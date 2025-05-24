@@ -99,16 +99,18 @@
                             <property name="vexpand-set">True</property>
                           </object>
                         </child>
-                      </object>
+                      </object> <!-- Closes GtkFrame -->
                     </child>
-                  </object>
-                </child>
-              </object>
-            </child>
-          </object>
-        </child>
-      </object>
-    </property>
+                  </object> <!-- Closes GtkBox (results_listbox & text_view) -->
+                </child> <!-- Closes child of main vertical GtkBox -->
+              </object> <!-- Closes main vertical GtkBox (child of AdwClamp) -->
+            </child> <!-- Closes child of AdwClamp -->
+          </object> <!-- Closes AdwClamp -->
+        </child> <!-- Closes child of AdwStatusPage -->
+      </object> <!-- Closes AdwStatusPage -->
+    </child> <!-- Closes the second <child type="top"> of AdwToolbarView (which holds AdwStatusPage) -->
+  </object> <!-- Closes AdwToolbarView -->
+</property> <!-- Closes <property name="content"> -->
     <property name="default-height">800</property>
     <property name="default-width">550</property>
     <property name="title" translatable="yes">Network Map</property>
