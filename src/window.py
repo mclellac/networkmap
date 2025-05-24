@@ -148,7 +148,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     row.set_title(title)
                     row.set_icon_name("computer-symbolic")
                     row.set_activatable(True)
-                    # Store the index of the host in the list
+                    # Ensure no custom data is set on the row here; details are fetched by index in on_host_row_activated.
                     row.connect("activated", self.on_host_row_activated)
                     self.results_listbox.append(row)
             finally:
