@@ -29,12 +29,13 @@
             <property name="title">Scan host(s)</property>
             <property name="vexpand">True</property>
             <child>
-              <object class="GtkBox">
-                <property name="halign">baseline-fill</property>
-                <property name="margin-end">25</property>
-                <property name="margin-start">25</property>
-                <property name="orientation">vertical</property>
-                <property name="spacing">10</property>
+              <object class="AdwClamp">
+                <property name="maximum-width">800</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="halign">baseline-fill</property>
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">10</property>
                 <property name="valign">baseline-fill</property>
                 <child>
                   <object class="GtkListBox">
@@ -110,7 +111,6 @@
     </property>
     <property name="default-height">800</property>
     <property name="default-width">550</property>
-    <property name="show-menubar">True</property>
     <property name="title" translatable="yes">Network Map</property>
   </template>
   <menu id="primary_menu">
