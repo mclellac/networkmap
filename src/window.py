@@ -2,7 +2,7 @@ import threading
 import os # Added for _discover_nse_scripts
 from typing import Optional, List, Dict, Any, Tuple
 
-from gi.repository import Adw, Gtk, GLib
+from gi.repository import Adw, Gtk, GLib, GObject # Added GObject
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
 
@@ -66,7 +66,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
         # results_listbox rows are connected dynamically in _populate_results_listbox
 
-    def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GLib.ParamSpec) -> None:
+    def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None: # Corrected pspec type hint
         """
         Handles the selection change in the NSE script combo box.
         Updates self.selected_nse_script based on the new selection.
