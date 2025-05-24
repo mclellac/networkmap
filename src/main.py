@@ -18,6 +18,7 @@ from gi.repository import Gtk, Gio, Adw, GLib # Added GLib for GLib.Variant if n
 
 # Local application imports
 from .window import NetworkMapWindow
+from .preferences_window import NetworkMapPreferencesWindow # Import PreferencesWindow
 
 # --- Application Metadata Constants ---
 APP_ID: str = "com.github.mclellac.NetworkMap"
@@ -49,6 +50,21 @@ class NetworkMapApplication(Adw.Application):
         self.create_action("about", self._on_about_action)
         self.create_action("preferences", self._on_preferences_action)
         # self.create_action("help", self._on_help_action, ["<primary>h", "F1"]) # Example for help
+
+        self._apply_initial_theme() # Call to apply theme on startup
+
+    def _apply_initial_theme(self) -> None:
+        """Applies the saved theme preference at application startup."""
+        settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        theme_str = settings.get_string("theme")
+        
+        style_manager = Adw.StyleManager.get_default()
+        if theme_str == "light":
+            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+        elif theme_str == "dark":
+            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        else: # "system" or any other fallback
+            style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
 
     def do_activate(self) -> None:
         """
@@ -101,13 +117,21 @@ class NetworkMapApplication(Adw.Application):
 
     def _on_preferences_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """
-        Handles the 'preferences' action.
-        Placeholder: In a real application, this would open a preferences dialog.
+        Handles the 'preferences' action by creating and presenting the preferences window.
         """
-        print(f"Action 'app.{action.get_name()}' activated. Preferences dialog should open.")
-        # Example:
-        # prefs_window = PreferencesWindow(application=self, transient_for=self.get_active_window())
-        # prefs_window.present()
+        active_window = self.get_active_window()
+        if not active_window:
+            # This case should ideally not happen if preferences are accessed from main window.
+            # If it can, ensure the main window is created first or handle appropriately.
+            print("Error: No active window to make preferences dialog transient for.")
+            # Optionally, create and show the main window first:
+            # self.do_activate() # This might lead to unexpected behavior if called out of sequence.
+            # active_window = self.get_active_window()
+            # if not active_window: return # Still no window, abort.
+            return # Abort if no active window
+
+        prefs_window = NetworkMapPreferencesWindow(parent_window=active_window)
+        prefs_window.present()
 
 
     # def _on_help_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
