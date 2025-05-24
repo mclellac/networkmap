@@ -1,46 +1,77 @@
-#!@PYTHON@
-
-# networkmap.in
-#
-# Copyright 2025 Carey McLelland
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# SPDX-License-Identifier: GPL-3.0-or-later
+#!/usr/bin/env @PYTHON@
+# -*- Mode: Python; coding: utf-8; indent-tabs-mode: nil; tab-width: 4 -*-
 
 import os
 import sys
-import signal
-import locale
-import gettext
 
-VERSION = '@VERSION@'
-pkgdatadir = '@pkgdatadir@'
-localedir = '@localedir@'
+conf = {
+    'PYTHON': '@PYTHON@',
+    'VERSION': '@VERSION@',
+    'localedir': '@localedir@',
+    'pkgdatadir': '@pkgdatadir@'
+}
 
-sys.path.insert(1, pkgdatadir)
-signal.signal(signal.SIGINT, signal.SIG_DFL)
-locale.bindtextdomain('networkmap', localedir)
-locale.textdomain('networkmap')
-gettext.install('networkmap', localedir)
+# 1. Add the package directory to sys.path to find the 'networkmap' module
+#    The 'networkmap' Python package (containing __init__.py, main.py, etc.)
+#    is installed into conf['pkgdatadir'] / 'networkmap'.
+#    So, conf['pkgdatadir'] itself needs to be in sys.path.
+sys.path.insert(0, conf['pkgdatadir'])
+
+# 2. Load GResources
+try:
+    from gi.repository import Gio, GLib # Import GLib for GLib.Error
+
+    # The .gresource file is installed directly into pkgdatadir
+    # (e.g., /usr/share/projectname/projectname.gresource)
+    resource_path = os.path.join(conf['pkgdatadir'], 'networkmap.gresource')
+
+    if os.path.exists(resource_path):
+        print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
+        resource = Gio.Resource.load(resource_path)
+        resource._register() # Register the resource with GIO
+        print(f"INFO: Successfully loaded and registered resources from: {resource_path}", file=sys.stderr)
+    else:
+        print(f"ERROR: Compiled GResource file not found at {resource_path}. Application may fail to load UI.", file=sys.stderr)
+        # For development: if running from build dir (e.g. ./buildir/networkmap)
+        # and .gresource is in ./builddir/src, this path won't work.
+        # Meson's `ninja test` or running via `meson devenv` usually handles this.
+        # This script is primarily for the *installed* scenario.
+        # A common fallback for development is to check relative to the script itself,
+        # assuming it's in a build directory structure.
+        # builddir_resource_path = os.path.join(os.path.dirname(__file__), 'src', 'networkmap.gresource')
+        # if os.path.exists(builddir_resource_path):
+        #     print(f"INFO: Attempting to load resource from build dir: {builddir_resource_path}", file=sys.stderr)
+        #     resource = Gio.Resource.load(builddir_resource_path)
+        #     resource._register()
+        #     print(f"INFO: Successfully loaded and registered resources from: {builddir_resource_path}", file=sys.stderr)
+        # else:
+        #     print(f"ERROR: Also could not find GResource in build dir path: {builddir_resource_path}", file=sys.stderr)
+        # The above fallback is commented out to keep the installed script cleaner.
+        # For development, ensure GResource is available or use `meson devenv`.
+
+
+except ImportError as e:
+    print(f"ERROR: Could not import Gio/GLib for GResource loading: {e}", file=sys.stderr)
+    sys.exit(1) # Critical error, exit
+except GLib.Error as e:
+    print(f"ERROR: GLib.Error loading GResource {resource_path}: {e}", file=sys.stderr)
+    sys.exit(1) # Critical error, exit
+except Exception as e:
+    print(f"ERROR: An unexpected error occurred during GResource loading: {e}", file=sys.stderr)
+    sys.exit(1) # Critical error, exit
+
+# 3. Import and run the main application module
+try:
+    # The package is 'networkmap' (the directory name inside pkgdatadir)
+    # It contains main.py
+    from networkmap import main as app_main
+except ModuleNotFoundError:
+    print(f"ERROR: Could not import main module from 'networkmap' package. Searched in sys.path, including {conf['pkgdatadir']}.", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"ERROR: Error importing application main: {e}", file=sys.stderr)
+    sys.exit(1)
 
 if __name__ == '__main__':
-    import gi
-
-    from gi.repository import Gio
-    resource = Gio.Resource.load(os.path.join(pkgdatadir, 'networkmap.gresource'))
-    resource._register()
-
-    from networkmap import main
-    sys.exit(main.main(VERSION))
+    # Pass system arguments to the application's main function
+    sys.exit(app_main.main(sys.argv))
