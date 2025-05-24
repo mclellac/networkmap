@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="networkmap">
 	<schema id="com.github.mclellac.NetworkMap" path="/com/github/mclellac/NetworkMap/">
+    <key name="results-font" type="s">
+      <default>'Monospace 10'</default>
+      <summary>Font for the results text view</summary>
+      <description>Specifies the font name and size to be used for displaying scan results. Format is "Font Name Size", e.g., "Monospace 10".</description>
+    </key>
+
+    <key name="theme" type="s">
+      <choices>
+        <choice value='system'/>
+        <choice value='light'/>
+        <choice value='dark'/>
+      </choices>
+      <default>'system'</default>
+      <summary>Application theme preference</summary>
+      <description>Allows choosing between System, Light, or Dark theme. Requires application restart or dynamic switching logic.</description>
+    </key>
+
+    <key name="dns-servers" type="s">
+      <default>''</default>
+      <summary>Custom DNS servers for Nmap scans</summary>
+      <description>A comma-separated list of DNS servers to be used by Nmap. If empty, system DNS servers are used.</description>
+    </key>
 	</schema>
 </schemalist>

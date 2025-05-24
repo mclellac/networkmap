@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="adw" version="1"/>
+  <template class="NetworkMapPreferencesWindow" parent="AdwPreferencesWindow">
+    <property name="title">Preferences</property> <!-- Or use translatable string -->
+    <property name="modal">true</property>
+    <child>
+      <object class="AdwPreferencesPage">
+        <child>
+          <object class="AdwPreferencesGroup" id="appearance_group">
+            <property name="title">Appearance</property> <!-- Or use translatable string -->
+            <child>
+              <object class="AdwFontRow" id="pref_font_row">
+                <property name="title">Results Area Font</property> <!-- Or use translatable string -->
+                <!-- GSettings binding will be done in Python or could be attempted here if AdwFontRow supports it directly via use-gsetting -->
+              </object>
+            </child>
+            <child>
+              <object class="AdwComboRow" id="pref_theme_combo_row">
+                <property name="title">Application Theme</property> <!-- Or use translatable string -->
+                <property name="model">
+                  <object class="GtkStringList">
+                    <items>
+                      <item translatable="yes">System</item>
+                      <item translatable="yes">Light</item>
+                      <item translatable="yes">Dark</item>
+                    </items>
+                  </object>
+                </property>
+                <!-- GSettings binding will be done in Python -->
+              </object>
+            </child>
+          </object> <!-- End AdwPreferencesGroup appearance_group -->
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="scanning_group">
+            <property name="title">Scanning</property> <!-- Or use translatable string -->
+            <child>
+              <object class="AdwEntryRow" id="pref_dns_servers_entry_row">
+                <property name="title">Custom DNS Servers</property> <!-- Or use translatable string -->
+                <property name="tooltip-text">Comma-separated list of IP addresses. Leave empty to use system DNS.</property> <!-- Or use translatable string -->
+                <!-- GSettings binding will be done in Python -->
+              </object>
+            </child>
+          </object> <!-- End AdwPreferencesGroup scanning_group -->
+        </child>
+      </object> <!-- End AdwPreferencesPage -->
+    </child>
+  </template>
+</interface>
