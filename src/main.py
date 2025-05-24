@@ -94,6 +94,7 @@ class NetworkMapApplication(Adw.Application):
             copyright=COPYRIGHT_INFO,
             website=PRIMARY_WEBSITE,
             issue_url=ISSUE_TRACKER_URL,
+            transient_for=self.get_active_window(), # Set property here
             # Translators: Replace this string with your names, one name per line.
             # translator_credits=_("translator-credits"), # This line uses gettext
         )
@@ -112,7 +113,7 @@ class NetworkMapApplication(Adw.Application):
             # No action needed here; translator_credits will remain unset.
             pass
 
-        about_dialog.set_transient_for(self.get_active_window())
+        # about_dialog.set_transient_for(self.get_active_window()) # Removed this line
         about_dialog.present()
 
     def _on_preferences_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:

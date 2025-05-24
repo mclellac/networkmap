@@ -1,38 +1,8 @@
-from gi.repository import Adw, Gtk, GObject, Gio, Pango # Keep imports for now
+# Minimal src/preferences_window.py for debugging
+print("Attempting to import preferences_window.py (ultra-simplified)")
 
-# @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/gtk/preferences.ui") # COMMENTED OUT
-class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
-    # __gtype_name__ = "NetworkMapPreferencesWindow" # COMMENTED OUT
-
-    # THEME_MAP_GSETTINGS_TO_INDEX = {"system": 0, "light": 1, "dark": 2} # Can remain
-    # THEME_MAP_INDEX_TO_GSETTINGS = ["system", "light", "dark"] # Can remain
-
-    # Template children - COMMENTED OUT
-    # pref_font_row: Adw.FontRow = Gtk.Template.Child("pref_font_row")
-    # pref_theme_combo_row: Adw.ComboRow = Gtk.Template.Child("pref_theme_combo_row")
-    # pref_dns_servers_entry_row: Adw.EntryRow = Gtk.Template.Child("pref_dns_servers_entry_row")
-
-    def __init__(self, parent_window: Gtk.Window):
-        super().__init__(transient_for=parent_window)
-        # All GSettings, initial value loading, signal connections, etc. should still be commented out
-        # from the previous simplification step.
-        print("NetworkMapPreferencesWindow initialized (hyper-simplified, no template)")
-
-    # Signal handlers (_on_font_changed, _on_theme_changed) should still be commented out.
-    # def _on_font_changed(self, font_row: Adw.FontRow, pspec: GObject.ParamSpec) -> None:
-    #     pass
-
-    # def _on_theme_changed(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-    #     pass
-
-# Example of how this might be instantiated (for testing, not part of this file yet):
-# if __name__ == '__main__':
-#     # This is placeholder code for direct testing if possible,
-#     # normally it's launched by the main app.
-#     app = Adw.Application(application_id="com.github.mclellac.NetworkMap.PrefsTest")
-#     def on_activate(application):
-#         win = NetworkMapPreferencesWindow(parent_window=None) # Pass a dummy parent or handle None
-#         win.set_application(application)
-#         win.present()
-#     app.connect("activate", on_activate)
-#     app.run([])
+# For this initial test, we are not even defining the class
+# NetworkMapPreferencesWindow to see if the file itself can be processed
+# by Python's import system when imported by src/main.py.
+# If this step works, src/main.py will fail later with an ImportError
+# because NetworkMapPreferencesWindow is not defined here, which is expected.
