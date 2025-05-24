@@ -105,8 +105,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.current_scan_results = None  # Reset current results
 
         # Clear existing rows from the results_listbox
-        while child := self.results_listbox.get_row_at_index(0):
-            self.results_listbox.remove(child)
+        self.results_listbox.set_visible(False)
+        try:
+            while child := self.results_listbox.get_row_at_index(0):
+                self.results_listbox.remove(child)
+        finally:
+            self.results_listbox.set_visible(True)
 
         if error:
             self.text_buffer.set_text(error)
@@ -131,21 +135,23 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.status_page.set_property("description", "Scan complete.")
 
             # Populate the results_listbox with discovered hosts
-            for host_data in self.current_scan_results:
-                row = Adw.ActionRow()
-                # Use host ID or hostname, default to "Unknown Host"
-                title = host_data.get("id") or host_data.get(
-                    "hostname", "Unknown Host"
-                )
-                row.set_title(title)
-                row.set_icon_name("computer-symbolic")
-                row.set_activatable(True)
-                row.set_data(
-                    "scan_details", # Store raw text details for display on activation
-                    host_data.get("raw_details_text", "No details available."),
-                )
-                row.connect("activated", self.on_host_row_activated)
-                self.results_listbox.append(row)
+            self.results_listbox.set_visible(False)
+            try:
+                for index, host_data in enumerate(self.current_scan_results):
+                    row = Adw.ActionRow()
+                    # Use host ID or hostname, default to "Unknown Host"
+                    title = host_data.get("id") or host_data.get(
+                        "hostname", "Unknown Host"
+                    )
+                    row.set_title(title)
+                    row.set_icon_name("computer-symbolic")
+                    row.set_activatable(True)
+                    # Store the index of the host in the list
+                    row.set_data("host_index", index)
+                    row.connect("activated", self.on_host_row_activated)
+                    self.results_listbox.append(row)
+            finally:
+                self.results_listbox.set_visible(True)
 
     def stop_spinner(self) -> None:
         """
@@ -163,11 +169,18 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         Args:
             row: The Adw.ActionRow that was activated.
         """
-        details: Optional[str] = row.get_data("scan_details")
-        if details:
-            self.text_buffer.set_text(details)
-        else:
-            # Fallback text if details are somehow missing
-            self.text_buffer.set_text(
-                f"No scan details available for {row.get_title()}."
-            )
+        host_index: Optional[int] = row.get_data("host_index")
+        details_to_display: str = f"Could not retrieve details for {row.get_title()}."
+
+        if host_index is not None and self.current_scan_results:
+            if 0 <= host_index < len(self.current_scan_results):
+                host_data = self.current_scan_results[host_index]
+                details_to_display = host_data.get("raw_details_text", f"No raw_details_text found for {row.get_title()}.")
+            else:
+                details_to_display = f"Error: Invalid index for {row.get_title()}."
+        elif self.current_scan_results is None:
+            details_to_display = f"Error: Scan results not available for {row.get_title()}."
+        else: # host_index is None
+            details_to_display = f"Error: Host index not found for {row.get_title()}."
+            
+        self.text_buffer.set_text(details_to_display)
