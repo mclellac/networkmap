@@ -1,5 +1,5 @@
 pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
-moduledir = pkgdatadir / 'networkmap'
+moduledir = pkgdatadir # Changed line
 gnome = import('gnome')
 
 gnome.compile_resources('networkmap',
@@ -31,6 +31,7 @@ networkmap_sources = [
   'main.py',
   'window.py',
   'nmap_scanner.py',
+  'preferences_window.py', # Added preferences_window.py
 ]
 
 install_data(networkmap_sources, install_dir: moduledir)
