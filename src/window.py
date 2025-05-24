@@ -149,7 +149,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     row.set_icon_name("computer-symbolic")
                     row.set_activatable(True)
                     # Store the index of the host in the list
-                    row.set_data("host_index", index)
                     row.connect("activated", self.on_host_row_activated)
                     self.results_listbox.append(row)
             finally:
@@ -166,23 +165,31 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def on_host_row_activated(self, row: Adw.ActionRow) -> None:
         """
         Callback for when a host row in the results_listbox is activated.
-        Displays the detailed scan information for the selected host.
+        Callback for when a host row in the results_listbox is activated.
+        Displays the detailed scan information for the selected host using its index in the listbox.
 
         Args:
             row: The Adw.ActionRow that was activated.
         """
-        host_index: Optional[int] = row.get_data("host_index")
-        details_to_display: str = f"Could not retrieve details for {row.get_title()}."
+        host_index: int = row.get_index() # Get the index of the activated row
 
-        if host_index is not None and self.current_scan_results:
-            if 0 <= host_index < len(self.current_scan_results):
-                host_data = self.current_scan_results[host_index]
-                details_to_display = host_data.get("raw_details_text", f"No raw_details_text found for {row.get_title()}.")
-            else:
-                details_to_display = f"Error: Invalid index for {row.get_title()}."
+        if host_index != -1 and self.current_scan_results and 0 <= host_index < len(self.current_scan_results):
+            host_data: Dict[str, Any] = self.current_scan_results[host_index]
+            details: Optional[str] = host_data.get("raw_details_text", "No details available.")
+            if details is not None: # Ensure details string is not None before setting
+                self.text_buffer.set_text(details)
+            else: # Should ideally not happen if raw_details_text always defaults to a string
+                self.text_buffer.set_text(f"No scan details available (empty content) for {row.get_title()}.")
         elif self.current_scan_results is None:
-            details_to_display = f"Error: Scan results not available for {row.get_title()}."
-        else: # host_index is None
-            details_to_display = f"Error: Host index not found for {row.get_title()}."
-            
-        self.text_buffer.set_text(details_to_display)
+            self.text_buffer.set_text(
+                f"Could not retrieve details for {row.get_title()} (Error: Scan results are missing)."
+            )
+        elif host_index == -1: # Should not happen for an activated row from the listbox
+            self.text_buffer.set_text(
+                f"Could not retrieve details for {row.get_title()} (Error: Row not found in list)."
+            )
+        else: # Index out of bounds, defensive coding
+            current_len = len(self.current_scan_results) if self.current_scan_results is not None else 0
+            self.text_buffer.set_text(
+                f"Could not retrieve details for {row.get_title()} (Error: Invalid index {host_index} for scan results length {current_len})."
+            )
