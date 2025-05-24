@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=networkmap
+Exec=networkmap
+Icon=com.github.mclellac.NetworkMap
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=GTK;
+StartupNotify=true
+DBusActivatable=true
