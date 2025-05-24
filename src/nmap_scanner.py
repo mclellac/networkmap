@@ -26,43 +26,32 @@ class NmapScanner:
             return None, str(e)
 
         try:
-            # Ensure Nmap runs with XML output for easier parsing if needed later,
-            # though python-nmap abstracts this.
-            # For OS fingerprinting, -O is already handled by _build_scan_args.
-            # If not doing OS fingerprint, ensure -sV or similar is passed for service info if desired,
-            # or rely on default python-nmap behavior.
-            # For now, we assume additional_args_str or default behavior provides service info if needed.
             self.nm.scan(hosts=target, arguments=scan_args)
             return self._parse_scan_results(do_os_fingerprint)
         except nmap.PortScannerError as e:
-            return None, f"Nmap error: {e}"
+            return None, f"Nmap error: {e.value if hasattr(e, 'value') else str(e)}"
         except Exception as e:
             return None, f"An unexpected error occurred ({type(e).__name__}): {e}"
 
     def _build_scan_args(
         self, do_os_fingerprint: bool, additional_args_str: str
     ) -> str:
-        # Base arguments for Nmap. -sV enables version detection for services.
-        # -O is for OS detection.
+        if not isinstance(additional_args_str, str):
+            raise ValueError("Additional arguments must be a string.")
+
         scan_args_list = []
         if do_os_fingerprint:
             scan_args_list.append("-O")
         
-        # Always add -sV for service and version detection to populate service details
-        # unless it's already specified in additional_args_str or conflicts
         if "-sV" not in additional_args_str and "-A" not in additional_args_str:
              scan_args_list.append("-sV")
 
         try:
-            if not isinstance(additional_args_str, str):
-                raise ValueError("Additional arguments must be a string.")
             additional_args = shlex.split(additional_args_str)
             scan_args_list.extend(additional_args)
         except ValueError as e:
-            raise ValueError(f"Invalid arguments: {e}")
+            raise ValueError(f"Error parsing additional arguments: {e}")
         
-        # Remove duplicates while preserving order for common flags like -O or -sV if user also adds them
-        # This is a simple approach; more robust arg parsing might be needed for complex cases.
         final_args = []
         for arg in scan_args_list:
             if arg not in final_args:
@@ -86,7 +75,7 @@ class NmapScanner:
                 "state": host_scan_data.state(),
                 "protocols": [],
                 "ports": [],
-                "os_fingerprint": None, # Initialize
+                "os_fingerprint": None,
                 "raw_details_text": ""
             }
             raw_details_parts: List[str] = []
@@ -125,8 +114,7 @@ class NmapScanner:
             
             if do_os_fingerprint and "osmatch" in host_scan_data and host_scan_data["osmatch"]:
                 os_matches = host_scan_data["osmatch"]
-                # Taking the first (best) OS match for simplicity
-                best_os_match = os_matches[0] 
+                best_os_match = os_matches[0]
                 os_fingerprint_details = {
                     "name": best_os_match.get("name", "N/A"),
                     "accuracy": best_os_match.get("accuracy", "N/A"),
@@ -158,8 +146,4 @@ class NmapScanner:
         if hosts_data:
             return hosts_data, None
         else:
-            # This case should ideally be covered by "No hosts found."
-            # if scanned_host_ids was empty. If it wasn't empty but we somehow
-            # didn't populate hosts_data, it might imply an issue.
-            # For now, align with the "No hosts found" if hosts_data is empty.
             return [], "No information found for scanned hosts."

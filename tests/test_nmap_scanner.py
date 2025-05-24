@@ -103,13 +103,39 @@ class TestNmapScanner(unittest.TestCase):
         }
 
         self.scanner.nm.all_hosts.return_value = [mock_host_ip]
-        self.scanner.nm.__getitem__.return_value = MagicMock(**{
-            'hostname.return_value': 'linuxhost.local',
-            'state.return_value': 'up',
-            'all_protocols.return_value': ['tcp'],
-            '__getitem__.side_effect': lambda key: mock_scan_data.get(key, {}), # Handles 'tcp' and 'osmatch'
-            'osmatch': [mock_os_match_data] # Ensure osmatch is directly accessible if parser looks for it this way
-        })
+
+        # Create the mock for the host object returned by self.nm[mock_host_ip]
+        mock_host_obj = MagicMock(name=f"HostMock_{mock_host_ip}")
+        
+        # Mock methods called on the host object
+        mock_host_obj.hostname.return_value = 'linuxhost.local'
+        mock_host_obj.state.return_value = 'up'
+        mock_host_obj.all_protocols.return_value = ['tcp'] # Parser uses this to iterate protocols
+
+        # Mock dictionary-like access for the host object (e.g., host_obj['tcp'], host_obj['osmatch'])
+        # The mock_scan_data dictionary holds the data that these accesses should return.
+        # For host_obj[proto]:
+        #   The parser does host_scan_data[proto], so it expects proto (e.g. 'tcp') to be a key.
+        # For host_obj['osmatch']:
+        #   The parser checks "osmatch" in host_scan_data and then host_scan_data["osmatch"].
+        
+        def getitem_side_effect(key):
+            # This side effect is for mock_host_obj['some_key']
+            if key in mock_scan_data:
+                return mock_scan_data[key]
+            # If the key is not in mock_scan_data, raise KeyError,
+            # which is typical dictionary behavior.
+            # The parser code expects keys like 'tcp' to exist if they are in all_protocols().
+            # For 'osmatch', it explicitly checks with "in" operator first.
+            raise KeyError(f"Mock for host_obj does not have key: {key}")
+
+        mock_host_obj.__getitem__.side_effect = getitem_side_effect
+        
+        # Configure __contains__ to reflect keys in mock_scan_data
+        # This ensures "osmatch" in host_scan_data works as expected.
+        mock_host_obj.__contains__.side_effect = lambda key: key in mock_scan_data
+        
+        self.scanner.nm.__getitem__.return_value = mock_host_obj
         
         hosts_data, error_message = self.scanner._parse_scan_results(do_os_fingerprint=True)
         
@@ -132,7 +158,7 @@ class TestNmapScanner(unittest.TestCase):
         result_data, error_msg = self.scanner.scan(target_host, False, 123) # 123 is not a string
         
         self.assertIsNone(result_data)
-        self.assertIn("Invalid arguments: Additional arguments must be a string.", error_msg)
+        self.assertEqual(error_msg, "Additional arguments must be a string.")
 
     def test_scan_nmap_execution_error(self):
         # Mock self.scanner.nm.scan() to raise PortScannerError
