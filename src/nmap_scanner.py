@@ -34,7 +34,11 @@ class NmapScanner:
         self.nm = nmap.PortScanner()
 
     def scan(
-        self, target: str, do_os_fingerprint: bool, additional_args_str: str
+        self,
+        target: str,
+        do_os_fingerprint: bool,
+        additional_args_str: str,
+        nse_script: Optional[str] = None, # Added nse_script parameter
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
         Performs an Nmap scan on the given target with specified options.
@@ -43,6 +47,7 @@ class NmapScanner:
             target: The target host(s) to scan (e.g., '192.168.1.1', 'scanme.nmap.org').
             do_os_fingerprint: Whether to perform OS fingerprinting (-O).
             additional_args_str: A string of additional Nmap arguments.
+            nse_script: Optional name of an NSE script to run.
 
         Returns:
             A tuple containing:
@@ -53,7 +58,7 @@ class NmapScanner:
         """
         try:
             scan_args = self._build_scan_args(
-                do_os_fingerprint, additional_args_str
+                do_os_fingerprint, additional_args_str, nse_script # Pass nse_script
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
@@ -76,7 +81,10 @@ class NmapScanner:
             return None, f"An unexpected error occurred ({type(e).__name__}): {e}"
 
     def _build_scan_args(
-        self, do_os_fingerprint: bool, additional_args_str: str
+        self,
+        do_os_fingerprint: bool,
+        additional_args_str: str,
+        nse_script: Optional[str] = None, # Added nse_script parameter
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
@@ -86,6 +94,7 @@ class NmapScanner:
         Args:
             do_os_fingerprint: If True, adds the '-O' flag for OS detection.
             additional_args_str: A string of user-supplied arguments.
+            nse_script: Optional name of an NSE script to use.
 
         Returns:
             A string of concatenated Nmap arguments.
@@ -125,7 +134,24 @@ class NmapScanner:
         if not host_timeout_present:
             DEFAULT_HOST_TIMEOUT = "60s" # Default timeout duration
             final_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}")
-        
+
+        # Add NSE script if provided and not already added via additional_args_str
+        # (though explicit handling for script args in additional_args_str is not done here;
+        # nmap itself will handle conflicts, usually by using the last specified script-related arg).
+        if nse_script: # Check if not None and not empty
+            # Avoid adding if user might have already specified --script something
+            # This simple check might not cover all cases of user-provided script args.
+            # For robust handling, one might need to parse `final_args` for existing script args.
+            # However, for this iteration, we add it if nse_script is directly provided.
+            if not any(arg.startswith("--script") for arg in final_args):
+                 final_args.append(f"--script={nse_script}")
+            elif f"--script={nse_script}" not in final_args: # If user specified a different script, add this one too
+                # This behavior (adding multiple --script args) is how nmap handles it.
+                # Or, one could decide to prioritize the one from `nse_script` parameter.
+                # For now, append if not exactly the same.
+                final_args.append(f"--script={nse_script}")
+
+
         # The python-nmap library passes arguments as a string.
         # shlex.join is available in Python 3.8+ and is preferred for constructing command lines.
         # For wider compatibility, " ".join is used here. Ensure args are quoted if necessary,

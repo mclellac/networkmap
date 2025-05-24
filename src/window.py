@@ -1,4 +1,5 @@
 import threading
+import os # Added for _discover_nse_scripts
 from typing import Optional, List, Dict, Any, Tuple
 
 from gi.repository import Adw, Gtk, GLib
@@ -35,16 +36,90 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
         # self.text_buffer is now initialized above
+        self.selected_nse_script: Optional[str] = None # For tracking selected NSE script
 
         self._connect_signals()
+        self._populate_nse_script_combo() # Populate NSE scripts
         self._update_ui_state("ready") # Initial UI state
 
     # Removed init_template method and @Gtk.Template.init decorator
 
+    def _populate_nse_script_combo(self) -> None:
+        """Populates the NSE script combo box with discovered scripts."""
+        discovered_scripts = self._discover_nse_scripts()
+        
+        # Prepare items for the Gtk.StringList.
+        # "None" allows the user to not select any specific script.
+        combo_items: List[str] = ["None"] + discovered_scripts
+        
+        string_list_model = Gtk.StringList.new(combo_items)
+        
+        self.nse_script_combo_row.set_model(string_list_model)
+        
+        # Set "None" as the default selected item.
+        # Since "None" is always added, combo_items will have at least one element.
+        self.nse_script_combo_row.set_selected(0)
+
     def _connect_signals(self) -> None:
         """Connects UI signals to their handlers."""
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
+        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
         # results_listbox rows are connected dynamically in _populate_results_listbox
+
+    def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GLib.ParamSpec) -> None:
+        """
+        Handles the selection change in the NSE script combo box.
+        Updates self.selected_nse_script based on the new selection.
+        """
+        selected_index = combo_row.get_selected()
+        model = combo_row.get_model()
+
+        # Ensure model is a Gtk.StringList as expected from _populate_nse_script_combo
+        if isinstance(model, Gtk.StringList) and selected_index >= 0:
+            selected_value = model.get_string(selected_index)
+            if selected_value == "None":
+                self.selected_nse_script = None
+                # print("Selected NSE Script: None") # For debugging
+            else:
+                self.selected_nse_script = selected_value
+                # print(f"Selected NSE Script: {self.selected_nse_script}") # For debugging
+        else:
+            self.selected_nse_script = None
+            # print("Selected NSE Script: None (selection cleared or invalid)") # For debugging
+
+    def _discover_nse_scripts(self) -> List[str]:
+        """
+        Discovers available Nmap NSE scripts from the default system path.
+
+        Returns:
+            A sorted list of script names (without .nse extension).
+            Returns an empty list if the directory is not accessible or an error occurs.
+        """
+        script_names: List[str] = []
+        # Standard Nmap script path on most Linux systems
+        default_path = "/usr/share/nmap/scripts/"
+
+        if not os.path.isdir(default_path) or not os.access(default_path, os.R_OK):
+            # Using print for logging as proper logging isn't set up yet.
+            print(
+                f"Warning: NSE script directory {default_path} not found or not readable."
+            )
+            return script_names # Return empty list
+
+        try:
+            for item_name in os.listdir(default_path):
+                if item_name.endswith(".nse"):
+                    full_item_path = os.path.join(default_path, item_name)
+                    if os.path.isfile(full_item_path):
+                        # Remove the .nse extension to get the script name
+                        script_names.append(item_name[:-4])
+            
+            script_names.sort()  # Sort for consistent order and easier UI display
+        except OSError as e:
+            print(f"Warning: Error reading NSE script directory {default_path}: {e}")
+            return []  # Return empty list on error
+
+        return script_names
 
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
         """
@@ -117,7 +192,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             # The second element is an error message from the scanner itself (e.g., "No hosts found")
             # or None if successful.
             hosts_data, scan_message = self.nmap_scanner.scan(
-                target, do_os_fingerprint, additional_args_str
+                target,
+                do_os_fingerprint,
+                additional_args_str,
+                self.selected_nse_script,  # Pass the selected NSE script
             )
             if scan_message and not hosts_data: # e.g. "No hosts found." or "Argument error:..."
                 error_type = "ScanMessage" # A special type to indicate it's from nmap_scanner directly
