@@ -30,7 +30,7 @@
             <property name="vexpand">True</property>
             <child>
               <object class="AdwClamp">
-                <property name="maximum-width">800</property>
+                <property name="maximum-size">800</property>
                 <child>
                   <object class="GtkBox">
                     <property name="halign">baseline-fill</property>
