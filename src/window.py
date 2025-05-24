@@ -29,17 +29,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
         super().__init__(**kwargs)
+        # Initialize Gtk.Template children that are needed immediately
+        self.text_buffer: Gtk.TextBuffer = self.text_view.get_buffer()
+
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
-        self.text_buffer: Optional[Gtk.TextBuffer] = None # Initialized in init_template
+        # self.text_buffer is now initialized above
 
         self._connect_signals()
         self._update_ui_state("ready") # Initial UI state
 
-    @Gtk.Template.Init
-    def init_template(self) -> None:
-        """Initializes buffer after Gtk.Template children are bound."""
-        self.text_buffer = self.text_view.get_buffer()
+    # Removed init_template method and @Gtk.Template.init decorator
 
     def _connect_signals(self) -> None:
         """Connects UI signals to their handlers."""
