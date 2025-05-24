@@ -81,32 +81,9 @@
                 <child>
                   <object class="GtkBox">
                     <child>
-                      <object class="GtkListBox">
+                      <object class="GtkListBox" id="results_listbox">
                         <property name="css-classes">boxed-list</property>
-                        <child>
-                          <object class="AdwActionRow">
-                            <property name="icon-name">computer-symbolic</property>
-                            <property name="title">Target 1</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="AdwActionRow">
-                            <property name="icon-name">computer-symbolic</property>
-                            <property name="title">Target 2</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="AdwActionRow">
-                            <property name="icon-name">computer-symbolic</property>
-                            <property name="title">Target 3</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="AdwActionRow">
-                            <property name="icon-name">computer-symbolic</property>
-                            <property name="title">Target 4</property>
-                          </object>
-                        </child>
+                        <!-- Static AdwActionRow children removed -->
                       </object>
                     </child>
                     <child>

@@ -1,24 +1,6 @@
-# main.py
-#
-# Copyright 2025 Carey McLelland
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#
-# SPDX-License-Identifier: GPL-3.0-or-later
-
 import sys
 import gi
+from typing import Callable, List, Optional
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -26,49 +8,57 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Gio, Adw
 from .window import NetworkMapWindow
 
+# Application metadata
+APP_ID = "com.github.mclellac.NetworkMap"
+APP_NAME = "Network Map"
+APP_VERSION = "0.1.0"
+DEVELOPER_NAME = "Carey McLelland"
+COPYRIGHT_INFO = "© 2025 Carey McLelland"
+
 
 class NetworkMapApplication(Adw.Application):
     """The main application singleton class."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(
-            application_id="com.github.mclellac.NetworkMap",
+            application_id=APP_ID,
             flags=Gio.ApplicationFlags.DEFAULT_FLAGS,
         )
         self.create_action("quit", lambda *_: self.quit(), ["<primary>q"])
         self.create_action("about", self.on_about_action)
         self.create_action("preferences", self.on_preferences_action)
 
-    def do_activate(self):
+    def do_activate(self) -> None:
         """Called when the application is activated.
 
         We raise the application's main window, creating it if
         necessary.
         """
-        win = self.props.active_window
+        win: Optional[NetworkMapWindow] = self.props.active_window
         if not win:
             win = NetworkMapWindow(application=self)
         win.present()
 
-    def on_about_action(self, *args):
+    def on_about_action(self, *args) -> None:
         """Callback for the app.about action."""
         about = Adw.AboutDialog(
-            application_name="Network Map",
-            application_icon="com.github.mclellac.NetworkMap",
-            developer_name="Carey McLelland",
-            version="0.1.0",
-            developers=["Carey McLelland"],
-            copyright="© 2025 Carey McLelland",
+            application_name=APP_NAME,
+            application_icon=APP_ID,  # Assuming icon name matches app_id
+            developer_name=DEVELOPER_NAME,
+            version=APP_VERSION,
+            developers=[DEVELOPER_NAME],  # Keep as a list
+            copyright=COPYRIGHT_INFO,
         )
-        # Translators: Replace "translator-credits" with your name/username, and optionally an email or URL.
         about.set_translator_credits(_("translator-credits"))
         about.present(self.props.active_window)
 
-    def on_preferences_action(self, widget, _):
+    def on_preferences_action(self, widget: Gtk.Widget, _: None) -> None:
         """Callback for the app.preferences action."""
         print("app.preferences action activated")
 
-    def create_action(self, name, callback, shortcuts=None):
+    def create_action(
+        self, name: str, callback: Callable, shortcuts: Optional[List[str]] = None
+    ) -> None:
         """Add an application action.
 
         Args:
@@ -84,7 +74,7 @@ class NetworkMapApplication(Adw.Application):
             self.set_accels_for_action(f"app.{name}", shortcuts)
 
 
-def main(version):
+def main(version: str) -> int:
     """The application's entry point."""
     app = NetworkMapApplication()
     return app.run(sys.argv)
