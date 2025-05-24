@@ -1,12 +1,25 @@
 try:
     import nmap
 except ImportError as e:
+    # This error is raised at import time, so it's critical.
     raise ImportError(
-        "nmap module is not installed. Please install it using the command: pip install python-nmap"
+        "The 'python-nmap' module is not installed. "
+        "Please install it using the command: pip install python-nmap"
     ) from e
 
 import shlex
 from typing import Tuple, Optional, List, Dict, Any
+
+
+# Custom Exceptions
+class NmapArgumentError(ValueError):
+    """Custom exception for errors during Nmap argument construction."""
+    pass
+
+
+class NmapScanParseError(ValueError):
+    """Custom exception for errors during Nmap scan results parsing."""
+    pass
 
 
 class NmapScanner:
@@ -34,100 +47,94 @@ class NmapScanner:
         Returns:
             A tuple containing:
                 - A list of dictionaries, where each dictionary represents a scanned host
-                  and its information. Returns None if argument parsing fails.
+                  and its information. Returns None if argument parsing fails or a critical
+                  Nmap error occurs.
                 - An error message string if an error occurred, otherwise None.
         """
         try:
             scan_args = self._build_scan_args(
                 do_os_fingerprint, additional_args_str
             )
-        except ValueError as e:
-            return None, str(e)
+        except NmapArgumentError as e:
+            return None, f"Argument error: {e}"
 
         try:
             self.nm.scan(hosts=target, arguments=scan_args)
+            # _parse_scan_results can also return an error message (e.g., "No hosts found.")
+            # which is not exceptional, so it's handled by the caller.
             return self._parse_scan_results(do_os_fingerprint)
         except nmap.PortScannerError as e:
-            # Try to provide a more specific error message from nmap
-            nmap_error_output = e.value if hasattr(e, "value") and e.value else str(e)
-            return None, f"Nmap error: {nmap_error_output}"
+            # nmap.PortScannerError often contains stderr output from nmap itself
+            nmap_error_output = getattr(e, 'value', str(e)).strip()
+            if not nmap_error_output: # If e.value is empty or just whitespace
+                nmap_error_output = str(e)
+            return None, f"Nmap execution error: {nmap_error_output}"
+        except NmapScanParseError as e: # Catch specific parsing errors
+            return None, f"Scan parsing error: {e}"
         except Exception as e:
-            return None, f"An unexpected error occurred during scan ({type(e).__name__}): {e}"
+            # Catch any other unexpected errors during the scan or parsing process
+            return None, f"An unexpected error occurred ({type(e).__name__}): {e}"
 
     def _build_scan_args(
         self, do_os_fingerprint: bool, additional_args_str: str
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
+        User-provided arguments are prioritized. Default arguments are added if not
+        already covered by user arguments.
 
         Args:
             do_os_fingerprint: If True, adds the '-O' flag for OS detection.
             additional_args_str: A string of user-supplied arguments.
-                                 '-sV' is added by default if not already present
-                                 in additional_args_str or if '-A' is not present.
 
         Returns:
             A string of concatenated Nmap arguments.
 
         Raises:
-            ValueError: If additional_args_str is not a string or if shlex fails to parse it.
+            NmapArgumentError: If additional_args_str is not a string or if shlex fails to parse it.
         """
         if not isinstance(additional_args_str, str):
-            raise ValueError("Additional arguments must be a string.")
+            # This check is kept for robustness, though type hinting should help prevent it.
+            raise NmapArgumentError("Additional arguments must be a string.")
 
-        current_scan_args = [] 
-        DEFAULT_HOST_TIMEOUT = "60s"
-
-        if do_os_fingerprint:
-            current_scan_args.append("-O")
-
-        # Add user-provided arguments first
-        if additional_args_str: # Ensure not empty string
+        user_args: List[str] = []
+        if additional_args_str:  # Ensure not empty string
             try:
-                user_args = shlex.split(additional_args_str)
-                current_scan_args.extend(user_args)
+                user_args.extend(shlex.split(additional_args_str))
             except ValueError as e:
-                raise ValueError(f"Error parsing additional arguments: {e}")
-        
-        # Add -sV if not specified by user (directly or via -A)
-        # Check based on the current state of current_scan_args after adding user_args
-        sV_present = any(arg == "-sV" for arg in current_scan_args)
-        A_present = any(arg == "-A" for arg in current_scan_args)
-        if not sV_present and not A_present:
-            # Check if -sV is already there to prevent adding it twice if user had it
-            if "-sV" not in current_scan_args: 
-                current_scan_args.append("-sV")
+                raise NmapArgumentError(f"Error parsing additional arguments: {e}")
 
-        # Add default host timeout if not specified by the user
-        host_timeout_present = any(arg.startswith("--host-timeout") for arg in current_scan_args)
+        # Start with user arguments, then conditionally add defaults.
+        # This approach gives user arguments precedence.
+        final_args: List[str] = list(user_args) # Make a copy to modify
+
+        # Add OS fingerprinting argument if requested and not already present
+        if do_os_fingerprint and "-O" not in final_args:
+            final_args.append("-O")
+        
+        # Add default service version detection (-sV) if not specified by user
+        # (directly or implied by -A which includes -sV).
+        sV_implied = any(arg in ["-sV", "-A"] for arg in final_args)
+        if not sV_implied:
+            final_args.append("-sV")
+
+        # Add default host timeout if not specified by the user.
+        # Nmap uses the *last* occurrence of --host-timeout if multiple are given.
+        # To respect user's choice, we only add ours if they haven't specified one.
+        host_timeout_present = any(arg.startswith("--host-timeout") for arg in final_args)
         if not host_timeout_present:
-            current_scan_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}")
-
-        # Deduplicate while preserving order (keeping first occurrence)
-        final_args_ordered = []
-        seen_args = set()
-        for arg in current_scan_args:
-            # For arguments like --host-timeout=value, we only want one --host-timeout.
-            # So, if arg starts with --host-timeout, we check if any --host-timeout is in seen_args.
-            # This is tricky because Nmap might care about the value.
-            # The current `host_timeout_present` check already ensures we don't add our default
-            # if *any* --host-timeout is there.
-            # The deduplication here is for *exact identical strings*.
-            # E.g. if user puts "-sV -sV", it becomes one "-sV".
-            # If user puts "--host-timeout 30s --host-timeout 30s", it becomes one.
-            # If user puts "--host-timeout 30s --host-timeout 45s", both are kept by this simple dedupe.
-            # Nmap usually takes the last one in such cases.
-            # The current logic is: user's --host-timeout (if any) is respected, ours is not added.
-            # If user provides multiple different --host-timeout, they all go to nmap.
-            if arg not in seen_args:
-                final_args_ordered.append(arg)
-                seen_args.add(arg)
+            DEFAULT_HOST_TIMEOUT = "60s" # Default timeout duration
+            final_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}")
         
-        return " ".join(final_args_ordered)
+        # The python-nmap library passes arguments as a string.
+        # shlex.join is available in Python 3.8+ and is preferred for constructing command lines.
+        # For wider compatibility, " ".join is used here. Ensure args are quoted if necessary,
+        # though shlex.split usually handles this for parsing. Nmap arguments are generally simple.
+        return " ".join(final_args)
 
     def _parse_scan_results(
         self, do_os_fingerprint: bool
-    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         """
         Parses the Nmap scan results from the PortScanner object.
 
@@ -138,106 +145,128 @@ class NmapScanner:
         Returns:
             A tuple containing:
                 - A list of dictionaries, where each dictionary holds data for a host.
-                  Returns an empty list if no hosts were found or no info for found hosts.
-                - An error message string if an error occurred (e.g. "No hosts found."),
+                  Returns an empty list if no hosts were found.
+                - An error message string if no hosts were found (e.g., "No hosts found."),
                   otherwise None.
+        
+        Raises:
+            NmapScanParseError: If there's an issue parsing data for a specific host.
+                                The current implementation stops and raises upon the first
+                                parsing error for a host.
         """
         hosts_data: List[Dict[str, Any]] = []
-        scanned_host_ids = self.nm.all_hosts() # Get all scanned host IDs
+        scanned_host_ids = self.nm.all_hosts()
 
         if not scanned_host_ids:
-            return [], "No hosts found." # Return empty list and message if no hosts
+            return [], "No hosts found."
 
         for host_id in scanned_host_ids:
-            host_scan_data = self.nm[host_id] # Access data for the current host
-            host_info: Dict[str, Any] = {
-                "id": host_id,
-                "hostname": host_scan_data.hostname(),
-                "state": host_scan_data.state(),
-                "protocols": [],
-                "ports": [],
-                "os_fingerprint": None,
-                "raw_details_text": ""
-            }
-            host_info: Dict[str, Any] = {
-                "id": host_id,
-                "hostname": host_scan_data.hostname() or "N/A", # Ensure hostname is not empty
-                "state": host_scan_data.state(),
-                "protocols": [],
-                "ports": [],
-                "os_fingerprint": None,
-                "raw_details_text": "" # Initialize raw details text
-            }
-            raw_details_parts: List[str] = []
+            try:
+                host_scan_data = self.nm[host_id]
+                
+                # Consolidated host_info initialization
+                host_info: Dict[str, Any] = {
+                    "id": host_id,
+                    "hostname": host_scan_data.hostname() or "N/A",
+                    "state": host_scan_data.state() or "N/A",
+                    "protocols": host_scan_data.all_protocols() or [],
+                    "ports": [],
+                    "os_fingerprint": None, # Will be populated if OS fingerprinting data exists
+                    "raw_details_text": ""  # Initialize raw details text
+                }
+                raw_details_parts: List[str] = [
+                    f"Host: {host_info['id']} (Hostname: {host_info['hostname']})",
+                    f"State: {host_info['state']}"
+                ]
 
-            raw_details_parts.append(f"Host: {host_info['id']} ({host_info['hostname']})")
-            raw_details_parts.append(f"State: {host_info['state']}")
+                for proto in host_info["protocols"]:
+                    raw_details_parts.append(f"\nProtocol: {proto.upper()}")
+                    ports_data = host_scan_data.get(proto, {})
+                    if not ports_data:
+                        raw_details_parts.append("  No open ports found for this protocol.")
+                        continue
 
-            host_info["protocols"] = host_scan_data.all_protocols() # e.g. ['tcp', 'udp']
-            for proto in host_info["protocols"]:
-                raw_details_parts.append(f"\nProtocol: {proto.upper()}")
-                ports_data = host_scan_data[proto] # Dictionary of ports for this protocol
-                for port_id in sorted(ports_data.keys()):
-                    port_details = ports_data[port_id]
-                    service_name = port_details.get('name', 'N/A')
-                    product = port_details.get('product', 'N/A')
-                    version = port_details.get('version', 'N/A')
-                    service_info = (
-                        f"Name: {service_name}, Product: {product}, Version: {version}"
-                    )
-                    port_entry = {
-                        "portid": port_id,
-                        "protocol": proto,
-                        "state": port_details.get("state", "N/A"),
-                        "service": {
-                            "name": service_name,
-                            "product": product,
-                            "version": version,
-                            "extrainfo": port_details.get("extrainfo"),
-                            "conf": port_details.get("conf"),
-                            "cpe": port_details.get("cpe"),
-                        },
-                    }
-                    host_info["ports"].append(port_entry)
-                    raw_details_parts.append(
-                        f"  Port: {port_id}/{proto}  State: {port_entry['state']}  Service: {service_info}"
-                    )
-            
-            # Process OS fingerprint if available and requested
-            if do_os_fingerprint and "osmatch" in host_scan_data and host_scan_data["osmatch"]:
-                # Get the best OS match (usually the first one)
-                os_matches = host_scan_data["osmatch"]
-                if os_matches: # Ensure there's at least one OS match
-                    best_os_match = os_matches[0]
-                    os_fingerprint_details = {
-                        "name": best_os_match.get("name", "N/A"),
-                        "accuracy": best_os_match.get("accuracy", "N/A"),
-                        "osclass": []
-                    }
-                    raw_details_parts.append("\nOS Fingerprint:")
-                    raw_details_parts.append(f"  Name: {os_fingerprint_details['name']} (Accuracy: {os_fingerprint_details['accuracy']}%)")
-                    
-                    for os_class in best_os_match.get("osclass", []):
-                        os_class_detail_str = ( # Renamed to avoid conflict
-                            f"Type: {os_class.get('type', 'N/A')}, "
-                            f"Vendor: {os_class.get('vendor', 'N/A')}, "
-                            f"OS Family: {os_class.get('osfamily', 'N/A')}, "
-                            f"OS Gen: {os_class.get('osgen', 'N/A')}"
+                    for port_id in sorted(ports_data.keys()):
+                        port_details = ports_data.get(port_id, {})
+                        service_name = port_details.get('name', 'N/A')
+                        product = port_details.get('product', '') # Default to empty for easier concatenation
+                        version = port_details.get('version', '') # Default to empty
+                        
+                        service_info_parts = [service_name]
+                        if product: service_info_parts.append(f"Product: {product}")
+                        if version: service_info_parts.append(f"Version: {version}")
+                        service_info_str = ", ".join(p for p in service_info_parts if p != 'N/A' and p) or "N/A"
+
+                        port_state = port_details.get("state", "N/A")
+                        port_entry = {
+                            "portid": port_id,
+                            "protocol": proto,
+                            "state": port_state,
+                            "service": {
+                                "name": service_name,
+                                "product": product or None, # Store None if empty
+                                "version": version or None, # Store None if empty
+                                "extrainfo": port_details.get("extrainfo"),
+                                "conf": str(port_details.get("conf", "N/A")), # Conf is usually an int
+                                "cpe": port_details.get("cpe"),
+                            },
+                        }
+                        host_info["ports"].append(port_entry)
+                        raw_details_parts.append(
+                            f"  Port: {port_id}/{proto:<3}  State: {port_state:<10} Service: {service_info_str}"
                         )
-                        os_fingerprint_details["osclass"].append({
-                            "type": os_class.get('type'),
-                            "vendor": os_class.get('vendor'),
-                            "osfamily": os_class.get('osfamily'),
-                            "osgen": os_class.get('osgen'),
-                            "accuracy": os_class.get('accuracy') # Accuracy of this specific class
-                        })
-                        raw_details_parts.append(f"    Class: {os_class_detail_str}")
-                    host_info["os_fingerprint"] = os_fingerprint_details
-            
-            host_info["raw_details_text"] = "\n".join(raw_details_parts)
-            hosts_data.append(host_info)
+                
+                if do_os_fingerprint and "osmatch" in host_scan_data:
+                    os_matches = host_scan_data.get("osmatch", [])
+                    if os_matches: # Ensure there's at least one OS match
+                        best_os_match = os_matches[0] # Typically the highest accuracy
+                        name = best_os_match.get("name", "N/A")
+                        accuracy = str(best_os_match.get("accuracy", "N/A")) # Accuracy is string in python-nmap
+                        
+                        os_fingerprint_details = {
+                            "name": name,
+                            "accuracy": accuracy,
+                            "osclass": []
+                        }
+                        raw_details_parts.append("\nOS Fingerprint:")
+                        raw_details_parts.append(f"  Best Match: {name} (Accuracy: {accuracy}%)")
+                        
+                        for os_class_data in best_os_match.get("osclass", []):
+                            os_class_detail_str = (
+                                f"Type: {os_class_data.get('type', 'N/A')}, "
+                                f"Vendor: {os_class_data.get('vendor', 'N/A')}, "
+                                f"OS Family: {os_class_data.get('osfamily', 'N/A')}, "
+                                f"OS Gen: {os_class_data.get('osgen', 'N/A')}"
+                            )
+                            os_fingerprint_details["osclass"].append({
+                                "type": os_class_data.get('type'),
+                                "vendor": os_class_data.get('vendor'),
+                                "osfamily": os_class_data.get('osfamily'),
+                                "osgen": os_class_data.get('osgen'),
+                                "accuracy": str(os_class_data.get('accuracy', 'N/A'))
+                            })
+                            raw_details_parts.append(f"    Class: {os_class_detail_str}")
+                        host_info["os_fingerprint"] = os_fingerprint_details
+                    elif do_os_fingerprint : # OS fingerprinting requested but no 'osmatch' data
+                        raw_details_parts.append("\nOS Fingerprint: No OS matches found.")
 
-        if not hosts_data and scanned_host_ids: # Scanned hosts but no data parsed for them
-             return [], "No information found for scanned hosts."
+                host_info["raw_details_text"] = "\n".join(raw_details_parts)
+                hosts_data.append(host_info)
+
+            except KeyError as e:
+                # This might occur if nmap output structure is unexpected for a specific host.
+                # Log or handle this specific host parsing error and continue with others.
+                # For now, we'll re-raise as a specific parsing error.
+                raise NmapScanParseError(f"Error parsing data for host {host_id}: Missing key {e}")
+            except Exception as e:
+                # Catch any other unexpected errors during parsing of a single host
+                raise NmapScanParseError(
+                    f"Unexpected error parsing data for host {host_id} ({type(e).__name__}): {e}"
+                )
+
+        if not hosts_data and scanned_host_ids:
+            # This case means hosts were scanned, but parsing failed for all of them
+            # or they had no data python-nmap could structure.
+            return [], "No information parsed for scanned hosts. They might be down or heavily filtered."
         
-        return hosts_data, None # Return data and no error
+        return hosts_data, None # Return data and no error message
