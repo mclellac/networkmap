@@ -75,28 +75,55 @@ class NmapScanner:
         if not isinstance(additional_args_str, str):
             raise ValueError("Additional arguments must be a string.")
 
-        scan_args_list = []
-        if do_os_fingerprint:
-            scan_args_list.append("-O")
-        
-        # Ensure version detection is enabled by default if not overridden
-        if "-sV" not in additional_args_str and "-A" not in additional_args_str:
-             scan_args_list.append("-sV")
+        current_scan_args = [] 
+        DEFAULT_HOST_TIMEOUT = "60s"
 
-        try:
-            # Use shlex to safely parse additional arguments
-            additional_args = shlex.split(additional_args_str)
-            scan_args_list.extend(additional_args)
-        except ValueError as e:
-            # Catch errors from shlex.split, e.g., unmatched quotes
-            raise ValueError(f"Error parsing additional arguments: {e}")
+        if do_os_fingerprint:
+            current_scan_args.append("-O")
+
+        # Add user-provided arguments first
+        if additional_args_str: # Ensure not empty string
+            try:
+                user_args = shlex.split(additional_args_str)
+                current_scan_args.extend(user_args)
+            except ValueError as e:
+                raise ValueError(f"Error parsing additional arguments: {e}")
         
-        # Remove duplicate arguments, preserving order of first appearance
-        final_args = []
-        for arg in scan_args_list:
-            if arg not in final_args: # Check for duplicates before adding
-                final_args.append(arg)
-        return " ".join(final_args)
+        # Add -sV if not specified by user (directly or via -A)
+        # Check based on the current state of current_scan_args after adding user_args
+        sV_present = any(arg == "-sV" for arg in current_scan_args)
+        A_present = any(arg == "-A" for arg in current_scan_args)
+        if not sV_present and not A_present:
+            # Check if -sV is already there to prevent adding it twice if user had it
+            if "-sV" not in current_scan_args: 
+                current_scan_args.append("-sV")
+
+        # Add default host timeout if not specified by the user
+        host_timeout_present = any(arg.startswith("--host-timeout") for arg in current_scan_args)
+        if not host_timeout_present:
+            current_scan_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}")
+
+        # Deduplicate while preserving order (keeping first occurrence)
+        final_args_ordered = []
+        seen_args = set()
+        for arg in current_scan_args:
+            # For arguments like --host-timeout=value, we only want one --host-timeout.
+            # So, if arg starts with --host-timeout, we check if any --host-timeout is in seen_args.
+            # This is tricky because Nmap might care about the value.
+            # The current `host_timeout_present` check already ensures we don't add our default
+            # if *any* --host-timeout is there.
+            # The deduplication here is for *exact identical strings*.
+            # E.g. if user puts "-sV -sV", it becomes one "-sV".
+            # If user puts "--host-timeout 30s --host-timeout 30s", it becomes one.
+            # If user puts "--host-timeout 30s --host-timeout 45s", both are kept by this simple dedupe.
+            # Nmap usually takes the last one in such cases.
+            # The current logic is: user's --host-timeout (if any) is respected, ours is not added.
+            # If user provides multiple different --host-timeout, they all go to nmap.
+            if arg not in seen_args:
+                final_args_ordered.append(arg)
+                seen_args.add(arg)
+        
+        return " ".join(final_args_ordered)
 
     def _parse_scan_results(
         self, do_os_fingerprint: bool

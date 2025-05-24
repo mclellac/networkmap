@@ -83,8 +83,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             )
             GLib.idle_add(self.display_results, hosts_data, error)
         except Exception as e:
+            # Pass a more detailed error message including the exception type
+            detailed_error_message = f"Unhandled error in scan worker: {type(e).__name__}: {str(e)}"
             GLib.idle_add(
-                self.display_results, None, f"An error occurred: {str(e)}"
+                self.display_results, None, detailed_error_message
             )
         finally:
             GLib.idle_add(self.stop_spinner)
