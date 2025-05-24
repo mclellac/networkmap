@@ -1,11 +1,10 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<!-- Created with Cambalache 0.94.1 -->
+<!-- Created with Cambalache 0.96.1 -->
 <interface>
   <!-- interface-name window.ui -->
-  <requires lib="Adw" version="1.0"/>
-  <requires lib="gio" version="2.0"/>
-  <requires lib="gtk" version="4.0"/>
-  <requires lib="libadwaita" version="1.6"/>
+  <requires lib="gio" version="2.44"/>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
   <template class="NetworkMapWindow" parent="AdwApplicationWindow">
     <property name="content">
       <object class="AdwToolbarView">
@@ -36,81 +35,81 @@
                     <property name="halign">baseline-fill</property>
                     <property name="orientation">vertical</property>
                     <property name="spacing">10</property>
-                <property name="valign">baseline-fill</property>
-                <child>
-                  <object class="GtkListBox">
-                    <property name="css-classes">boxed-list</property>
-                    <property name="margin-bottom">15</property>
+                    <property name="valign">baseline-fill</property>
                     <child>
-                      <object class="AdwEntryRow" id="target_entry_row">
-                        <property name="show-apply-button">True</property>
-                        <property name="title">Target/CIDR</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwSwitchRow" id="os_fingerprint_switch">
-                        <property name="subtitle">Requires root</property>
-                        <property name="title">OS Fingerprinting</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwEntryRow" id="arguments_entry_row">
-                        <property name="show-apply-button">True</property>
-                        <property name="title">additional arguments</property>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="AdwComboRow" id="nse_script_combo_row">
-                        <property name="subtitle">Include exectution of NSE script</property>
-                        <property name="title">NSE Script</property>
-                      </object>
-                    </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="AdwSpinner" id="spinner">
-                    <property name="focus-on-click">False</property>
-                    <property name="halign">center</property>
-                    <property name="height-request">32</property>
-                    <property name="margin-bottom">5</property>
-                    <property name="margin-top">5</property>
-                    <property name="overflow">hidden</property>
-                    <property name="valign">center</property>
-                    <property name="width-request">32</property>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkBox">
-                    <child>
-                      <object class="GtkListBox" id="results_listbox">
+                      <object class="GtkListBox">
                         <property name="css-classes">boxed-list</property>
-                        <!-- Static AdwActionRow children removed -->
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkFrame">
-                        <property name="hexpand">True</property>
-                        <property name="margin-start">15</property>
-                        <property name="vexpand">True</property>
+                        <property name="margin-bottom">15</property>
                         <child>
-                          <object class="GtkTextView" id="text_view">
-                            <property name="hexpand">True</property>
-                            <property name="vexpand">True</property>
-                            <property name="vexpand-set">True</property>
+                          <object class="AdwEntryRow" id="target_entry_row">
+                            <property name="show-apply-button">True</property>
+                            <property name="title">Target/CIDR</property>
                           </object>
                         </child>
-                      </object> <!-- Closes GtkFrame -->
+                        <child>
+                          <object class="AdwSwitchRow" id="os_fingerprint_switch">
+                            <property name="subtitle">Requires root</property>
+                            <property name="title">OS Fingerprinting</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwEntryRow" id="arguments_entry_row">
+                            <property name="show-apply-button">True</property>
+                            <property name="title">additional arguments</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwComboRow" id="nse_script_combo_row">
+                            <property name="subtitle">Include exectution of NSE script</property>
+                            <property name="title">NSE Script</property>
+                          </object>
+                        </child>
+                      </object>
                     </child>
-                  </object> <!-- Closes GtkBox (results_listbox & text_view) -->
-                </child> <!-- Closes child of main vertical GtkBox -->
-              </object> <!-- Closes main vertical GtkBox (child of AdwClamp) -->
-            </child> <!-- Closes child of AdwClamp -->
-          </object> <!-- Closes AdwClamp -->
-        </child> <!-- Closes child of AdwStatusPage -->
-      </object> <!-- Closes AdwStatusPage -->
-    </child> <!-- Closes the second <child type="top"> of AdwToolbarView (which holds AdwStatusPage) -->
-  </object> <!-- Closes AdwToolbarView -->
-</property> <!-- Closes <property name="content"> -->
+                    <child>
+                      <object class="AdwSpinner" id="spinner">
+                        <property name="focus-on-click">False</property>
+                        <property name="halign">center</property>
+                        <property name="height-request">32</property>
+                        <property name="margin-bottom">5</property>
+                        <property name="margin-top">5</property>
+                        <property name="overflow">hidden</property>
+                        <property name="valign">center</property>
+                        <property name="width-request">32</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox">
+                        <child>
+                          <object class="GtkListBox" id="results_listbox">
+                            <property name="css-classes">boxed-list</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkFrame">
+                            <property name="hexpand">True</property>
+                            <property name="margin-start">15</property>
+                            <property name="vexpand">True</property>
+                            <child>
+                              <object class="GtkTextView" id="text_view">
+                                <property name="hexpand">True</property>
+                                <property name="vexpand">True</property>
+                                <property name="vexpand-set">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </property>
+    <!-- Closes <property name="content"> -->
     <property name="default-height">800</property>
     <property name="default-width">550</property>
     <property name="title" translatable="yes">Network Map</property>
