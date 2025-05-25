@@ -1,8 +1,8 @@
 import threading
-import os # Added for _discover_nse_scripts
+import os
 from typing import Optional, List, Dict, Any, Tuple
 
-from gi.repository import Adw, Gtk, GLib, GObject # Added GObject
+from gi.repository import Adw, Gtk, GLib, GObject
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
 
@@ -30,33 +30,26 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
         super().__init__(**kwargs)
-        # Initialize Gtk.Template children that are needed immediately
         self.text_buffer: Gtk.TextBuffer = self.text_view.get_buffer()
 
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
-        # self.text_buffer is now initialized above
         self.selected_nse_script: Optional[str] = None # For tracking selected NSE script
 
         self._connect_signals()
-        self._populate_nse_script_combo() # Populate NSE scripts
-        self._update_ui_state("ready") # Initial UI state
-
-    # Removed init_template method and @Gtk.Template.init decorator
+        self._populate_nse_script_combo()
+        self._update_ui_state("ready")
 
     def _populate_nse_script_combo(self) -> None:
         """Populates the NSE script combo box with discovered scripts."""
         discovered_scripts = self._discover_nse_scripts()
         
-        # Prepare items for the Gtk.StringList.
         # "None" allows the user to not select any specific script.
         combo_items: List[str] = ["None"] + discovered_scripts
         
         string_list_model = Gtk.StringList.new(combo_items)
-        
         self.nse_script_combo_row.set_model(string_list_model)
         
-        # Set "None" as the default selected item.
         # Since "None" is always added, combo_items will have at least one element.
         self.nse_script_combo_row.set_selected(0)
 
@@ -66,26 +59,23 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
         # results_listbox rows are connected dynamically in _populate_results_listbox
 
-    def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None: # Corrected pspec type hint
+    def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """
         Handles the selection change in the NSE script combo box.
-        Updates self.selected_nse_script based on the new selection.
+        Updates `self.selected_nse_script` based on the new selection.
         """
         selected_index = combo_row.get_selected()
         model = combo_row.get_model()
 
-        # Ensure model is a Gtk.StringList as expected from _populate_nse_script_combo
+        # Ensure model is a Gtk.StringList as expected.
         if isinstance(model, Gtk.StringList) and selected_index >= 0:
             selected_value = model.get_string(selected_index)
             if selected_value == "None":
                 self.selected_nse_script = None
-                # print("Selected NSE Script: None") # For debugging
             else:
                 self.selected_nse_script = selected_value
-                # print(f"Selected NSE Script: {self.selected_nse_script}") # For debugging
         else:
             self.selected_nse_script = None
-            # print("Selected NSE Script: None (selection cleared or invalid)") # For debugging
 
     def _discover_nse_scripts(self) -> List[str]:
         """
@@ -96,28 +86,27 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             Returns an empty list if the directory is not accessible or an error occurs.
         """
         script_names: List[str] = []
-        # Standard Nmap script path on most Linux systems
+        # Standard Nmap script path on most Linux systems.
         default_path = "/usr/share/nmap/scripts/"
 
         if not os.path.isdir(default_path) or not os.access(default_path, os.R_OK):
-            # Using print for logging as proper logging isn't set up yet.
+            # Using print for logging as proper logging isn't set up yet for this class.
             print(
                 f"Warning: NSE script directory {default_path} not found or not readable."
             )
-            return script_names # Return empty list
+            return script_names
 
         try:
             for item_name in os.listdir(default_path):
                 if item_name.endswith(".nse"):
                     full_item_path = os.path.join(default_path, item_name)
                     if os.path.isfile(full_item_path):
-                        # Remove the .nse extension to get the script name
-                        script_names.append(item_name[:-4])
+                        script_names.append(item_name[:-4]) # Remove .nse extension
             
-            script_names.sort()  # Sort for consistent order and easier UI display
+            script_names.sort()
         except OSError as e:
             print(f"Warning: Error reading NSE script directory {default_path}: {e}")
-            return []  # Return empty list on error
+            return []
 
         return script_names
 
@@ -132,7 +121,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if state == "scanning":
             self.spinner.set_visible(True)
             self.status_page.set_property("description", "Scanning...")
-            self.target_entry_row.set_sensitive(False) # Disable input during scan
+            self.target_entry_row.set_sensitive(False)
             self.arguments_entry_row.set_sensitive(False)
             self.os_fingerprint_switch.set_sensitive(False)
         else:
@@ -140,12 +129,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.target_entry_row.set_sensitive(True)
             self.arguments_entry_row.set_sensitive(True)
             self.os_fingerprint_switch.set_sensitive(True)
+
             if state == "error":
                 self.status_page.set_property("description", f"Scan Failed: {message or 'Unknown error'}")
             elif state == "success":
                 self.status_page.set_property("description", "Scan Complete.")
             elif state == "ready":
-                self.status_page.set_property("description", "Ready to scan.")
+                self.status_page.set_property("description", message or "Ready to scan.")
             elif state == "no_results": # Specifically for "No hosts found." from nmap_scanner
                 self.status_page.set_property("description", "Scan Complete: No hosts found.")
             elif state == "no_data": # For cases where hosts_data is None but no specific nmap error
@@ -153,19 +143,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
 
     def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
-        """Callback for when the scan is initiated."""
+        """Callback for when the scan is initiated from the target entry row."""
         target: str = self.target_entry_row.get_text().strip()
         if not target:
-            # Optionally, show a toast or dialog for empty target
             if self.text_buffer: self.text_buffer.set_text("Please enter a target to scan.")
-            self._update_ui_state("ready", "Empty target") # Or a specific state for this
+            self._update_ui_state("ready", "Empty target")
             return
 
         self._clear_results_ui()
         self._update_ui_state("scanning")
         
-        # Start scan in a separate thread
-        thread = threading.Thread(
+        scan_thread = threading.Thread(
             target=self._run_scan_worker,
             args=(
                 target,
@@ -188,28 +176,26 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         hosts_data: Optional[List[Dict[str, Any]]] = None
 
         try:
-            # NmapScanner.scan now returns Tuple[List[...], Optional[str]]
-            # The second element is an error message from the scanner itself (e.g., "No hosts found")
-            # or None if successful.
+            # NmapScanner.scan returns:
+            # hosts_data: List of host dictionaries, or None on critical error.
+            # scan_message: Optional error/info message from the scanner itself.
             hosts_data, scan_message = self.nmap_scanner.scan(
                 target,
                 do_os_fingerprint,
                 additional_args_str,
-                self.selected_nse_script,  # Pass the selected NSE script
+                self.selected_nse_script,
             )
-            if scan_message and not hosts_data: # e.g. "No hosts found." or "Argument error:..."
-                error_type = "ScanMessage" # A special type to indicate it's from nmap_scanner directly
+            if scan_message and not hosts_data:
+                error_type = "ScanMessage" # Indicates message from nmap_scanner, not an exception
                 error_message = scan_message
 
         except (NmapArgumentError, NmapScanParseError) as e:
             error_type = type(e).__name__
             error_message = str(e)
         except Exception as e:
-            # Catch any other unexpected errors
             error_type = type(e).__name__
             error_message = f"An unexpected error occurred in the scan worker: {str(e)}"
         
-        # Schedule UI updates on the main GTK thread
         GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message)
 
 
@@ -219,27 +205,26 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         error_type: Optional[str],
         error_message: Optional[str],
     ) -> None:
-        """Handles UI updates after the scan worker finishes."""
+        """Handles UI updates after the Nmap scan worker finishes."""
         if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
-            # If the error_message itself is "No hosts found.", it's a specific non-error case.
-            if error_message == "No hosts found.":
+            if error_message == "No hosts found.": # Specific case from nmap_scanner
                  self._update_ui_state("no_results")
-                 self.current_scan_results = []
-            else:
+                 self.current_scan_results = [] # Treat as empty result set
+            else: # Other errors (argument, parse, execution, unexpected)
                 self._update_ui_state("error", error_message)
                 self.current_scan_results = None
-        elif hosts_data is None: # No error type, but hosts_data is None
+        elif hosts_data is None: # No explicit error_type, but no data either
             self._clear_results_ui()
             if self.text_buffer: self.text_buffer.set_text("No data received from scan.")
             self._update_ui_state("no_data")
             self.current_scan_results = None
-        elif not hosts_data:  # Empty list, meaning "No hosts found" was likely the scan_message
-            self._clear_results_ui() # Already cleared by _on_scan_button_clicked
+        elif not hosts_data: # Empty list of hosts
+            self._clear_results_ui()
             if self.text_buffer: self.text_buffer.set_text("No hosts were found matching the criteria.")
             self._update_ui_state("no_results")
             self.current_scan_results = []
-        else:
+        else: # Successful scan with results
             self.current_scan_results = hosts_data
             self._populate_results_listbox(hosts_data)
             if self.text_buffer: self.text_buffer.set_text(
@@ -247,52 +232,51 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             )
             self._update_ui_state("success")
         
-        # Ensure spinner stops and UI is re-enabled regardless of outcome,
-        # _update_ui_state handles most of this.
+        # Ensure UI elements like spinner and input fields are reset correctly.
+        # _update_ui_state handles most of this based on the final state.
+        # Explicitly ensure spinner is off if not already handled by _update_ui_state.
         if self.spinner.get_visible():
              self.spinner.set_visible(False)
-        if not self.target_entry_row.get_sensitive():
+        # Ensure input fields are enabled if not in a scanning state.
+        if not self.target_entry_row.get_sensitive() and self.status_page.get_property("description") != "Scanning...":
             self.target_entry_row.set_sensitive(True)
             self.arguments_entry_row.set_sensitive(True)
             self.os_fingerprint_switch.set_sensitive(True)
 
 
     def _clear_results_ui(self) -> None:
-        """Clears the results listbox and the text view."""
-        # Efficiently clear ListBox by removing children
-        # Hiding/showing can prevent excessive redraws if removal is slow,
+        """Clears the results listbox and the text view display."""
+        # Efficiently clear ListBox by removing children.
+        # Hiding/showing the listbox can prevent excessive redraws if removal is slow,
         # but for typical result sizes, direct removal should be fine.
         while child := self.results_listbox.get_row_at_index(0):
             self.results_listbox.remove(child)
         
         if self.text_buffer:
-            self.text_buffer.set_text("") # Clear previous details or errors
+            self.text_buffer.set_text("")
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
-        """Populates the results_listbox with discovered hosts."""
+        """Populates the results_listbox with discovered hosts from scan data."""
         # self.results_listbox.set_visible(False) # Optional: hide during bulk update
-        for host_data in hosts_data: # No enumerate needed if index isn't used for row data
+        for host_data in hosts_data:
             row = Adw.ActionRow()
             title = host_data.get("hostname") or host_data.get("id", "Unknown Host")
             row.set_title(title)
             row.set_subtitle(f"State: {host_data.get('state', 'N/A')}")
             row.set_icon_name("computer-symbolic")
             row.set_activatable(True)
-            # Store the host_id directly or index if preferred, for on_host_row_activated.
             # Storing index is simpler if current_scan_results is guaranteed to match.
-            # For robustness, one might store host_id and re-search, but index is common.
             row.connect("activated", self._on_host_row_activated)
             self.results_listbox.append(row)
-        # self.results_listbox.set_visible(True)
+        # self.results_listbox.set_visible(True) # Optional: show after bulk update
 
     def _display_scan_error(self, error_type: str, error_message: str) -> None:
-        """Displays scan errors in the text_view."""
-        self._clear_results_ui() # Clear previous results
+        """Displays scan-related errors in the text_view."""
+        self._clear_results_ui() # Clear previous results before showing an error
         if self.text_buffer:
             self.text_buffer.set_text(f"Error Type: {error_type}\n\nMessage: {error_message}")
-        # Optionally, use Adw.Toast for less critical/more transient errors
-        # toast = Adw.Toast.new(f"Scan Error: {error_message[:100]}") # Truncate for toast
-        # self.add_toast(toast) # 'self' should be an Adw.ApplicationWindow or have a ToastOverlay
+        # Consider using Adw.Toast for less critical/more transient errors in the future.
+        # e.g., toast = Adw.Toast.new(f"Scan Error: {error_message[:100]}"); self.add_toast(toast);
 
     def _on_host_row_activated(self, row: Adw.ActionRow) -> None:
         """
