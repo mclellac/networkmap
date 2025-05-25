@@ -54,6 +54,7 @@ class NetworkMapApplication(Adw.Application):
         self.create_action("about", self._on_about_action)
         self.create_action("preferences", self._on_preferences_action, ["<primary>comma"])
         self.create_action("help_shortcuts", self._on_help_shortcuts_action, ["<Control>question", "F1"])
+        self.create_action("new_tab", self._on_new_tab_action, ["<primary>t"])
 
         self._apply_initial_theme()
 
@@ -112,6 +113,16 @@ class NetworkMapApplication(Adw.Application):
 
         prefs_window = NetworkMapPreferencesWindow(parent_window=active_window)
         prefs_window.present()
+
+    def _on_new_tab_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
+        """Handles the 'new_tab' action by telling the active window to add a new tab."""
+        win = self.get_active_window()
+        if isinstance(win, NetworkMapWindow): # Ensure it's our main window
+            win._add_new_tab()
+        elif win: # Active window exists but is not NetworkMapWindow
+            print(f"Warning: Action 'app.new_tab' called, but active window is not NetworkMapWindow. Type: {type(win)}", file=sys.stderr)
+        # If no active window, do nothing (or log if necessary)
+
 
     def _on_help_shortcuts_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'help_shortcuts' action by displaying the shortcuts window."""
