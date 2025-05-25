@@ -11,12 +11,6 @@ conf = {
     'pkgdatadir': '@pkgdatadir@'
 }
 
-# 1. Add the package directory to sys.path to find the 'networkmap' module
-#    The 'networkmap' Python package (containing __init__.py, main.py, etc.)
-#    is installed into conf['pkgdatadir'] / 'networkmap'.
-#    So, conf['pkgdatadir'] itself needs to be in sys.path.
-sys.path.insert(0, conf['pkgdatadir'])
-
 # 2. Load GResources
 try:
     from gi.repository import Gio, GLib # Import GLib for GLib.Error
@@ -62,26 +56,19 @@ except Exception as e:
 
 # 3. Import and run the main application module
 try:
-    # --- BEGIN DIAGNOSTIC PRINTS ---
-    print(f"DEBUG: Launch script sys.path: {sys.path}", file=sys.stderr)
-    check_dir = os.path.join(conf['pkgdatadir'], 'networkmap')
-    print(f"DEBUG: Checking directory: {check_dir}", file=sys.stderr)
-    if os.path.isdir(check_dir):
-        try:
-            print(f"DEBUG: Contents of {check_dir}: {os.listdir(check_dir)}", file=sys.stderr)
-        except Exception as e:
-            print(f"DEBUG: Error listing contents of {check_dir}: {e}", file=sys.stderr)
-    else:
-        print(f"DEBUG: {check_dir} is not a directory.", file=sys.stderr)
-    # --- END DIAGNOSTIC PRINTS ---
-    # The package is 'networkmap' (the directory name inside pkgdatadir)
-    # It contains main.py
     from networkmap import main as app_main
-except ModuleNotFoundError:
-    print(f"ERROR: Could not import main module from 'networkmap' package. Searched in sys.path, including {conf['pkgdatadir']}.", file=sys.stderr)
+except ImportError as e: # Could be ModuleNotFoundError or other ImportErrors
+    print(f"ERROR: Failed to import the main application module 'networkmap.main'.", file=sys.stderr)
+    print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
+    # If more detailed traceback is desired for debugging, it can be added here.
+    # import traceback
+    # traceback.print_exc(file=sys.stderr)
     sys.exit(1)
-except Exception as e:
-    print(f"ERROR: Error importing application main: {e}", file=sys.stderr)
+except Exception as e: # Catch any other unexpected error during import
+    print(f"ERROR: An unexpected error occurred while importing 'networkmap.main'.", file=sys.stderr)
+    print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
+    # import traceback
+    # traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 if __name__ == '__main__':

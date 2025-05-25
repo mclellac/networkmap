@@ -35,4 +35,7 @@ networkmap_sources = [
   'utils.py', # Updated path
 ]
 
-install_data(networkmap_sources, install_dir: moduledir / 'networkmap')
+python.install_sources(
+  networkmap_sources,
+  subdir: 'networkmap'
+)
