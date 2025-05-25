@@ -22,7 +22,6 @@ def discover_nse_scripts() -> List[str]:
         Returns an empty list if the directory is not accessible or an error occurs.
     """
     script_names: List[str] = []
-    # Standard Nmap script path on most Linux systems.
     default_path = "/usr/share/nmap/scripts/"
 
     if not os.path.isdir(default_path) or not os.access(default_path, os.R_OK):
@@ -36,7 +35,7 @@ def discover_nse_scripts() -> List[str]:
             if item_name.endswith(".nse"):
                 full_item_path = os.path.join(default_path, item_name)
                 if os.path.isfile(full_item_path):
-                    script_names.append(item_name[:-4]) # Remove .nse extension
+                    script_names.append(item_name[:-4])
         
         script_names.sort()
     except OSError as e:
