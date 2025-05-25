@@ -146,6 +146,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         Worker function to perform the Nmap scan.
         This method is run in a separate thread.
         """
+        settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        default_args_from_settings: str = settings.get_string("default-nmap-arguments")
+
         error_type: Optional[str] = None
         error_message: Optional[str] = None
         hosts_data: Optional[List[Dict[str, Any]]] = None
@@ -159,6 +162,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 do_os_fingerprint,
                 additional_args_str,
                 self.selected_nse_script,
+                default_args_str=default_args_from_settings, # Pass fetched default args
             )
             if scan_message and not hosts_data:
                 error_type = "ScanMessage" # Indicates message from nmap_scanner, not an exception

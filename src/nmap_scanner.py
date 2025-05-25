@@ -38,6 +38,7 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
+        default_args_str: Optional[str] = None,  # New parameter
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
         Performs an Nmap scan on the given target with specified options.
@@ -47,6 +48,7 @@ class NmapScanner:
             do_os_fingerprint: Whether to perform OS fingerprinting (-O).
             additional_args_str: A string of additional Nmap arguments.
             nse_script: Optional name of an NSE script to run.
+            default_args_str: Optional string of default arguments to prepend.
 
         Returns:
             A tuple containing:
@@ -57,7 +59,7 @@ class NmapScanner:
         """
         try:
             scan_args = self._build_scan_args(
-                do_os_fingerprint, additional_args_str, nse_script
+                do_os_fingerprint, additional_args_str, nse_script, default_args_str
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
@@ -83,6 +85,7 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
+        default_args_str: Optional[str] = None,  # New parameter
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
@@ -93,6 +96,7 @@ class NmapScanner:
             do_os_fingerprint: If True, adds the '-O' flag for OS detection.
             additional_args_str: A string of user-supplied arguments.
             nse_script: Optional name of an NSE script to use.
+            default_args_str: Optional string of default arguments.
 
         Returns:
             A string of concatenated Nmap arguments.
@@ -104,6 +108,13 @@ class NmapScanner:
             # This check is kept for robustness, though type hinting should help prevent it.
             raise NmapArgumentError("Additional arguments must be a string.")
 
+        base_args: List[str] = []
+        if default_args_str: # Check if not None and not empty
+            try:
+                base_args.extend(shlex.split(default_args_str))
+            except ValueError as e:
+                raise NmapArgumentError(f"Error parsing default arguments: {e}")
+
         user_args: List[str] = []
         if additional_args_str: # Don't parse if empty, shlex.split('') is ['']
             try:
@@ -112,8 +123,10 @@ class NmapScanner:
                 # This can happen if quotes are mismatched, etc.
                 raise NmapArgumentError(f"Error parsing additional arguments: {e}")
 
-        # Start with user arguments, then conditionally add defaults.
-        final_args: List[str] = list(user_args)
+        # Combine default and user arguments. User arguments typically override or supplement defaults.
+        # Order might matter depending on Nmap's argument parsing specifics (e.g. last one wins for some).
+        # A common approach is defaults first, then user-specific.
+        final_args: List[str] = base_args + user_args
 
         if do_os_fingerprint and "-O" not in final_args:
             final_args.append("-O")
