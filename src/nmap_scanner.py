@@ -8,7 +8,7 @@ except ImportError as e:
 
 import shlex
 from typing import Tuple, Optional, List, Dict, Any
-from ..utils import is_root
+from .utils import is_root
 
 
 class NmapArgumentError(ValueError):
