@@ -1,7 +1,6 @@
 try:
     import nmap
 except ImportError as e:
-    # This error is raised at import time, so it's critical.
     raise ImportError(
         "The 'python-nmap' module is not installed. "
         "Please install it using the command: pip install python-nmap"
@@ -38,7 +37,7 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
-        default_args_str: Optional[str] = None,  # New parameter
+        default_args_str: Optional[str] = None,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
         Performs an Nmap scan on the given target with specified options.
@@ -66,13 +65,10 @@ class NmapScanner:
 
         try:
             self.nm.scan(hosts=target, arguments=scan_args)
-            # _parse_scan_results can also return an error message (e.g., "No hosts found.")
-            # which is not exceptional, so it's handled by the caller.
             return self._parse_scan_results(do_os_fingerprint)
         except nmap.PortScannerError as e:
-            # nmap.PortScannerError often contains stderr output from nmap itself.
             nmap_error_output = getattr(e, 'value', str(e)).strip()
-            if not nmap_error_output: # If e.value is empty or just whitespace, use the full error string.
+            if not nmap_error_output:
                 nmap_error_output = str(e)
             return None, f"Nmap execution error: {nmap_error_output}"
         except NmapScanParseError as e:
@@ -85,7 +81,7 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
-        default_args_str: Optional[str] = None,  # New parameter
+        default_args_str: Optional[str] = None,
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
@@ -105,40 +101,31 @@ class NmapScanner:
             NmapArgumentError: If additional_args_str is not a string or if shlex fails to parse it.
         """
         if not isinstance(additional_args_str, str):
-            # This check is kept for robustness, though type hinting should help prevent it.
             raise NmapArgumentError("Additional arguments must be a string.")
 
         base_args: List[str] = []
-        if default_args_str: # Check if not None and not empty
+        if default_args_str:
             try:
                 base_args.extend(shlex.split(default_args_str))
             except ValueError as e:
                 raise NmapArgumentError(f"Error parsing default arguments: {e}")
 
         user_args: List[str] = []
-        if additional_args_str: # Don't parse if empty, shlex.split('') is ['']
+        if additional_args_str:
             try:
                 user_args.extend(shlex.split(additional_args_str))
             except ValueError as e:
-                # This can happen if quotes are mismatched, etc.
                 raise NmapArgumentError(f"Error parsing additional arguments: {e}")
 
-        # Combine default and user arguments. User arguments typically override or supplement defaults.
-        # Order might matter depending on Nmap's argument parsing specifics (e.g. last one wins for some).
-        # A common approach is defaults first, then user-specific.
         final_args: List[str] = base_args + user_args
 
         if do_os_fingerprint and "-O" not in final_args:
             final_args.append("-O")
 
-        # Add -sV (service version detection) if not specified by user (directly or via -A).
         sV_implied = any(arg in ["-sV", "-A"] for arg in final_args)
         if not sV_implied:
             final_args.append("-sV")
 
-        # Add default host timeout if not specified by the user.
-        # Nmap uses the last occurrence of --host-timeout if multiple are given.
-        # To respect user's choice, we only add ours if they haven't specified one.
         host_timeout_present = any(arg.startswith("--host-timeout") for arg in final_args)
         if not host_timeout_present:
             DEFAULT_HOST_TIMEOUT = "60s"
@@ -147,9 +134,6 @@ class NmapScanner:
         if nse_script:
             final_args.append(f"--script={nse_script}")
 
-        # The python-nmap library passes arguments as a string.
-        # shlex.join is available in Python 3.8+ and is preferred for constructing command lines.
-        # For wider compatibility, " ".join is used here.
         return " ".join(final_args)
 
     def _parse_scan_results(
@@ -171,8 +155,6 @@ class NmapScanner:
 
         Raises:
             NmapScanParseError: If there's an issue parsing data for a specific host.
-                                The current implementation stops and raises upon the first
-                                parsing error for a host.
         """
         hosts_data: List[Dict[str, Any]] = []
         scanned_host_ids = self.nm.all_hosts()
@@ -227,7 +209,7 @@ class NmapScanner:
                                 "product": product or None,
                                 "version": version or None,
                                 "extrainfo": port_details.get("extrainfo"),
-                                "conf": str(port_details.get("conf", "N/A")), # conf is usually an int (e.g. 10 for 'script')
+                                "conf": str(port_details.get("conf", "N/A")),
                                 "cpe": port_details.get("cpe"),
                             },
                         }
@@ -239,9 +221,9 @@ class NmapScanner:
                 if do_os_fingerprint and "osmatch" in host_scan_data:
                     os_matches = host_scan_data.get("osmatch", [])
                     if os_matches:
-                        best_os_match = os_matches[0] # Typically the highest accuracy
+                        best_os_match = os_matches[0]
                         name = best_os_match.get("name", "N/A")
-                        accuracy = str(best_os_match.get("accuracy", "N/A")) # Accuracy is string in python-nmap output
+                        accuracy = str(best_os_match.get("accuracy", "N/A"))
                         
                         os_fingerprint_details = {
                             "name": name,
@@ -257,7 +239,7 @@ class NmapScanner:
                                 f"Vendor: {os_class_data.get('vendor', 'N/A')}",
                                 f"OS Family: {os_class_data.get('osfamily', 'N/A')}",
                                 f"OS Gen: {os_class_data.get('osgen', 'N/A')}",
-                                f"Accuracy: {str(os_class_data.get('accuracy', 'N/A'))}%" # Accuracy per class
+                                f"Accuracy: {str(os_class_data.get('accuracy', 'N/A'))}%"
                             ]
                             raw_details_parts.append(f"    Class: {', '.join(os_class_info_parts)}")
                             
@@ -269,24 +251,20 @@ class NmapScanner:
                                 "accuracy": str(os_class_data.get('accuracy', 'N/A'))
                             })
                         host_info["os_fingerprint"] = os_fingerprint_details
-                    elif do_os_fingerprint: # OS fingerprinting requested but no 'osmatch' data
+                    elif do_os_fingerprint:
                         raw_details_parts.append("\nOS Fingerprint: No OS matches found.")
 
                 host_info["raw_details_text"] = "\n".join(raw_details_parts)
                 hosts_data.append(host_info)
 
             except KeyError as e:
-                # This indicates an unexpected structure in the nmap data for a host.
                 raise NmapScanParseError(f"Error parsing data for host {host_id}: Missing key {e}")
             except Exception as e:
-                # Catch any other unexpected errors during parsing of a single host.
                 raise NmapScanParseError(
                     f"Unexpected error parsing data for host {host_id} ({type(e).__name__}): {e}"
                 )
 
         if not hosts_data and scanned_host_ids:
-            # This case means hosts were scanned, but parsing failed for all of them
-            # or they had no data python-nmap could structure.
             return [], "No information parsed for scanned hosts. They might be down or heavily filtered."
         
         return hosts_data, None

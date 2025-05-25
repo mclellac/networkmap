@@ -12,7 +12,8 @@ gnome.compile_resources('networkmap',
 python = import('python')
 
 conf = configuration_data()
-conf.set('PYTHON', python.find_installation('python3').full_path())
+py_installation = python.find_installation('python3', required: true) # Added required: true for robustness
+conf.set('PYTHON', py_installation.full_path())
 conf.set('VERSION', meson.project_version())
 conf.set('localedir', get_option('prefix') / get_option('localedir'))
 conf.set('pkgdatadir', pkgdatadir)
@@ -35,7 +36,7 @@ networkmap_sources = [
   'utils.py', # Updated path
 ]
 
-python.install_sources(
+py_installation.install_sources(
   networkmap_sources,
   subdir: 'networkmap'
 )
