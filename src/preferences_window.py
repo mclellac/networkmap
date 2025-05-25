@@ -20,6 +20,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
     pref_font_button: Gtk.FontButton = Gtk.Template.Child("pref_font_button")
     pref_theme_combo_row: Adw.ComboRow = Gtk.Template.Child("pref_theme_combo_row")
     pref_dns_servers_entry_row: Adw.EntryRow = Gtk.Template.Child("pref_dns_servers_entry_row")
+    pref_default_nmap_args_entry_row: Adw.EntryRow = Gtk.Template.Child() # Added new child
 
     def __init__(self, parent_window: Gtk.Window):
         """
@@ -50,6 +51,14 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self.settings.bind(
             "dns-servers",
             self.pref_dns_servers_entry_row,
+            "text",
+            Gio.SettingsBindFlags.DEFAULT
+        )
+
+        # Bind Default Nmap Arguments entry row
+        self.settings.bind(
+            "default-nmap-arguments",
+            self.pref_default_nmap_args_entry_row,
             "text",
             Gio.SettingsBindFlags.DEFAULT
         )

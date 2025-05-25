@@ -23,5 +23,11 @@
       <summary>Custom DNS servers for Nmap scans</summary>
       <description>A comma-separated list of DNS servers to be used by Nmap. If empty, system DNS servers are used.</description>
     </key>
+
+    <key name="default-nmap-arguments" type="s">
+      <default>''</default>
+      <summary>Default arguments for Nmap scans</summary>
+      <description>These arguments are automatically prepended to every Nmap scan initiated through the application. Arguments specified in the main window's 'Additional Arguments' field can override or supplement these defaults.</description>
+    </key>
 	</schema>
 </schemalist>

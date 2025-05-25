@@ -53,15 +53,20 @@
                           </object>
                         </child>
                         <child>
-                          <object class="AdwEntryRow" id="arguments_entry_row">
-                            <property name="show-apply-button">True</property>
-                            <property name="title">additional arguments</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="AdwComboRow" id="nse_script_combo_row">
-                            <property name="subtitle">Include exectution of NSE script</property>
-                            <property name="title">NSE Script</property>
+                          <object class="AdwExpanderRow">
+                            <property name="title">Advanced Options</property>
+                            <property name="expanded">False</property>
+                            <child>
+                              <object class="AdwEntryRow" id="arguments_entry_row">
+                                <property name="title">Additional Arguments</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwComboRow" id="nse_script_combo_row">
+                                <property name="subtitle">Include execution of NSE script</property>
+                                <property name="title">NSE Script</property>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>
