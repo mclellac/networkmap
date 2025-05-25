@@ -8,6 +8,7 @@ gnome.compile_resources('networkmap',
   install_dir: pkgdatadir,
 )
 
+resource_path = join_paths(get_option('prefix'), 'share', 'networkmap', 'networkmap.gresource')
 python = import('python')
 py_installation = python.find_installation('python', required: true)
 
@@ -16,6 +17,7 @@ conf.set('PYTHON', 'python')
 conf.set('VERSION', meson.project_version())
 conf.set('localedir', get_option('localedir'))
 conf.set('pkgdatadir', pkgdatadir)
+conf.set('RESOURCE_PATH', resource_path)
 
 configure_file(
   input: 'networkmap.in',

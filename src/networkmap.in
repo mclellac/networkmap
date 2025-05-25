@@ -3,10 +3,12 @@
 
 import os
 import sys
+import logging
 
 conf = {
     'PYTHON': '@PYTHON@',
     'VERSION': '@VERSION@',
+    'RESOURCE_PATH': '@RESOURCE_PATH@',
     'localedir': '@localedir@',
     'pkgdatadir': '@pkgdatadir@'
 }
@@ -16,11 +18,6 @@ conf = {
 # The path here matches the Meson install path for Python packages.
 # Adjust if your Meson setup uses a different path or variable.
 
-# Typical Meson install path might be like:
-# /usr/local/lib/python3.13/site-packages
-# It's safest to construct this dynamically if possible.
-
-# Construct the path to the installed Python packages based on Python version:
 python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
 site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packages')
 
@@ -42,12 +39,12 @@ except Exception as e_adw_test:
 try:
     from gi.repository import Gio, GLib  # Import GLib for GLib.Error
 
-    resource_path = os.path.join(conf['pkgdatadir'], 'networkmap.gresource')
+    resource_path = conf['RESOURCE_PATH']
 
     if os.path.exists(resource_path):
         print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
         resource = Gio.Resource.load(resource_path)
-        resource._register()
+        Gio.resources_register(resource)
         print(f"INFO: Successfully loaded and registered resources from: {resource_path}", file=sys.stderr)
     else:
         print(f"ERROR: Compiled GResource file not found at {resource_path}. Application may fail to load UI.", file=sys.stderr)

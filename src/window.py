@@ -12,15 +12,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     __gtype_name__ = "NetworkMapWindow"
 
     target_entry_row: Adw.EntryRow = Gtk.Template.Child("target_entry_row")
-    os_fingerprint_switch: Gtk.Switch = Gtk.Template.Child(
-        "os_fingerprint_switch"
-    )
-    arguments_entry_row: Adw.EntryRow = Gtk.Template.Child(
-        "arguments_entry_row"
-    )
-    nse_script_combo_row: Adw.ComboRow = Gtk.Template.Child(
-        "nse_script_combo_row"
-    )
+    os_fingerprint_switch: Gtk.Switch = Gtk.Template.Child("os_fingerprint_switch")
+    arguments_entry_row: Adw.EntryRow = Gtk.Template.Child("arguments_entry_row")
+    nse_script_combo_row: Adw.ComboRow = Gtk.Template.Child("nse_script_combo_row")
     spinner: Gtk.Spinner = Gtk.Template.Child("spinner")
     text_view: Gtk.TextView = Gtk.Template.Child("text_view")
     status_page: Adw.StatusPage = Gtk.Template.Child("status_page")
@@ -95,7 +89,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.os_fingerprint_switch.set_sensitive(True)
 
             if state == "error":
-                self.status_page.set_property("description", f"Scan Failed: {message or 'Unknown error'}")
+                self.status_page.set_property(
+                    "description", f"Scan Failed: {message or 'Unknown error'}"
+                )
             elif state == "success":
                 self.status_page.set_property("description", "Scan Complete.")
             elif state == "ready":
@@ -103,8 +99,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             elif state == "no_results":
                 self.status_page.set_property("description", "Scan Complete: No hosts found.")
             elif state == "no_data":
-                 self.status_page.set_property("description", "Scan Complete: No data received.")
-
+                self.status_page.set_property("description", "Scan Complete: No data received.")
 
     def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
         """Callback for when the scan is initiated from the target entry row."""
@@ -116,7 +111,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
         self._clear_results_ui()
         self._update_ui_state("scanning")
-        
+
         scan_thread = threading.Thread(
             target=self._run_scan_worker,
             args=(
@@ -160,9 +155,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         except Exception as e:
             error_type = type(e).__name__
             error_message = f"An unexpected error occurred in the scan worker: {str(e)}"
-        
-        GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message)
 
+        GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message)
 
     def _process_scan_completion(
         self,
@@ -174,8 +168,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
             if error_message == "No hosts found.":
-                 self._update_ui_state("no_results")
-                 self.current_scan_results = []
+                self._update_ui_state("no_results")
+                self.current_scan_results = []
             else:
                 self._update_ui_state("error", error_message)
                 self.current_scan_results = None
@@ -194,14 +188,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self._populate_results_listbox(hosts_data)
             self._set_text_view_text("Select a host from the list to see its scan details.")
             self._update_ui_state("success")
-        
+
+        # Correctly hide spinner and restore sensitivity
         if self.spinner.get_visible():
-             self.spinner.set_visible(False)
-        if not self.target_entry_row.get_sensitive() and self.status_page.get_property("description") != "Scanning...":
+            self.spinner.set_visible(False)
+        if (
+            not self.target_entry_row.get_sensitive()
+            and self.status_page.get_property("description") != "Scanning..."
+        ):
             self.target_entry_row.set_sensitive(True)
             self.arguments_entry_row.set_sensitive(True)
             self.os_fingerprint_switch.set_sensitive(True)
-
 
     def _clear_results_ui(self) -> None:
         """Clears the results listbox and the text view display."""
@@ -234,11 +231,15 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         host_index: int = row.get_index()
 
         if self.current_scan_results is None:
-            self._set_text_view_text("Cannot display host details: Scan results are currently unavailable.")
+            self._set_text_view_text(
+                "Cannot display host details: Scan results are currently unavailable."
+            )
             return
 
         if not (0 <= host_index < len(self.current_scan_results)):
-            self._set_text_view_text(f"Error: Invalid host selection (index {host_index}). Please try again.")
+            self._set_text_view_text(
+                f"Error: Invalid host selection (index {host_index}). Please try again."
+            )
             return
 
         host_data: Dict[str, Any] = self.current_scan_results[host_index]
@@ -247,4 +248,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if details:
             self._set_text_view_text(details)
         else:
-            self._set_text_view_text(f"No detailed scan information available for {row.get_title()}.")
+            self._set_text_view_text(
+                f"No detailed scan information available for {row.get_title()}."
+            )
