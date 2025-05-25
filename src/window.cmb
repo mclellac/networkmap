@@ -1,6 +1,0 @@
-<?xml version='1.0' encoding='UTF-8' standalone='no'?>
-<!DOCTYPE cambalache-project SYSTEM "cambalache-project.dtd">
-<!-- Created with Cambalache 0.96.1 -->
-<cambalache-project version="0.96.0" target_tk="gtk-4.0">
-  <ui template-class="NetworkMapWindow" filename="window.ui" sha256="57817053b81aa7a2bb0f3a6bdced1fd573de6c4325b4d76743a80c2700ee7fd4"/>
-</cambalache-project>
