@@ -68,12 +68,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             else:
                  print("ERROR (NetworkMapWindow): No pages in tab_view after trying to add initial tab and _add_new_tab returned None.", file=sys.stderr)
         
-        self.tab_view.connect("pages-changed", self._on_tab_view_pages_changed)
+        # Corrected signal connection for handling the "last tab closed" scenario
+        self.tab_view.connect("page-detached", self._on_tab_view_page_detached)
 
 
-    def _on_tab_view_pages_changed(self, tab_view: Adw.TabView) -> None:
-        # Handles the scenario after pages have changed (e.g., a tab is closed),
-        # ensuring a new default tab is created if none are left.
+    def _on_tab_view_page_detached(self, tab_view: Adw.TabView, page: Adw.TabPage) -> None:
+        # Handles the scenario after a page is detached (closed).
+        # If no pages remain, a new default tab is created.
         if tab_view.get_n_pages() == 0:
             # Create a new tab. _add_new_tab will handle setting it as selected
             # and will title it "New Scan" if target is None and set_title=True.
