@@ -19,6 +19,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     text_view: Gtk.TextView = Gtk.Template.Child("text_view")
     status_page: Adw.StatusPage = Gtk.Template.Child("status_page")
     results_listbox: Gtk.ListBox = Gtk.Template.Child("results_listbox")
+    toast_overlay: Adw.ToastOverlay = Gtk.Template.Child("toast_overlay")
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
@@ -107,10 +108,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if not target:
             self._set_text_view_text("Please enter a target to scan.")
             self._update_ui_state("ready", "Empty target")
+            # Potentially add a toast for empty target if desired, though the StatusPage updates.
+            # self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
             return
 
         self._clear_results_ui()
         self._update_ui_state("scanning")
+        self.toast_overlay.add_toast(Adw.Toast.new(f"Scan started for {target}"))
 
         scan_thread = threading.Thread(
             target=self._run_scan_worker,
@@ -169,25 +173,31 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self._display_scan_error(error_type, error_message or "Unknown error.")
             if error_message == "No hosts found.":
                 self._update_ui_state("no_results")
+                self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
                 self.current_scan_results = []
             else:
                 self._update_ui_state("error", error_message)
+                self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message}"))
                 self.current_scan_results = None
-        elif hosts_data is None:
+        elif hosts_data is None: # Should ideally be covered by error_type if scan_message exists
             self._clear_results_ui()
             self._set_text_view_text("No data received from scan.")
             self._update_ui_state("no_data")
+            # Consider if a specific toast is needed here or if it's part of an error toast
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
             self.current_scan_results = None
-        elif not hosts_data:
+        elif not hosts_data: # No hosts found, but scan itself was successful
             self._clear_results_ui()
             self._set_text_view_text("No hosts were found matching the criteria.")
             self._update_ui_state("no_results")
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
             self.current_scan_results = []
-        else:
+        else: # Successful scan with results
             self.current_scan_results = hosts_data
             self._populate_results_listbox(hosts_data)
             self._set_text_view_text("Select a host from the list to see its scan details.")
             self._update_ui_state("success")
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
 
         # Correctly hide spinner and restore sensitivity
         if self.spinner.get_visible():

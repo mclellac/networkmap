@@ -52,7 +52,8 @@ class NetworkMapApplication(Adw.Application):
 
         self.create_action("quit", self._on_quit_action, ["<primary>q"])
         self.create_action("about", self._on_about_action)
-        self.create_action("preferences", self._on_preferences_action)
+        self.create_action("preferences", self._on_preferences_action, ["<primary>comma"])
+        self.create_action("help_shortcuts", self._on_help_shortcuts_action, ["<Control>question", "F1"])
 
         self._apply_initial_theme()
 
@@ -111,6 +112,25 @@ class NetworkMapApplication(Adw.Application):
 
         prefs_window = NetworkMapPreferencesWindow(parent_window=active_window)
         prefs_window.present()
+
+    def _on_help_shortcuts_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
+        """Handles the 'help_shortcuts' action by displaying the shortcuts window."""
+        # Assuming 'help-overlay.ui' is the compiled UI file for the shortcuts
+        # and it's included in the GResources.
+        # The resource path would be like '/com/github/mclellac/NetworkMap/help-overlay.ui'
+        # based on standard project structure and gresource paths.
+        try:
+            builder = Gtk.Builder.new_from_resource("/com/github/mclellac/NetworkMap/gtk/help-overlay.ui")
+            shortcuts_window = builder.get_object("help_overlay") # Ensure 'help_overlay' is the ID of your Gtk.ShortcutsWindow in the UI file.
+            
+            if shortcuts_window:
+                shortcuts_window.set_transient_for(self.get_active_window())
+                shortcuts_window.present()
+            else:
+                print("Error: Could not load the shortcuts window object 'help_overlay' from resources.", file=sys.stderr)
+        except GLib.Error as e:
+            print(f"Error loading shortcuts window from resource: {e}", file=sys.stderr)
+
 
     def create_action(
         self,
