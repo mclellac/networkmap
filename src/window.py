@@ -125,7 +125,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 self.arguments_entry_row.get_text(),
             ),
         )
-        scan_thread.daemon = True # Corrected from thread.daemon to scan_thread.daemon
+        scan_thread.daemon = True
         scan_thread.start()
 
     def _run_scan_worker(

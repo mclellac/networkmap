@@ -11,6 +11,12 @@ conf = {
     'pkgdatadir': '@pkgdatadir@'
 }
 
+# Ensure the package installed in pkgdatadir can be found.
+# conf['pkgdatadir'] (e.g., /usr/local/share/networkmap) is added to sys.path.
+# The Python module 'networkmap' is installed in conf['pkgdatadir'] / 'networkmap'.
+if conf['pkgdatadir'] not in sys.path:
+    sys.path.insert(0, conf['pkgdatadir'])
+
 # 2. Load GResources
 try:
     from gi.repository import Gio, GLib # Import GLib for GLib.Error
