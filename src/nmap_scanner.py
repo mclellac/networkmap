@@ -7,8 +7,9 @@ except ImportError as e:
     ) from e
 
 import shlex
+import subprocess
 from typing import Tuple, Optional, List, Dict, Any
-from ..utils import is_root
+from .utils import is_root
 
 
 class NmapArgumentError(ValueError):
@@ -58,38 +59,84 @@ class NmapScanner:
                 - An error message string if an error occurred, otherwise None.
         """
         try:
-            scan_args = self._build_scan_args(
+            scan_args_str = self._build_scan_args(
                 do_os_fingerprint, additional_args_str, nse_script, default_args_str
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
 
-        try:
-            if do_os_fingerprint and not is_root():
-                # OS fingerprinting requires root privileges.
-                # python-nmap will use pkexec for sudo if available.
-                self.nm.scan(hosts=target, arguments=scan_args, sudo=True)
-            else:
-                self.nm.scan(hosts=target, arguments=scan_args)
-            
-            return self._parse_scan_results(do_os_fingerprint)
-        except nmap.PortScannerError as e:
-            nmap_error_output = getattr(e, 'value', str(e)).strip()
-            if not nmap_error_output: # Ensure there's some error message
-                nmap_error_output = str(e)
+        needs_pkexec = do_os_fingerprint and not is_root()
 
-            # Check for common sudo/pkexec related error messages
-            sudo_error_keywords = [
-                "sudo", "pkexec", "privileges", "authentication failed", 
-                "cancelled by user", "not found", "operation not permitted"
-            ]
-            if any(keyword in nmap_error_output.lower() for keyword in sudo_error_keywords):
-                return None, f"Nmap privilege error (sudo/pkexec): {nmap_error_output}"
-            else:
+        if needs_pkexec:
+            try:
+                current_scan_args_list = shlex.split(scan_args_str)
+                
+                # Add '-oX -' for XML output to stdout if no other XML output option is present.
+                # This ensures we get XML for python-nmap to parse.
+                xml_output_options = ["-oX", "-oA"] # -oA includes XML
+                if not any(opt in current_scan_args_list for opt in xml_output_options):
+                    current_scan_args_list.extend(["-oX", "-"])
+                
+                pkexec_cmd = ["pkexec", "/usr/bin/nmap"] + current_scan_args_list + [target]
+                
+                completed_process = subprocess.run(
+                    pkexec_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False 
+                )
+
+                if completed_process.returncode == 0:
+                    # Even with exit code 0, nmap might not have produced valid XML if stdout is empty.
+                    # analyse_nmap_xml_scan populates self.nm.
+                    # If stdout is empty, it will result in no hosts in self.nm.
+                    self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout or "")
+                    
+                    # If no hosts were found by nmap (e.g. target down, or filtered, or empty XML output),
+                    # and nmap printed to stderr, this stderr might contain useful info (e.g. "Note: Host seems down").
+                    # We can't return it as *the* error if exit code was 0, but it's relevant.
+                    # _parse_scan_results will correctly return ([], "No hosts found.") if self.nm is empty.
+                    # If there was a critical error that prevented XML output but nmap still exited 0,
+                    # this is an edge case. For now, we rely on _parse_scan_results.
+                    if not self.nm.all_hosts() and completed_process.stderr:
+                        # This could augment the "No hosts found" message, but _parse_scan_results
+                        # doesn't currently support passing stderr through.
+                        # For now, we just proceed. The primary result is "No hosts found".
+                        pass
+                        
+                    return self._parse_scan_results(do_os_fingerprint)
+                else:
+                    error_message = f"pkexec/nmap error (Code {completed_process.returncode}): "
+                    if completed_process.stderr:
+                        error_message += completed_process.stderr.strip()
+                    elif completed_process.stdout: # Some errors might go to stdout
+                        error_message += completed_process.stdout.strip()
+                    else:
+                        error_message += "Unknown error."
+                    return None, error_message
+            except FileNotFoundError:
+                return None, "Error: pkexec command not found. Is PolicyKit (polkit-1) installed and pkexec in PATH?"
+            except Exception as e: 
+                return None, f"An unexpected error occurred during pkexec scan ({type(e).__name__}): {e}"
+        else:
+            # Standard scan using python-nmap's direct scan method
+            try:
+                self.nm.scan(hosts=target, arguments=scan_args_str)
+                return self._parse_scan_results(do_os_fingerprint)
+            except nmap.PortScannerError as e:
+                nmap_error_output = getattr(e, 'value', str(e)).strip()
+                if not nmap_error_output: # Ensure there's some error message
+                    nmap_error_output = str(e)
                 return None, f"Nmap execution error: {nmap_error_output}"
-        except NmapScanParseError as e:
-            return None, f"Scan parsing error: {e}"
-        except Exception as e:
+            # NmapScanParseError will be caught by the caller's try-except if raised by _parse_scan_results
+            # Other exceptions during direct scan
+            except Exception as e:
+                return None, f"An unexpected error occurred during direct scan ({type(e).__name__}): {e}"
+
+        # Fallback, though all paths should return before this.
+        return None, "Scan failed due to an unexpected internal error."
+
+    def _build_scan_args(
             return None, f"An unexpected error occurred during scan ({type(e).__name__}): {e}"
 
     def _build_scan_args(

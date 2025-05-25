@@ -1,7 +1,7 @@
 import threading
 from typing import Optional, List, Dict, Any, Tuple
 
-from gi.repository import Adw, Gtk, GLib, GObject, Gio
+from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
 from .utils import discover_nse_scripts
@@ -29,10 +29,26 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
         self.selected_nse_script: Optional[str] = None
+        
+        self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
 
+        self._apply_font_preference() # Apply initial font preference
         self._connect_signals()
         self._populate_nse_script_combo()
         self._update_ui_state("ready")
+
+    def _apply_font_preference(self) -> None:
+        """Applies the font preference from GSettings to the results text_view."""
+        font_str = self.settings.get_string("results-font")
+        if font_str:
+            font_desc = Pango.FontDescription.from_string(font_str)
+            self.text_view.override_font(font_desc)
+        else:
+            # Reset to theme font if setting is empty or invalid
+            # self.text_view.override_font(Pango.FontDescription()) 
+            # For now, do nothing to keep default or previously set theme font
+            pass
 
     def _set_text_view_text(self, message: str) -> None:
         """Sets the text of the text_view's buffer if it exists."""
@@ -169,35 +185,38 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         error_message: Optional[str],
     ) -> None:
         """Handles UI updates after the Nmap scan worker finishes."""
-        if error_type:
+        if error_type and error_message != "No hosts found.":
             self._display_scan_error(error_type, error_message or "Unknown error.")
-            if error_message == "No hosts found.":
-                self._update_ui_state("no_results")
-                self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
-                self.current_scan_results = []
-            else:
-                self._update_ui_state("error", error_message)
-                self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message}"))
-                self.current_scan_results = None
-        elif hosts_data is None: # Should ideally be covered by error_type if scan_message exists
-            self._clear_results_ui()
-            self._set_text_view_text("No data received from scan.")
-            self._update_ui_state("no_data")
-            # Consider if a specific toast is needed here or if it's part of an error toast
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
+            self._update_ui_state("error", error_message)
+            self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'Unknown error'}"))
             self.current_scan_results = None
-        elif not hosts_data: # No hosts found, but scan itself was successful
-            self._clear_results_ui()
-            self._set_text_view_text("No hosts were found matching the criteria.")
-            self._update_ui_state("no_results")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
-            self.current_scan_results = []
-        else: # Successful scan with results
+        elif hosts_data is not None and hosts_data:  # Scan successful with results
             self.current_scan_results = hosts_data
             self._populate_results_listbox(hosts_data)
             self._set_text_view_text("Select a host from the list to see its scan details.")
             self._update_ui_state("success")
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
+        elif hosts_data == [] or (error_type and error_message == "No hosts found."):
+            self._clear_results_ui()
+            if error_message == "No hosts found.":
+                self._display_scan_error(error_type, error_message) # Keep existing error display
+            else: # hosts_data == []
+                self._set_text_view_text("No hosts were found matching the criteria.")
+            self._update_ui_state("no_results")
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
+            self.current_scan_results = []
+        elif hosts_data is None and not error_type: # No data, no specific error
+            self._clear_results_ui()
+            self._set_text_view_text("No data received from scan.")
+            self._update_ui_state("no_data")
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
+            self.current_scan_results = None
+        # Fallback for any other unhandled error_type scenario that might not set hosts_data
+        elif error_type:
+             self._display_scan_error(error_type, error_message or "Unknown error.")
+             self._update_ui_state("error", error_message)
+             self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'An unspecified error occurred'}"))
+             self.current_scan_results = None
 
         # Correctly hide spinner and restore sensitivity
         if self.spinner.get_visible():
