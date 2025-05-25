@@ -6,46 +6,115 @@ from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
 from .utils import discover_nse_scripts
+from .scan_page import ScanPage
 
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/window.ui")
 class NetworkMapWindow(Adw.ApplicationWindow):
     __gtype_name__ = "NetworkMapWindow"
 
-    target_entry_row: Adw.EntryRow = Gtk.Template.Child("target_entry_row")
-    os_fingerprint_switch: Gtk.Switch = Gtk.Template.Child("os_fingerprint_switch")
-    arguments_entry_row: Adw.EntryRow = Gtk.Template.Child("arguments_entry_row")
-    nse_script_combo_row: Adw.ComboRow = Gtk.Template.Child("nse_script_combo_row")
-    spinner: Gtk.Spinner = Gtk.Template.Child("spinner")
-    text_view: Gtk.TextView = Gtk.Template.Child("text_view")
-    status_page: Adw.StatusPage = Gtk.Template.Child("status_page")
-    results_listbox: Gtk.ListBox = Gtk.Template.Child("results_listbox")
-    toast_overlay: Adw.ToastOverlay = Gtk.Template.Child("toast_overlay")
+    tab_view: Adw.TabView = Gtk.Template.Child("tab_view")
+    tab_bar: Adw.TabBar = Gtk.Template.Child("tab_bar")
+    
+    # Old Template Children that will move to ScanPage are removed from here:
+    # target_entry_row, os_fingerprint_switch, arguments_entry_row, nse_script_combo_row
+    # spinner, text_view, status_page, results_listbox, toast_overlay
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
         super().__init__(**kwargs)
-        self.text_buffer: Gtk.TextBuffer = self.text_view.get_buffer()
+        
+        self.tab_bar.set_view(self.tab_view)
 
-        self.nmap_scanner: NmapScanner = NmapScanner()
-        self.current_scan_results: Optional[List[Dict[str, Any]]] = None
-        self.selected_nse_script: Optional[str] = None
+        # self.text_buffer will be part of ScanPage
+        # self.text_view will be part of ScanPage
+
+        self.nmap_scanner: NmapScanner = NmapScanner() # Remains for now
+        self.current_scan_results: Optional[List[Dict[str, Any]]] = None # Will likely move or be managed per tab
+        self.selected_nse_script: Optional[str] = None # Will likely move or be managed per tab
         
-        self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap") # Remains for global settings
         
-        # Initialize and apply CSS provider for font settings
+        # Font CSS provider is initialized here. ScanPage instances will add this
+        # provider to their text_view's style context.
         self.font_css_provider = Gtk.CssProvider()
-        self.text_view.get_style_context().add_provider(
-            self.font_css_provider, 
-            Gtk.STYLE_PROVIDER_PRIORITY_USER
+        
+        # When GSetting changes, update the CSS provider's data.
+        # All text_views using this provider will update.
+        self.settings.connect("changed::results-font", lambda s, k: self._update_font_css_provider_data())
+        self._update_font_css_provider_data() # Load initial font data into the provider
+        
+        # Old signal connections and UI setup that will move to ScanPage are removed:
+        # self._connect_signals() 
+        # self._populate_nse_script_combo()
+        # self._update_ui_state("ready")
+        
+        self._add_new_tab(set_title=False)
+        first_page = self.tab_view.get_page(0)
+        if first_page: # Should exist
+            first_page.set_title("Network Scan")
+        
+        self.tab_view.connect("close-page-done", self._on_tab_view_page_closed)
+
+
+    def _on_tab_view_page_closed(self, tab_view: Adw.TabView, page: Adw.TabPage) -> None:
+        # Handles the scenario after a tab is closed, ensuring a new default tab is created if none are left.
+        if tab_view.get_n_pages() == 0:
+            # Create a new tab. _add_new_tab will handle setting it as selected
+            # and will title it "New Scan" if target is None and set_title=True.
+            new_adw_tabpage = self._add_new_tab(target=None, set_title=True)
+            # If a specific title like "Network Scan" is absolutely required for this auto-created tab:
+            if new_adw_tabpage: # Ensure the tab was actually created
+                new_adw_tabpage.set_title("Network Scan") # Override default "New Scan" if needed
+
+    def _create_new_page(self, target: Optional[str] = None) -> ScanPage:
+        page_widget = ScanPage(app_window=self)
+        if target:
+            # Assuming ScanPage has target_entry_row accessible after its __init__
+            page_widget.target_entry_row.set_text(target)
+        
+        # ScanPage.__init__ is now responsible for applying the font_css_provider
+        # from self (app_window) to its text_view.
+        return page_widget
+
+    def _add_new_tab(self, target: Optional[str] = None, set_title: bool = True) -> Adw.TabPage:
+        new_page_widget = self._create_new_page(target=target)
+        new_tab_page = self.tab_view.append(new_page_widget)
+        new_tab_page.set_indicator_icon(Gio.ThemedIcon.new("network-transmit-receive-symbolic"))
+        if set_title:
+            title = target if target else "New Scan" # Default title for subsequent tabs
+            new_tab_page.set_title(title)
+        self.tab_view.set_selected_page(new_tab_page)
+        
+        # Signal connection for scan initiation will be handled within ScanPage._connect_signals()
+        # which calls app_window._initiate_scan_for_page(self)
+        return new_tab_page
+
+    def _initiate_scan_for_page(self, scan_page: ScanPage) -> None:
+        """Initiates a scan based on the UI elements of a given ScanPage."""
+        target: str = scan_page.target_entry_row.get_text().strip()
+        if not target:
+            scan_page.set_text_view_text("Please enter a target to scan.")
+            scan_page.update_ui_state("ready", "Empty target")
+            # scan_page.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
+            return
+
+        scan_page.clear_results_ui()
+        scan_page.update_ui_state("scanning")
+        scan_page.toast_overlay.add_toast(Adw.Toast.new(f"Scan started for {target}"))
+
+        scan_thread = threading.Thread(
+            target=self._run_scan_worker,
+            args=(
+                target,
+                scan_page.os_fingerprint_switch.get_active(),
+                scan_page.arguments_entry_row.get_text(),
+                scan_page.selected_nse_script, # ScanPage will own this
+                scan_page # Pass the ScanPage instance
+            ),
         )
-        
-        self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
-        self._apply_font_preference() # Apply initial font preference
-        
-        self._connect_signals()
-        self._populate_nse_script_combo()
-        self._update_ui_state("ready")
+        scan_thread.daemon = True
+        scan_thread.start()
 
     def _apply_font_preference(self) -> None:
         # Applies the font preference from GSettings to the results text_view using specific CSS properties.
@@ -97,9 +166,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nse_script_combo_row.set_selected(0)
 
     def _connect_signals(self) -> None:
-        """Connects UI signals to their handlers."""
-        self.target_entry_row.connect("apply", self._on_scan_button_clicked)
-        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
+        """Connects UI signals to their handlers. (This method will be refactored for ScanPage)"""
+        # self.target_entry_row.connect("apply", self._on_scan_button_clicked)
+        # self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
+        pass
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """
@@ -121,35 +191,19 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
         """
         Updates the UI elements like spinner and status page based on application state.
+        (This method will be refactored for ScanPage)
 
         Args:
             state: The current state ("scanning", "error", "success", "ready", "no_results", "no_data").
             message: An optional message, typically for errors or specific statuses.
         """
-        if state == "scanning":
-            self.spinner.set_visible(True)
-            self.status_page.set_property("description", "Scanning...")
-            self.target_entry_row.set_sensitive(False)
-            self.arguments_entry_row.set_sensitive(False)
-            self.os_fingerprint_switch.set_sensitive(False)
-        else:
-            self.spinner.set_visible(False)
-            self.target_entry_row.set_sensitive(True)
-            self.arguments_entry_row.set_sensitive(True)
-            self.os_fingerprint_switch.set_sensitive(True)
-
-            if state == "error":
-                self.status_page.set_property(
-                    "description", f"Scan Failed: {message or 'Unknown error'}"
-                )
-            elif state == "success":
-                self.status_page.set_property("description", "Scan Complete.")
-            elif state == "ready":
-                self.status_page.set_property("description", message or "Ready to scan.")
-            elif state == "no_results":
-                self.status_page.set_property("description", "Scan Complete: No hosts found.")
-            elif state == "no_data":
-                self.status_page.set_property("description", "Scan Complete: No data received.")
+        # if state == "scanning":
+        #     self.spinner.set_visible(True) # self.spinner is no longer here
+        #     self.status_page.set_property("description", "Scanning...") # self.status_page is no longer here
+        #     # ... and so on for other elements
+        # else:
+        #     # ...
+        pass
 
     def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
         """Callback for when the scan is initiated from the target entry row."""
@@ -177,113 +231,126 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         scan_thread.start()
 
     def _run_scan_worker(
-        self, target: str, do_os_fingerprint: bool, additional_args_str: str
+        self, 
+        target: str, 
+        do_os_fingerprint: bool, 
+        additional_args_str: str, 
+        selected_nse_script: Optional[str], # Passed from ScanPage
+        scan_page: ScanPage # Pass the ScanPage instance
     ) -> None:
         """
         Worker function to perform the Nmap scan.
         This method is run in a separate thread.
         """
-        settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
-        default_args_from_settings: str = settings.get_string("default-nmap-arguments")
+        # self.settings is already an instance variable
+        default_args_from_settings: str = self.settings.get_string("default-nmap-arguments")
 
         error_type: Optional[str] = None
         error_message: Optional[str] = None
         hosts_data: Optional[List[Dict[str, Any]]] = None
 
         try:
+            # self.nmap_scanner is already an instance variable
             hosts_data, scan_message = self.nmap_scanner.scan(
                 target,
                 do_os_fingerprint,
                 additional_args_str,
-                self.selected_nse_script,
+                selected_nse_script, # Use the one from ScanPage
                 default_args_str=default_args_from_settings,
             )
-            if scan_message and not hosts_data:
-                error_type = "ScanMessage"
+            if scan_message and not hosts_data: # scan_message indicates an error or "No hosts found"
+                error_type = "ScanMessage" # Custom type to indicate message from scan itself
                 error_message = scan_message
 
-        except (NmapArgumentError, NmapScanParseError) as e:
+        except (NmapArgumentError, NmapScanParseError) as e: # These are custom exceptions from nmap_scanner
             error_type = type(e).__name__
             error_message = str(e)
-        except Exception as e:
+        except Exception as e: # Catch any other unexpected errors
             error_type = type(e).__name__
             error_message = f"An unexpected error occurred in the scan worker: {str(e)}"
 
-        GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message)
+        GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message, scan_page)
 
     def _process_scan_completion(
         self,
         hosts_data: Optional[List[Dict[str, Any]]],
         error_type: Optional[str],
         error_message: Optional[str],
+        scan_page: ScanPage # Receive the ScanPage instance
     ) -> None:
-        """Handles UI updates after the Nmap scan worker finishes."""
-        if error_type and error_message != "No hosts found.":
-            self._display_scan_error(error_type, error_message or "Unknown error.")
-            self._update_ui_state("error", error_message)
-            self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'Unknown error'}"))
-            self.current_scan_results = None
-        elif hosts_data is not None and hosts_data:  # Scan successful with results
-            self.current_scan_results = hosts_data
-            self._populate_results_listbox(hosts_data)
-            self._set_text_view_text("Select a host from the list to see its scan details.")
-            self._update_ui_state("success")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
-        elif hosts_data == [] or (error_type and error_message == "No hosts found."):
-            self._clear_results_ui()
-            if error_message == "No hosts found.":
-                self._display_scan_error(error_type, error_message) # Keep existing error display
-            else: # hosts_data == []
-                self._set_text_view_text("No hosts were found matching the criteria.")
-            self._update_ui_state("no_results")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
-            self.current_scan_results = []
-        elif hosts_data is None and not error_type: # No data, no specific error
-            self._clear_results_ui()
-            self._set_text_view_text("No data received from scan.")
-            self._update_ui_state("no_data")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
-            self.current_scan_results = None
-        # Fallback for any other unhandled error_type scenario that might not set hosts_data
-        elif error_type:
-             self._display_scan_error(error_type, error_message or "Unknown error.")
-             self._update_ui_state("error", error_message)
-             self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'An unspecified error occurred'}"))
-             self.current_scan_results = None
+        """Handles UI updates after the Nmap scan worker finishes, on the specific ScanPage."""
+        
+        # Update tab title if a target was scanned and is present
+        selected_tab_page = self.tab_view.get_selected_page()
+        if selected_tab_page and scan_page == selected_tab_page.get_child(): # Ensure updates apply to the correct tab
+            current_target_text = scan_page.target_entry_row.get_text().strip()
+            if current_target_text:
+                 # Only update if title is not already the target (or was "Network Scan"/"New Scan")
+                if selected_tab_page.get_title() != current_target_text :
+                    selected_tab_page.set_title(current_target_text)
+            elif selected_tab_page.get_title() == "": # If target cleared and title was empty (e.g. first tab before scan)
+                 selected_tab_page.set_title("Network Scan")
 
-        # Correctly hide spinner and restore sensitivity
-        if self.spinner.get_visible():
-            self.spinner.set_visible(False)
-        if (
-            not self.target_entry_row.get_sensitive()
-            and self.status_page.get_property("description") != "Scanning..."
-        ):
-            self.target_entry_row.set_sensitive(True)
-            self.arguments_entry_row.set_sensitive(True)
-            self.os_fingerprint_switch.set_sensitive(True)
+
+        if error_type and error_message != "No hosts found.":
+            scan_page.display_scan_error(error_type, error_message or "Unknown error.")
+            scan_page.update_ui_state("error", error_message)
+            scan_page.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'Unknown error'}"))
+            scan_page.current_scan_results = None
+        elif hosts_data is not None and hosts_data:  # Scan successful with results
+            scan_page.current_scan_results = hosts_data
+            scan_page.populate_results_listbox(hosts_data)
+            scan_page.set_text_view_text("Select a host from the list to see its scan details.")
+            scan_page.update_ui_state("success")
+            scan_page.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
+        elif hosts_data == [] or (error_type and error_message == "No hosts found."):
+            scan_page.clear_results_ui()
+            if error_message == "No hosts found.": # Make sure "No hosts found" is displayed if it's the message
+                 scan_page.display_scan_error(error_type if error_type else "Info", error_message)
+            else: # hosts_data == []
+                scan_page.set_text_view_text("No hosts were found matching the criteria.")
+            scan_page.update_ui_state("no_results")
+            scan_page.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
+            scan_page.current_scan_results = []
+        elif hosts_data is None and not error_type: # No data, no specific error (e.g. scan_message was None)
+            scan_page.clear_results_ui()
+            scan_page.set_text_view_text("No data received from scan.") # Or a more generic message
+            scan_page.update_ui_state("no_data")
+            scan_page.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
+            scan_page.current_scan_results = None
+        # Fallback for any other unhandled error_type scenario
+        elif error_type:
+             scan_page.display_scan_error(error_type, error_message or "Unknown error.")
+             scan_page.update_ui_state("error", error_message)
+             scan_page.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'An unspecified error occurred'}"))
+             scan_page.current_scan_results = None
+        
+        # UI state like spinner and input sensitivity is handled by scan_page.update_ui_state()
+
+
+    # Methods to be removed or significantly refactored as they primarily deal with UI elements now in ScanPage
+    # _clear_results_ui, _populate_results_listbox, _display_scan_error, _on_host_row_activated
+    # _set_text_view_text (though ScanPage might have its own version)
 
     def _clear_results_ui(self) -> None:
-        """Clears the results listbox and the text view display."""
-        while child := self.results_listbox.get_row_at_index(0):
-            self.results_listbox.remove(child)
-        self._set_text_view_text("")
+        """Clears the results listbox and the text view display. (DEPRECATED in Window - Moved to ScanPage)"""
+        # while child := self.results_listbox.get_row_at_index(0): # self.results_listbox is no longer here
+        #     self.results_listbox.remove(child)
+        # self._set_text_view_text("")
+        pass
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
-        """Populates the results_listbox with discovered hosts from scan data."""
-        for host_data in hosts_data:
-            row = Adw.ActionRow()
-            title = host_data.get("hostname") or host_data.get("id", "Unknown Host")
-            row.set_title(title)
-            row.set_subtitle(f"State: {host_data.get('state', 'N/A')}")
-            row.set_icon_name("computer-symbolic")
-            row.set_activatable(True)
-            row.connect("activated", self._on_host_row_activated)
-            self.results_listbox.append(row)
+        """Populates the results_listbox with discovered hosts from scan data. (DEPRECATED in Window - Moved to ScanPage)"""
+        # for host_data in hosts_data:
+        #     # ... row creation ...
+        #     self.results_listbox.append(row) # self.results_listbox is no longer here
+        pass
 
     def _display_scan_error(self, error_type: str, error_message: str) -> None:
-        """Displays scan-related errors in the text_view."""
-        self._clear_results_ui()
-        self._set_text_view_text(f"Error Type: {error_type}\n\nMessage: {error_message}")
+        """Displays scan-related errors in the text_view. (DEPRECATED in Window - Moved to ScanPage)"""
+        # self._clear_results_ui() # This would call the (now empty) window version
+        # self._set_text_view_text(f"Error Type: {error_type}\n\nMessage: {error_message}")
+        pass
 
     def _on_host_row_activated(self, row: Adw.ActionRow) -> None:
         """

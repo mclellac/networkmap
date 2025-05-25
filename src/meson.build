@@ -35,6 +35,7 @@ networkmap_sources = [
   'nmap_scanner.py',
   'preferences_window.py',
   'utils.py',
+  'scan_page.py',
 ]
 
 py_installation.install_sources(
