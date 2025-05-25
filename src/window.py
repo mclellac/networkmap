@@ -49,10 +49,24 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # self._populate_nse_script_combo()
         # self._update_ui_state("ready")
         
-        self._add_new_tab(set_title=False)
-        first_page = self.tab_view.get_page(0)
-        if first_page: # Should exist
-            first_page.set_title("Network Scan")
+        initial_adw_tab_page = self._add_new_tab(target=None, set_title=True) # Creates tab, sets title to "New Scan" by default
+
+        if initial_adw_tab_page:
+            initial_adw_tab_page.set_title("Network Scan") # Explicitly set the desired title for the first tab
+            print(f"DEBUG (NetworkMapWindow): Initial tab created. Title: '{initial_adw_tab_page.get_title()}', N Pages: {self.tab_view.get_n_pages()}", file=sys.stderr)
+        else:
+            # This case means _add_new_tab itself returned None, which would be unexpected.
+            print("ERROR (NetworkMapWindow): _add_new_tab did not return a page object for the initial tab.", file=sys.stderr)
+            # Fallback logic to check if a page was added anyway (e.g., if append worked but return was missed)
+            if self.tab_view.get_n_pages() > 0:
+                 print("DEBUG (NetworkMapWindow): A page exists despite _add_new_tab returning None. Trying to get_page(0).", file=sys.stderr)
+                 fallback_page = self.tab_view.get_page(0)
+                 if fallback_page:
+                     fallback_page.set_title("Network Scan (fallback)")
+                 else:
+                     print("ERROR (NetworkMapWindow): get_page(0) also returned None.", file=sys.stderr)
+            else:
+                 print("ERROR (NetworkMapWindow): No pages in tab_view after trying to add initial tab and _add_new_tab returned None.", file=sys.stderr)
         
         self.tab_view.connect("close-page-done", self._on_tab_view_page_closed)
 
@@ -127,7 +141,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
                 size_points = 0
-                if font_desc.get_size_is_set():
+                if font_desc.get_size() != 0: # Corrected check for Pango font size
                     size_points = font_desc.get_size() / Pango.SCALE
                 
                 print(f"DEBUG (NetworkMapWindow): Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
