@@ -87,8 +87,8 @@ class NetworkMapApplication(Adw.Application):
             copyright=COPYRIGHT_INFO,
             website=PRIMARY_WEBSITE,
             issue_url=ISSUE_TRACKER_URL,
-            transient_for=self.get_active_window(),
         )
+        about_dialog.set_transient_for(self.get_active_window())
 
         try:
             if callable(_):

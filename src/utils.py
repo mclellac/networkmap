@@ -44,3 +44,13 @@ def discover_nse_scripts() -> List[str]:
         return []
 
     return script_names
+
+
+def is_root() -> bool:
+    """
+    Checks if the current effective user ID is root.
+
+    Returns:
+        True if the effective user ID is 0, False otherwise.
+    """
+    return os.geteuid() == 0

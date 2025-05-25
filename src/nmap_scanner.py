@@ -8,6 +8,7 @@ except ImportError as e:
 
 import shlex
 from typing import Tuple, Optional, List, Dict, Any
+from ..utils import is_root
 
 
 class NmapArgumentError(ValueError):
@@ -64,13 +65,28 @@ class NmapScanner:
             return None, f"Argument error: {e}"
 
         try:
-            self.nm.scan(hosts=target, arguments=scan_args)
+            if do_os_fingerprint and not is_root():
+                # OS fingerprinting requires root privileges.
+                # python-nmap will use pkexec for sudo if available.
+                self.nm.scan(hosts=target, arguments=scan_args, sudo=True)
+            else:
+                self.nm.scan(hosts=target, arguments=scan_args)
+            
             return self._parse_scan_results(do_os_fingerprint)
         except nmap.PortScannerError as e:
             nmap_error_output = getattr(e, 'value', str(e)).strip()
-            if not nmap_error_output:
+            if not nmap_error_output: # Ensure there's some error message
                 nmap_error_output = str(e)
-            return None, f"Nmap execution error: {nmap_error_output}"
+
+            # Check for common sudo/pkexec related error messages
+            sudo_error_keywords = [
+                "sudo", "pkexec", "privileges", "authentication failed", 
+                "cancelled by user", "not found", "operation not permitted"
+            ]
+            if any(keyword in nmap_error_output.lower() for keyword in sudo_error_keywords):
+                return None, f"Nmap privilege error (sudo/pkexec): {nmap_error_output}"
+            else:
+                return None, f"Nmap execution error: {nmap_error_output}"
         except NmapScanParseError as e:
             return None, f"Scan parsing error: {e}"
         except Exception as e:
