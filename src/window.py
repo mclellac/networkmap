@@ -116,41 +116,37 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         scan_thread.daemon = True
         scan_thread.start()
 
-    def _apply_font_preference(self) -> None:
-        # Applies the font preference from GSettings to the results text_view using specific CSS properties.
+    def _update_font_css_provider_data(self) -> None:
+        # Applies the font preference from GSettings to the central CSS provider.
         font_str = self.settings.get_string("results-font")
-        print(f"DEBUG: Font string from GSettings: '{font_str}'", file=sys.stderr)
-
-        css_data = ""  # Default to empty CSS (clear override)
+        print(f"DEBUG (NetworkMapWindow): Font string from GSettings: '{font_str}'", file=sys.stderr) # Ensure sys is imported
+        css_data = ""
         if font_str:
             try:
+                # Ensure Pango is imported: from gi.repository import Pango
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
                 size_points = 0
-                
-                if font_desc.get_size_is_set(): # Check if size was explicitly set in the description
+                if font_desc.get_size_is_set():
                     size_points = font_desc.get_size() / Pango.SCALE
                 
-                print(f"DEBUG: Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
+                print(f"DEBUG (NetworkMapWindow): Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
 
                 if family and size_points > 0:
                     css_data = f"* {{ font-family: \"{family}\"; font-size: {size_points}pt; }}"
                 elif family: # Only family is reliably parsed or size is 0/default
-                    css_data = f"* {{ font-family: \"{family}\"; }}" # Apply only family, let size be default
-                    print(f"DEBUG: Applying family only: '{family}'", file=sys.stderr)
+                    css_data = f"* {{ font-family: \"{family}\"; }}"
                 else:
-                    # This case means Pango.FontDescription couldn't even get a family name.
-                    print(f"Warning: Could not parse family name effectively from font string '{font_str}'. CSS will be empty.", file=sys.stderr)
+                    print(f"Warning (NetworkMapWindow): Could not parse family name effectively from font string '{font_str}'. CSS will be empty.", file=sys.stderr)
             except Exception as e:
-                # Handles errors from Pango.FontDescription.from_string() if font_str is malformed
-                print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will be empty.", file=sys.stderr)
+                print(f"Error (NetworkMapWindow): Parsing font string '{font_str}' with Pango: {e}. CSS will be empty.", file=sys.stderr)
         
-        print(f"DEBUG: Generated CSS data: '{css_data}'", file=sys.stderr)
-
-        if hasattr(self, 'font_css_provider'):
+        print(f"DEBUG (NetworkMapWindow): Generated CSS for provider: '{css_data}'", file=sys.stderr)
+        
+        if hasattr(self, 'font_css_provider'): # Ensure font_css_provider is an instance variable
             self.font_css_provider.load_from_data(css_data.encode())
         else:
-            print("Error: font_css_provider not initialized before applying font preference.", file=sys.stderr)
+            print("Error (NetworkMapWindow): font_css_provider not initialized.", file=sys.stderr)
 
     def _set_text_view_text(self, message: str) -> None:
         """Sets the text of the text_view's buffer if it exists."""
