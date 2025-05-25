@@ -32,6 +32,7 @@ networkmap_sources = [
   'window.py',
   'nmap_scanner.py',
   'preferences_window.py', # Added preferences_window.py
+  'networkmap/utils.py', # Added utils.py
 ]
 
-install_data(networkmap_sources, install_dir: moduledir)
+install_data(networkmap_sources, install_dir: moduledir / 'networkmap')

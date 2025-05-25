@@ -19,6 +19,7 @@ from gi.repository import Gtk, Gio, Adw, GLib
 # Local application imports
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
+from .networkmap.utils import apply_theme # Added import
 
 # --- Application Metadata Constants ---
 APP_ID: str = "com.github.mclellac.NetworkMap"
@@ -57,14 +58,7 @@ class NetworkMapApplication(Adw.Application):
         """Applies the saved theme preference at application startup."""
         settings = Gio.Settings.new(APP_ID) # Use APP_ID for consistency
         theme_str = settings.get_string("theme")
-        
-        style_manager = Adw.StyleManager.get_default()
-        if theme_str == "light":
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
-        elif theme_str == "dark":
-            style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-        else: # "system"
-            style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        apply_theme(theme_str) # Use the new utility function
 
     def do_activate(self) -> None:
         """
