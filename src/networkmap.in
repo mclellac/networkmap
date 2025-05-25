@@ -62,6 +62,18 @@ except Exception as e:
 
 # 3. Import and run the main application module
 try:
+    # --- BEGIN DIAGNOSTIC PRINTS ---
+    print(f"DEBUG: Launch script sys.path: {sys.path}", file=sys.stderr)
+    check_dir = os.path.join(conf['pkgdatadir'], 'networkmap')
+    print(f"DEBUG: Checking directory: {check_dir}", file=sys.stderr)
+    if os.path.isdir(check_dir):
+        try:
+            print(f"DEBUG: Contents of {check_dir}: {os.listdir(check_dir)}", file=sys.stderr)
+        except Exception as e:
+            print(f"DEBUG: Error listing contents of {check_dir}: {e}", file=sys.stderr)
+    else:
+        print(f"DEBUG: {check_dir} is not a directory.", file=sys.stderr)
+    # --- END DIAGNOSTIC PRINTS ---
     # The package is 'networkmap' (the directory name inside pkgdatadir)
     # It contains main.py
     from networkmap import main as app_main
