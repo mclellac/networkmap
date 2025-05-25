@@ -137,9 +137,6 @@ class NmapScanner:
         return None, "Scan failed due to an unexpected internal error."
 
     def _build_scan_args(
-            return None, f"An unexpected error occurred during scan ({type(e).__name__}): {e}"
-
-    def _build_scan_args(
         self,
         do_os_fingerprint: bool,
         additional_args_str: str,

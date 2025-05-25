@@ -31,24 +31,40 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.selected_nse_script: Optional[str] = None
         
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        
+        # Initialize and apply CSS provider for font settings
+        self.font_css_provider = Gtk.CssProvider()
+        self.text_view.get_style_context().add_provider(
+            self.font_css_provider, 
+            Gtk.STYLE_PROVIDER_PRIORITY_USER
+        )
+        
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
-
         self._apply_font_preference() # Apply initial font preference
+        
         self._connect_signals()
         self._populate_nse_script_combo()
         self._update_ui_state("ready")
 
     def _apply_font_preference(self) -> None:
-        """Applies the font preference from GSettings to the results text_view."""
-        font_str = self.settings.get_string("results-font")
+        """Applies the font preference from GSettings to the results text_view using CSS."""
+        font_str = self.settings.get_string("results-font") # Assumes self.settings is initialized
+            
+        css_data = "" # Default to empty CSS (clear override)
         if font_str:
-            font_desc = Pango.FontDescription.from_string(font_str)
-            self.text_view.override_font(font_desc)
+            # Pango font description like "Monospace 12" is generally okay for "font:" CSS property in GTK.
+            # Escape any special characters in font_str if necessary, though typically font names are simple.
+            # For CSS, if font_str contains spaces, it might need quoting, but Pango format "Family Style Size"
+            # is usually fine for Gtk's `font` CSS property.
+            css_data = f"* {{ font: {font_str}; }}"
+            
+        # Ensure self.font_css_provider is initialized before calling this
+        if hasattr(self, 'font_css_provider'):
+            self.font_css_provider.load_from_data(css_data.encode())
         else:
-            # Reset to theme font if setting is empty or invalid
-            # self.text_view.override_font(Pango.FontDescription()) 
-            # For now, do nothing to keep default or previously set theme font
-            pass
+            # This case should ideally not happen if __init__ is structured correctly
+            # Consider logging to sys.stderr if available and appropriate for the app
+            print("Error: font_css_provider not initialized before applying font preference.")
 
     def _set_text_view_text(self, message: str) -> None:
         """Sets the text of the text_view's buffer if it exists."""
