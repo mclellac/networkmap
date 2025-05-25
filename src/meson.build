@@ -1,6 +1,6 @@
-pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
-gnome = import('gnome')
+pkgdatadir = get_option('datadir') / meson.project_name()
 
+gnome = import('gnome')
 gnome.compile_resources('networkmap',
   'networkmap.gresource.xml',
   gresource_bundle: true,
@@ -9,12 +9,12 @@ gnome.compile_resources('networkmap',
 )
 
 python = import('python')
+py_installation = python.find_installation('python', required: true)
 
 conf = configuration_data()
-py_installation = python.find_installation('python3', required: true) # Added required: true for robustness
-conf.set('PYTHON', py_installation.full_path())
+conf.set('PYTHON', 'python')
 conf.set('VERSION', meson.project_version())
-conf.set('localedir', get_option('prefix') / get_option('localedir'))
+conf.set('localedir', get_option('localedir'))
 conf.set('pkgdatadir', pkgdatadir)
 
 configure_file(
@@ -32,7 +32,7 @@ networkmap_sources = [
   'window.py',
   'nmap_scanner.py',
   'preferences_window.py',
-  'utils.py', # Updated path
+  'utils.py',
 ]
 
 py_installation.install_sources(

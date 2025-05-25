@@ -103,9 +103,7 @@ def run_command(cmd):
         result = subprocess.run(cmd, check=True, text=True, capture_output=True)
         print(result.stdout)
     except subprocess.CalledProcessError as e:
-        print(
-            f"Error: Command {' '.join(map(str, cmd))} failed."
-        )  # Convert PosixPath to str
+        print(f"Error: Command {' '.join(map(str, cmd))} failed.")  # Convert PosixPath to str
         print(e.stderr)
         sys.exit(1)
 
@@ -166,18 +164,25 @@ def build_application(os_type):
     build_dir = Path("build")
     check_and_delete_directory(build_dir)
 
-    print("\n[Build] Configuring project with Meson...")
-    run_command(["meson", "setup", str(build_dir)])  # Convert PosixPath to str
+    # Meson setup
+    meson_cmd = ["meson", "setup", str(build_dir)]
+    print("\n[Build] Running Meson setup command:", " ".join(meson_cmd))
+    run_command(meson_cmd)
 
-    print("[Build] Compiling with Ninja...")
-    run_command(["ninja", "-C", str(build_dir)])  # Convert PosixPath to str
-    print("[Build] Installing with Ninja...")
-    run_command(["sudo", "ninja", "-C", str(build_dir), "install"])
+    # Ninja build
+    ninja_build_cmd = ["ninja", "-C", str(build_dir)]
+    print("[Build] Running Ninja build command:", " ".join(ninja_build_cmd))
+    run_command(ninja_build_cmd)
+
+    # Ninja install
+    ninja_install_cmd = ["sudo", "ninja", "-C", str(build_dir), "install"]
+    print("[Build] Running Ninja install command:", " ".join(ninja_install_cmd))
+    run_command(ninja_install_cmd)
 
     print("[Build] Installation complete!")
 
+    # macOS-specific fix
     if os_type == "Darwin":
-        # Get the first site-packages directory in sys.path
         site_packages_dir = next((p for p in sys.path if "site-packages" in p), None)
         if site_packages_dir:
             old_path = Path("/usr/local" + site_packages_dir) / "akstaging"
@@ -188,9 +193,7 @@ def build_application(os_type):
                 run_command(["sudo", "rm", "-rf", str(new_path)])
 
             if old_path.exists():
-                print(
-                    "[macOS Fix] Moving akstaging to correct site-packages location..."
-                )
+                print("[macOS Fix] Moving akstaging to correct site-packages location...")
                 run_command(["sudo", "mv", "-v", str(old_path), str(new_path)])
         else:
             print(">> Failed to determine Python site-packages directory.")
@@ -199,19 +202,13 @@ def build_application(os_type):
 def check_homebrew():
     """Check if Homebrew is installed on macOS."""
     if shutil.which("brew") is None:
-        print(
-            ">> Homebrew not found. Please install it or install the dependencies manually."
-        )
+        print(">> Homebrew not found. Please install it or install the dependencies manually.")
         sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Dependency installer and application builder"
-    )
-    parser.add_argument(
-        "-i", "--install-deps", action="store_true", help="Install dependencies"
-    )
+    parser = argparse.ArgumentParser(description="Dependency installer and application builder")
+    parser.add_argument("-i", "--install-deps", action="store_true", help="Install dependencies")
     parser.add_argument(
         "-b", "--build", action="store_true", help="Build and install the application"
     )

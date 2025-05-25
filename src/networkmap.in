@@ -11,6 +11,22 @@ conf = {
     'pkgdatadir': '@pkgdatadir@'
 }
 
+# --- Insert the site-packages install path for the installed modules ---
+# This is the critical fix so Python can find the installed networkmap package.
+# The path here matches the Meson install path for Python packages.
+# Adjust if your Meson setup uses a different path or variable.
+
+# Typical Meson install path might be like:
+# /usr/local/lib/python3.13/site-packages
+# It's safest to construct this dynamically if possible.
+
+# Construct the path to the installed Python packages based on Python version:
+python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packages')
+
+if site_packages_path not in sys.path:
+    sys.path.insert(0, site_packages_path)
+
 # --- BEGIN Adwaita Import Test ---
 print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr)
 try:
@@ -24,64 +40,39 @@ except Exception as e_adw_test:
 
 # 2. Load GResources
 try:
-    from gi.repository import Gio, GLib # Import GLib for GLib.Error
+    from gi.repository import Gio, GLib  # Import GLib for GLib.Error
 
-    # The .gresource file is installed directly into pkgdatadir
-    # (e.g., /usr/share/projectname/projectname.gresource)
     resource_path = os.path.join(conf['pkgdatadir'], 'networkmap.gresource')
 
     if os.path.exists(resource_path):
         print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
         resource = Gio.Resource.load(resource_path)
-        resource._register() # Register the resource with GIO
+        resource._register()
         print(f"INFO: Successfully loaded and registered resources from: {resource_path}", file=sys.stderr)
     else:
         print(f"ERROR: Compiled GResource file not found at {resource_path}. Application may fail to load UI.", file=sys.stderr)
-        # For development: if running from build dir (e.g. ./buildir/networkmap)
-        # and .gresource is in ./builddir/src, this path won't work.
-        # Meson's `ninja test` or running via `meson devenv` usually handles this.
-        # This script is primarily for the *installed* scenario.
-        # A common fallback for development is to check relative to the script itself,
-        # assuming it's in a build directory structure.
-        # builddir_resource_path = os.path.join(os.path.dirname(__file__), 'src', 'networkmap.gresource')
-        # if os.path.exists(builddir_resource_path):
-        #     print(f"INFO: Attempting to load resource from build dir: {builddir_resource_path}", file=sys.stderr)
-        #     resource = Gio.Resource.load(builddir_resource_path)
-        #     resource._register()
-        #     print(f"INFO: Successfully loaded and registered resources from: {builddir_resource_path}", file=sys.stderr)
-        # else:
-        #     print(f"ERROR: Also could not find GResource in build dir path: {builddir_resource_path}", file=sys.stderr)
-        # The above fallback is commented out to keep the installed script cleaner.
-        # For development, ensure GResource is available or use `meson devenv`.
-
 
 except ImportError as e:
     print(f"ERROR: Could not import Gio/GLib for GResource loading: {e}", file=sys.stderr)
-    sys.exit(1) # Critical error, exit
+    sys.exit(1)
 except GLib.Error as e:
     print(f"ERROR: GLib.Error loading GResource {resource_path}: {e}", file=sys.stderr)
-    sys.exit(1) # Critical error, exit
+    sys.exit(1)
 except Exception as e:
-    print(f"ERROR: An unexpected error occurred during GResource loading: {e}", file=sys.stderr)
-    sys.exit(1) # Critical error, exit
+    print(f"ERROR: Unexpected error during GResource loading: {e}", file=sys.stderr)
+    sys.exit(1)
 
 # 3. Import and run the main application module
 try:
     from networkmap import main as app_main
-except ImportError as e: # Could be ModuleNotFoundError or other ImportErrors
+except ImportError as e:
     print(f"ERROR: Failed to import the main application module 'networkmap.main'.", file=sys.stderr)
     print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
-    # If more detailed traceback is desired for debugging, it can be added here.
-    # import traceback
-    # traceback.print_exc(file=sys.stderr)
     sys.exit(1)
-except Exception as e: # Catch any other unexpected error during import
-    print(f"ERROR: An unexpected error occurred while importing 'networkmap.main'.", file=sys.stderr)
+except Exception as e:
+    print(f"ERROR: Unexpected error while importing 'networkmap.main'.", file=sys.stderr)
     print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
-    # import traceback
-    # traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 
 if __name__ == '__main__':
-    # Pass system arguments to the application's main function
     sys.exit(app_main.main(sys.argv))

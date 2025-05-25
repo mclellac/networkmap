@@ -1,7 +1,9 @@
-import Adw
 import os
 from typing import List
 import logging
+
+from gi.repository import Adw
+
 
 def apply_theme(theme: str):
     """Applies the selected theme."""
@@ -12,6 +14,7 @@ def apply_theme(theme: str):
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
     else:
         style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+
 
 def discover_nse_scripts() -> List[str]:
     """
@@ -25,9 +28,7 @@ def discover_nse_scripts() -> List[str]:
     default_path = "/usr/share/nmap/scripts/"
 
     if not os.path.isdir(default_path) or not os.access(default_path, os.R_OK):
-        logging.warning(
-            f"NSE script directory {default_path} not found or not readable."
-        )
+        logging.warning(f"NSE script directory {default_path} not found or not readable.")
         return script_names
 
     try:
@@ -36,7 +37,7 @@ def discover_nse_scripts() -> List[str]:
                 full_item_path = os.path.join(default_path, item_name)
                 if os.path.isfile(full_item_path):
                     script_names.append(item_name[:-4])
-        
+
         script_names.sort()
     except OSError as e:
         logging.warning(f"Error reading NSE script directory {default_path}: {e}")

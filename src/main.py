@@ -6,6 +6,7 @@ subclassing `Adw.Application` and handles the application lifecycle,
 actions, and window management. It also contains the `main` function
 which serves as the entry point for the application.
 """
+
 import sys
 from typing import Callable, List, Optional
 
@@ -19,6 +20,12 @@ from gi.repository import Gtk, Gio, Adw, GLib
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
 from .utils import apply_theme
+
+import os
+import sys
+
+print(f"DEBUG: sys.path = {sys.path}", file=sys.stderr)
+print(f"DEBUG: networkmap.__file__ = {__file__}", file=sys.stderr)
 
 APP_ID: str = "com.github.mclellac.NetworkMap"
 APP_NAME: str = "Network Map"
@@ -82,18 +89,20 @@ class NetworkMapApplication(Adw.Application):
             issue_url=ISSUE_TRACKER_URL,
             transient_for=self.get_active_window(),
         )
-        
+
         try:
-            if callable(_): 
-                translator_credits = _("translator-credits") 
-                if translator_credits != "translator-credits": 
+            if callable(_):
+                translator_credits = _("translator-credits")
+                if translator_credits != "translator-credits":
                     about_dialog.set_translator_credits(translator_credits)
         except NameError:
             pass
 
         about_dialog.present()
 
-    def _on_preferences_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
+    def _on_preferences_action(
+        self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]
+    ) -> None:
         """Handles the 'preferences' action by creating and presenting the preferences window."""
         active_window = self.get_active_window()
         if not active_window:
@@ -104,8 +113,10 @@ class NetworkMapApplication(Adw.Application):
         prefs_window.present()
 
     def create_action(
-        self, name: str, callback: Callable[[Gio.SimpleAction, Optional[GLib.Variant]], None],
-        shortcuts: Optional[List[str]] = None
+        self,
+        name: str,
+        callback: Callable[[Gio.SimpleAction, Optional[GLib.Variant]], None],
+        shortcuts: Optional[List[str]] = None,
     ) -> None:
         """
         Helper function to create and add a Gio.SimpleAction to the application.
@@ -135,6 +146,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     processed_argv = argv if argv is not None else sys.argv
     app = NetworkMapApplication()
     return app.run(processed_argv)
+
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
