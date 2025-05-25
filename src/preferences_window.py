@@ -1,5 +1,8 @@
 from gi.repository import Adw, Gtk, GObject, Gio, Pango
 
+# Local application imports
+from .networkmap.utils import apply_theme # Added import
+
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/gtk/preferences.ui")
 class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
     """
@@ -74,12 +77,5 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         if 0 <= selected_index < len(self.THEME_MAP_INDEX_TO_GSETTINGS):
             theme_str = self.THEME_MAP_INDEX_TO_GSETTINGS[selected_index]
             self.settings.set_string("theme", theme_str)
-
-            style_manager = Adw.StyleManager.get_default()
-            if theme_str == "light":
-                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
-            elif theme_str == "dark":
-                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-            else: # "system"
-                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+            apply_theme(theme_str) # Use the new utility function
         # The Adw.ComboRow model should prevent out-of-bounds indices if its items are fixed.
