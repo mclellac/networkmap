@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from gi.repository import Adw, Gtk, GLib, GObject
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
-from .networkmap.utils import discover_nse_scripts # Added import
+from .utils import discover_nse_scripts # Updated import
 
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/window.ui")
