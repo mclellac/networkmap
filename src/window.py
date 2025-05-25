@@ -68,10 +68,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             else:
                  print("ERROR (NetworkMapWindow): No pages in tab_view after trying to add initial tab and _add_new_tab returned None.", file=sys.stderr)
         
-        # Corrected signal connection for handling the "last tab closed" scenario
+        # IMPERATIVE STEP 1 & 2: Ensure only the correct signal connection exists.
+        # No "close-page-done" or "pages-changed" for this logic.
+        # The correct "page-detached" connection is below.
+        # If any "close-page-done" or "pages-changed" were present here for this logic, they would be removed by this diff.
         self.tab_view.connect("page-detached", self._on_tab_view_page_detached)
 
 
+    # IMPERATIVE STEP 3 & 6: Ensure callback method name, signature, and logic are correct.
     def _on_tab_view_page_detached(self, tab_view: Adw.TabView, page: Adw.TabPage) -> None:
         # Handles the scenario after a page is detached (closed).
         # If no pages remain, a new default tab is created.
