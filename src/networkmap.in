@@ -11,6 +11,17 @@ conf = {
     'pkgdatadir': '@pkgdatadir@'
 }
 
+# --- BEGIN Adwaita Import Test ---
+print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr)
+try:
+    import gi
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+    print("DEBUG: Direct import of Adwaita (Adw) SUCCEEDED.", file=sys.stderr)
+except Exception as e_adw_test:
+    print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr)
+# --- END Adwaita Import Test ---
+
 # 2. Load GResources
 try:
     from gi.repository import Gio, GLib # Import GLib for GLib.Error
