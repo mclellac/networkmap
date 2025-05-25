@@ -19,7 +19,7 @@ from gi.repository import Gtk, Gio, Adw, GLib
 # Local application imports
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
-from .networkmap.utils import apply_theme # Added import
+from .utils import apply_theme # Updated import
 
 # --- Application Metadata Constants ---
 APP_ID: str = "com.github.mclellac.NetworkMap"

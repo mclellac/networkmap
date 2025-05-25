@@ -1,7 +1,7 @@
 from gi.repository import Adw, Gtk, GObject, Gio, Pango
 
 # Local application imports
-from .networkmap.utils import apply_theme # Added import
+from .utils import apply_theme # Updated import
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/gtk/preferences.ui")
 class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
