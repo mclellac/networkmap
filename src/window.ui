@@ -20,10 +20,12 @@
             </child>
           </object>
         </child>
-        <child type="top">
-          <object class="AdwStatusPage" id="status_page">
-            <property name="description">Perform an nmap scan on a target host or network.</property>
-            <property name="halign">baseline-fill</property>
+        <child>
+          <object class="AdwToastOverlay" id="toast_overlay">
+            <property name="child">
+              <object class="AdwStatusPage" id="status_page">
+                <property name="description">Perform an nmap scan on a target host or network.</property>
+                <property name="halign">baseline-fill</property>
             <property name="icon-name">network-server-symbolic</property>
             <property name="title">Scan host(s)</property>
             <property name="vexpand">True</property>
@@ -111,9 +113,11 @@
               </object>
             </child>
           </object>
-        </child>
+        </property>
       </object>
-    </property>
+    </child>
+  </object>
+</property>
     <!-- Closes <property name="content"> -->
     <property name="default-height">800</property>
     <property name="default-width">550</property>
