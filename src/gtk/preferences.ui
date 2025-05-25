@@ -15,9 +15,9 @@
             <property name="title">Appearance</property>
             <child>
               <object class="AdwActionRow" id="pref_font_action_row">
+                <property name="subtitle">Select the font for the Nmap results text view.</property>
                 <!-- ID changed -->
                 <property name="title">Results Area Font</property>
-                <property name="subtitle">Select the font for the Nmap results text view.</property>
                 <child>
                   <object class="GtkFontButton" id="pref_font_button">
                     <!-- New ID for the button -->
@@ -42,8 +42,8 @@
                     </items>
                   </object>
                 </property>
-                <property name="title">Application Theme</property>
                 <property name="subtitle">Choose the application-wide color scheme.</property>
+                <property name="title">Application Theme</property>
               </object>
             </child>
           </object>
@@ -54,7 +54,6 @@
             <child>
               <object class="AdwEntryRow" id="pref_dns_servers_entry_row">
                 <property name="title">Custom DNS Servers</property>
-                <property name="subtitle">Leave empty to use system DNS. Separate multiple servers with commas.</property>
                 <!-- Or use translatable string -->
                 <property name="tooltip-text">Comma-separated list of IP addresses. Leave empty to use system DNS.</property>
               </object>
@@ -62,7 +61,6 @@
             <child>
               <object class="AdwEntryRow" id="pref_default_nmap_args_entry_row">
                 <property name="title">Default Nmap Arguments</property>
-                <property name="subtitle">These arguments are prepended to every scan. User-provided arguments can override them.</property>
               </object>
             </child>
           </object>

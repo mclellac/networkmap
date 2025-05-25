@@ -54,8 +54,8 @@
                         </child>
                         <child>
                           <object class="AdwExpanderRow">
-                            <property name="title">Advanced Options</property>
                             <property name="expanded">False</property>
+                            <property name="title">Advanced Options</property>
                             <child>
                               <object class="AdwEntryRow" id="arguments_entry_row">
                                 <property name="title">Additional Arguments</property>
