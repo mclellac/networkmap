@@ -117,7 +117,7 @@ class NmapScanner:
 
         if do_os_fingerprint and "-O" not in final_args:
             final_args.append("-O")
-        
+
         # Add -sV (service version detection) if not specified by user (directly or via -A).
         sV_implied = any(arg in ["-sV", "-A"] for arg in final_args)
         if not sV_implied:
@@ -155,7 +155,7 @@ class NmapScanner:
                   Returns an empty list if no hosts were found.
                 - An error message string if no hosts were found (e.g., "No hosts found."),
                   otherwise None.
-        
+
         Raises:
             NmapScanParseError: If there's an issue parsing data for a specific host.
                                 The current implementation stops and raises upon the first
@@ -170,7 +170,7 @@ class NmapScanner:
         for host_id in scanned_host_ids:
             try:
                 host_scan_data = self.nm[host_id]
-                
+
                 host_info: Dict[str, Any] = {
                     "id": host_id,
                     "hostname": host_scan_data.hostname() or "N/A",
@@ -197,7 +197,7 @@ class NmapScanner:
                         service_name = port_details.get('name', 'N/A')
                         product = port_details.get('product', '')
                         version = port_details.get('version', '')
-                        
+
                         service_parts = []
                         if service_name and service_name != 'N/A': service_parts.append(f"Name: {service_name}")
                         if product: service_parts.append(f"Product: {product}")

@@ -2,5 +2,5 @@
 <!DOCTYPE cambalache-project SYSTEM "cambalache-project.dtd">
 <!-- Created with Cambalache 0.96.1 -->
 <cambalache-project version="0.96.0" target_tk="gtk-4.0">
-  <ui template-class="NetworkMapWindow" filename="window.ui" sha256="18b854ba2dd3d91fc77e4252681dfec66f7868d763796cd5ce28478127e5549d"/>
+  <ui template-class="NetworkMapWindow" filename="window.ui" sha256="040e8ee181739ce769513834054f531b02e4faf9fe84669af8583050d4400559"/>
 </cambalache-project>
