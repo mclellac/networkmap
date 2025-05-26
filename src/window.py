@@ -145,7 +145,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         string_list_model = Gtk.StringList.new(combo_items)
 
         # Create and configure the string filter
-        self.nse_script_filter = Gtk.StringFilter.new(None)
+        # Create an expression to get the 'string' property from Gtk.StringObject
+        # Gtk.StringObject is the type of items in a Gtk.StringList.
+        expression = Gtk.PropertyExpression.new(Gtk.StringObject, None, "string")
+        self.nse_script_filter = Gtk.StringFilter.new(expression)
         self.nse_script_filter.set_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.nse_script_filter.set_ignore_case(True)
 
