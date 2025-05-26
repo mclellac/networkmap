@@ -64,9 +64,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.connect(f"changed::{self.TARGET_HISTORY_SCHEMA_KEY}", self._on_target_history_changed)
 
         # Target history completion setup
-        self.target_completion_model = Gtk.StringList.new(self.target_history_list)
+        self.target_completion_model = Gtk.ListStore(str)
+        for target_str in self.target_history_list:
+            self.target_completion_model.append([target_str])
+        
         self.target_completion = Gtk.EntryCompletion()
         self.target_completion.set_model(self.target_completion_model)
+        self.target_completion.set_text_column(0) # Specify column for Gtk.ListStore
         self.target_completion.set_inline_completion(True)
         self.target_completion.set_popup_completion(True)
         self.target_entry_row.set_completion(self.target_completion)
@@ -459,9 +463,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # print("DEBUG: Target history GSetting changed, updating completion model.")
         self.target_history_list = list(self.settings.get_strv(key_name)) 
         
-        new_model = Gtk.StringList.new(self.target_history_list)
-        self.target_completion_model = new_model 
-        self.target_completion.set_model(self.target_completion_model)
+        self.target_completion_model.clear()
+        for target_str in self.target_history_list:
+            self.target_completion_model.append([target_str])
+        # No need to call self.target_completion.set_model() again, as the model object itself was modified.
 
     def _initiate_scan_procedure(self) -> None:
         """Core logic to start an Nmap scan based on current UI settings."""
