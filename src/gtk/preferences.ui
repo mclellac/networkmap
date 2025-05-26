@@ -1,0 +1,71 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.1 -->
+<interface>
+  <!-- interface-name preferences.ui -->
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="NetworkMapPreferencesWindow" parent="AdwPreferencesWindow">
+    <!-- Or use translatable string -->
+    <property name="modal">true</property>
+    <property name="title">Preferences</property>
+    <child>
+      <object class="AdwPreferencesPage">
+        <child>
+          <object class="AdwPreferencesGroup" id="appearance_group">
+            <property name="title">Appearance</property>
+            <child>
+              <object class="AdwActionRow" id="pref_font_action_row">
+                <property name="subtitle">Select the font for the Nmap results text view.</property>
+                <!-- ID changed -->
+                <property name="title">Results Area Font</property>
+                <child>
+                  <object class="GtkFontButton" id="pref_font_button">
+                    <!-- New ID for the button -->
+                    <property name="halign">start</property>
+                    <property name="use-font">true</property>
+                    <!-- Make button display current font -->
+                    <property name="use-size">true</property>
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwComboRow" id="pref_theme_combo_row">
+                <!-- Or use translatable string -->
+                <property name="model">
+                  <object class="GtkStringList">
+                    <items>
+                      <item translatable="yes">System</item>
+                      <item translatable="yes">Light</item>
+                      <item translatable="yes">Dark</item>
+                    </items>
+                  </object>
+                </property>
+                <property name="subtitle">Choose the application-wide color scheme.</property>
+                <property name="title">Application Theme</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwPreferencesGroup" id="scanning_group">
+            <property name="title">Scanning</property>
+            <child>
+              <object class="AdwEntryRow" id="pref_dns_servers_entry_row">
+                <property name="title">Custom DNS Servers</property>
+                <!-- Or use translatable string -->
+                <property name="tooltip-text">Comma-separated list of IP addresses. Leave empty to use system DNS.</property>
+              </object>
+            </child>
+            <child>
+              <object class="AdwEntryRow" id="pref_default_nmap_args_entry_row">
+                <property name="title">Default Nmap Arguments</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>

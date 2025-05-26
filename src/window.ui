@@ -1,0 +1,142 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Created with Cambalache 0.96.1 -->
+<interface>
+  <!-- interface-name window.ui -->
+  <requires lib="gio" version="2.44"/>
+  <requires lib="gtk" version="4.18"/>
+  <requires lib="libadwaita" version="1.7"/>
+  <template class="NetworkMapWindow" parent="AdwApplicationWindow">
+    <property name="content">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <child type="end">
+              <object class="GtkMenuButton">
+                <property name="icon-name">open-menu-symbolic</property>
+                <property name="menu-model">primary_menu</property>
+                <property name="primary">True</property>
+                <property name="tooltip-text" translatable="yes">Main Menu</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="AdwToastOverlay" id="toast_overlay">
+            <property name="child">
+              <object class="AdwStatusPage" id="status_page">
+                <property name="description">Perform an nmap scan on a target host or network.</property>
+                <property name="halign">baseline-fill</property>
+            <property name="icon-name">network-server-symbolic</property>
+            <property name="title">Scan host(s)</property>
+            <property name="vexpand">True</property>
+            <child>
+              <object class="AdwClamp">
+                <property name="maximum-size">800</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="halign">baseline-fill</property>
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">10</property>
+                    <property name="valign">baseline-fill</property>
+                    <child>
+                      <object class="GtkListBox">
+                        <property name="css-classes">boxed-list</property>
+                        <property name="margin-bottom">15</property>
+                        <child>
+                          <object class="AdwEntryRow" id="target_entry_row">
+                            <property name="show-apply-button">True</property>
+                            <property name="title">Target/CIDR</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwSwitchRow" id="os_fingerprint_switch">
+                            <property name="subtitle">Requires root</property>
+                            <property name="title">OS Fingerprinting</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwExpanderRow">
+                            <property name="expanded">False</property>
+                            <property name="title">Advanced Options</property>
+                            <child>
+                              <object class="AdwEntryRow" id="arguments_entry_row">
+                                <property name="title">Additional Arguments</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="AdwComboRow" id="nse_script_combo_row">
+                                <property name="subtitle">Include execution of NSE script</property>
+                                <property name="title">NSE Script</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="AdwSpinner" id="spinner">
+                        <property name="focus-on-click">False</property>
+                        <property name="halign">center</property>
+                        <property name="height-request">32</property>
+                        <property name="margin-bottom">5</property>
+                        <property name="margin-top">5</property>
+                        <property name="overflow">hidden</property>
+                        <property name="valign">center</property>
+                        <property name="width-request">32</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkBox">
+                        <child>
+                          <object class="GtkListBox" id="results_listbox">
+                            <property name="css-classes">boxed-list</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkFrame">
+                            <property name="hexpand">True</property>
+                            <property name="margin-start">15</property>
+                            <property name="vexpand">True</property>
+                            <child>
+                              <object class="GtkTextView" id="text_view">
+                                <property name="hexpand">True</property>
+                                <property name="vexpand">True</property>
+                                <property name="vexpand-set">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </child>
+  </object>
+</property>
+    <!-- Closes <property name="content"> -->
+    <property name="default-height">800</property>
+    <property name="default-width">550</property>
+    <property name="title" translatable="yes">Network Map</property>
+  </template>
+  <menu id="primary_menu">
+    <section>
+      <item>
+        <attribute name="action">app.preferences</attribute>
+        <attribute name="label" translatable="yes">_Preferences</attribute>
+      </item>
+      <item>
+        <attribute name="action">win.show-help-overlay</attribute>
+        <attribute name="label" translatable="yes">_Keyboard Shortcuts</attribute>
+      </item>
+      <item>
+        <attribute name="action">app.about</attribute>
+        <attribute name="label" translatable="yes">_About NetworkMap</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

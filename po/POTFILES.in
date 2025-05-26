@@ -1,0 +1,8 @@
+# List of source files containing translatable strings.
+# Please keep this file sorted alphabetically.
+data/com.github.mclellac.NetworkMap.desktop.in
+data/com.github.mclellac.NetworkMap.metainfo.xml.in
+data/com.github.mclellac.NetworkMap.gschema.xml
+src/main.py
+src/window.py
+src/window.ui
