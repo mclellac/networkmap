@@ -63,30 +63,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.connect(f"changed::{PROFILES_SCHEMA_KEY}", lambda s, k: self._populate_profile_combo())
         self.settings.connect(f"changed::{self.TARGET_HISTORY_SCHEMA_KEY}", self._on_target_history_changed)
 
-        # Target history completion setup
-        self.target_completion_model = Gtk.ListStore(str)
-        for target_str in self.target_history_list:
-            self.target_completion_model.append([target_str])
-        
-        self.target_completion = Gtk.EntryCompletion()
-        self.target_completion.set_model(self.target_completion_model)
-        self.target_completion.set_text_column(0) # Specify column for Gtk.ListStore
-        self.target_completion.set_inline_completion(True)
-        self.target_completion.set_popup_completion(True)
-        
-        # Get the activatable widget from Adw.EntryRow, which should be the Gtk.Entry
-        target_gtk_entry = self.target_entry_row.get_activatable_widget()
-        
-        if isinstance(target_gtk_entry, Gtk.Entry):
-            target_gtk_entry.set_completion(self.target_completion)
-        else:
-            # Fallback or error logging if it's not a Gtk.Entry
-            # This might happen if the Adw.EntryRow's internal structure is different than expected
-            # or if get_activatable_widget() returns something else.
-            print(f"WARNING: Could not set Gtk.EntryCompletion. Activatable widget of target_entry_row is type {type(target_gtk_entry)}, not Gtk.Entry.")
-            # As an alternative, Adw.EntryRow is itself a Gtk.Editable.
-            # However, Gtk.Editable interface does not have set_completion.
-            # If above fails, it implies a deeper issue with accessing the underlying entry for this Adwaita version.
+        # Target history completion setup (REMOVED)
         
         self._connect_signals() # Original signals
         
@@ -473,13 +450,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.set_strv("target-history", self.target_history_list)
 
     def _on_target_history_changed(self, settings_obj: Gio.Settings, key_name: str) -> None:
-        # print("DEBUG: Target history GSetting changed, updating completion model.")
-        self.target_history_list = list(self.settings.get_strv(key_name)) 
-        
-        self.target_completion_model.clear()
-        for target_str in self.target_history_list:
-            self.target_completion_model.append([target_str])
-        # No need to call self.target_completion.set_model() again, as the model object itself was modified.
+        # print("DEBUG: Target history GSetting changed, internal list updated.") # Modified print
+        self.target_history_list = list(self.settings.get_strv(key_name))
+        # self.target_completion_model and self.target_completion no longer exist, so no model update here.
 
     def _initiate_scan_procedure(self) -> None:
         """Core logic to start an Nmap scan based on current UI settings."""
