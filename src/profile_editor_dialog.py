@@ -6,10 +6,6 @@ class ProfileEditorDialog(Adw.Dialog):
     def __init__(self, parent_window: Gtk.Window, profile_to_edit: Optional[ScanProfile] = None, existing_profile_names: Optional[List[str]] = None):
         super().__init__() 
             
-        if parent_window:
-            self.set_transient_for(parent_window)
-        self.set_modal(True)
-
         self.profile_to_edit = profile_to_edit
         self.is_editing = profile_to_edit is not None
         self.existing_profile_names = existing_profile_names or []

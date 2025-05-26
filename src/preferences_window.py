@@ -104,7 +104,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             d.close() 
         
         dialog.connect("response", on_dialog_response)
-        dialog.present()
+        dialog.present(self)
 
     def _on_edit_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
         profile_to_edit = next((p for p in self.profile_manager.load_profiles() if p['name'] == profile_name), None)
@@ -123,7 +123,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 d.close()
 
             dialog.connect("response", on_dialog_response)
-            dialog.present()
+            dialog.present(self)
         else:
             print(f"Error: Could not find profile '{profile_name}' to edit.")
 
