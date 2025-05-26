@@ -85,7 +85,6 @@
                             <child>
                               <object class="AdwEntryRow" id="port_spec_entry_row">
                                 <property name="title" translatable="yes">Specify Ports</property>
-                                <property name="placeholder-text" translatable="yes">e.g., 22, 80, 443, 1000-2000</property>
                               </object>
                             </child>
                             <child>
