@@ -67,6 +67,13 @@
                           </object>
                         </child>
                         <child>
+                          <object class="AdwComboRow" id="profile_combo_row">
+                            <property name="title" translatable="yes">Scan Profile</property>
+                            <property name="subtitle" translatable="yes">Apply a saved scan configuration</property>
+                            <!-- Model will be populated from code -->
+                          </object>
+                        </child>
+                        <child>
                           <object class="AdwExpanderRow">
                             <property name="expanded">False</property>
                             <property name="title">Advanced Options</property>

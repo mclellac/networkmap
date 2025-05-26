@@ -6,11 +6,15 @@ from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
 from .utils import discover_nse_scripts
+from .profile_manager import ScanProfile, ProfileManager, PROFILES_SCHEMA_KEY
 
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/window.ui")
 class NetworkMapWindow(Adw.ApplicationWindow):
     __gtype_name__ = "NetworkMapWindow"
+
+    MAX_HISTORY_SIZE = 20 # Define max history size
+    TARGET_HISTORY_SCHEMA_KEY = "target-history" # Define for clarity
 
     target_entry_row: Adw.EntryRow = Gtk.Template.Child("target_entry_row")
     os_fingerprint_switch: Gtk.Switch = Gtk.Template.Child("os_fingerprint_switch")
@@ -27,6 +31,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     port_spec_entry_row: Adw.EntryRow = Gtk.Template.Child("port_spec_entry_row")
     timing_template_combo_row: Adw.ComboRow = Gtk.Template.Child("timing_template_combo_row")
     no_ping_switch: Adw.SwitchRow = Gtk.Template.Child("no_ping_switch")
+    profile_combo_row: Adw.ComboRow = Gtk.Template.Child("profile_combo_row")
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
@@ -41,6 +46,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.timing_options: Dict[str, Optional[str]] = {} # Will be populated
         
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+        self.target_history_list: List[str] = list(self.settings.get_strv("target-history"))
         
         # Initialize and apply CSS provider for font settings
         self.font_css_provider = Gtk.CssProvider()
@@ -53,12 +59,80 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview) # Added
         
-        self._connect_signals()
+        self.profile_manager = ProfileManager()
+        self.settings.connect(f"changed::{PROFILES_SCHEMA_KEY}", lambda s, k: self._populate_profile_combo())
+        self.settings.connect(f"changed::{self.TARGET_HISTORY_SCHEMA_KEY}", self._on_target_history_changed)
+
+        # Target history completion setup
+        self.target_completion_model = Gtk.StringList.new(self.target_history_list)
+        self.target_completion = Gtk.EntryCompletion()
+        self.target_completion.set_model(self.target_completion_model)
+        self.target_completion.set_inline_completion(True)
+        self.target_completion.set_popup_completion(True)
+        self.target_entry_row.set_completion(self.target_completion)
+        
+        self._connect_signals() # Original signals
+        
+        # Profile combo related signals and initial population
+        self._populate_profile_combo() 
+        self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
+
         self._populate_nse_script_combo() # Ensure NSE scripts are loaded at startup
         self._populate_timing_template_combo() # Populate timing options
         self._update_nmap_command_preview() # Initial command preview
         self._update_ui_state("ready")
         GLib.idle_add(self._apply_font_preference) # Apply initial font preference after UI is fully initialized
+
+    def _populate_profile_combo(self) -> None:
+        # print("DEBUG: Repopulating profile combo box") # For checking GSettings change signal
+        profiles = self.profile_manager.load_profiles()
+        profile_names: List[str] = ["Manual Configuration"] + [p['name'] for p in profiles]
+        
+        string_list_model = Gtk.StringList.new(profile_names)
+        self.profile_combo_row.set_model(string_list_model)
+        self.profile_combo_row.set_selected(0) # Default to "Manual Configuration"
+        # When set_selected(0) is called, if the current selection is already 0,
+        # _on_profile_selected might not be triggered.
+        # If it's different, it will trigger _on_profile_selected, which will call _apply_scan_profile(None).
+        # If it's already 0, we might need to manually ensure UI is in "manual" state.
+        # However, _apply_scan_profile(None) in _on_profile_selected handles this.
+        # If the selection was already 0, and we want to ensure a "reset" happens
+        # when profiles are repopulated (e.g. a profile was deleted, and "Manual" remains selected),
+        # we might explicitly call _apply_scan_profile(None) here.
+        # For now, relying on _on_profile_selected to handle the application of None.
+
+    def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
+        selected_idx = combo_row.get_selected()
+        model = combo_row.get_model()
+
+        if not isinstance(model, Gtk.StringList) or selected_idx < 0:
+            # This can happen if the model is temporarily not a Gtk.StringList during updates
+            # or if no item is selected (-1).
+            return
+
+        selected_name = model.get_string(selected_idx)
+
+        if selected_idx == 0: # "Manual Configuration"
+            self._apply_scan_profile(None) 
+            # print("DEBUG: Switched to Manual Configuration")
+        else:
+            profile_name = selected_name
+            profiles = self.profile_manager.load_profiles() # Load fresh list
+            found_profile: Optional[ScanProfile] = None
+            for p in profiles:
+                if p['name'] == profile_name:
+                    found_profile = p
+                    break
+            
+            if found_profile:
+                self._apply_scan_profile(found_profile)
+                # print(f"DEBUG: Applied profile '{profile_name}'")
+            else:
+                # This case should ideally not happen if profiles are populated correctly
+                # print(f"Error: Profile '{profile_name}' selected but not found in manager.")
+                # Fallback: set to manual and apply None profile
+                self.profile_combo_row.set_selected(0) 
+                self._apply_scan_profile(None)
 
     def _populate_timing_template_combo(self) -> None:
         """Populates the timing template combo box."""
@@ -277,6 +351,118 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             elif state == "no_data":
                 self.status_page.set_property("description", "Scan Complete: No data received.")
 
+    def _apply_scan_profile(self, profile: Optional[ScanProfile]) -> None:
+        """Applies the settings from a given scan profile to the UI."""
+        if not profile:
+            # Potentially reset fields to default or a "manual" state
+            # For now, if None is passed, perhaps we clear relevant fields or set to a default
+            # This behavior might be refined when the profile selection UI is built
+            self.os_fingerprint_switch.set_active(False)
+            self.stealth_scan_switch.set_active(False)
+            self.no_ping_switch.set_active(False)
+            self.port_spec_entry_row.set_text("")
+            self.arguments_entry_row.set_text("")
+            self.nse_script_combo_row.set_selected(0) # "None"
+            self.timing_template_combo_row.set_selected(0) # "Default (T3)"
+            # self.selected_nse_script and self.selected_timing_template should also be reset
+            self.selected_nse_script = None 
+            selected_timing_display_name = list(self.timing_options.keys())[0] # "Default (T3)"
+            self.selected_timing_template = self.timing_options[selected_timing_display_name]
+
+            self._update_nmap_command_preview()
+            return
+
+        self.os_fingerprint_switch.set_active(profile['os_fingerprint'])
+        self.stealth_scan_switch.set_active(profile['stealth_scan'])
+        self.no_ping_switch.set_active(profile['no_ping'])
+        self.port_spec_entry_row.set_text(profile['ports'])
+        self.arguments_entry_row.set_text(profile['additional_args'])
+
+        # Apply NSE script
+        if profile['nse_script']:
+            # Model for nse_script_combo_row is Gtk.FilterListModel -> Gtk.StringList
+            # We need to find profile['nse_script'] in the Gtk.StringList
+            string_list_model = self.nse_script_combo_row.get_model()
+            if isinstance(string_list_model, Gtk.FilterListModel):
+                string_list_model = string_list_model.get_model() # Get the underlying Gtk.StringList
+            
+            found_script = False
+            if isinstance(string_list_model, Gtk.StringList):
+                for i in range(string_list_model.get_n_items()):
+                    item_str = string_list_model.get_string(i)
+                    if item_str == profile['nse_script']:
+                        self.nse_script_combo_row.set_selected(i)
+                        # Important: also update self.selected_nse_script directly
+                        self.selected_nse_script = profile['nse_script']
+                        found_script = True
+                        break
+            if not found_script:
+                self.nse_script_combo_row.set_selected(0) # "None"
+                self.selected_nse_script = None
+        else:
+            self.nse_script_combo_row.set_selected(0) # "None"
+            self.selected_nse_script = None
+
+        # Apply Timing Template
+        if profile['timing_template']:
+            # timing_options is {"Display Name": "Actual Nmap Arg", ...}
+            # profile['timing_template'] stores the "Actual Nmap Arg"
+            # We need to find the "Display Name" that corresponds to this arg.
+            target_timing_arg = profile['timing_template']
+            found_timing_display_name = None
+            for display_name, nmap_arg in self.timing_options.items():
+                if nmap_arg == target_timing_arg:
+                    found_timing_display_name = display_name
+                    break
+            
+            timing_model = self.timing_template_combo_row.get_model() # This is a Gtk.StringList
+            found_timing_in_model = False
+            if found_timing_display_name and isinstance(timing_model, Gtk.StringList):
+                for i in range(timing_model.get_n_items()):
+                    item_str = timing_model.get_string(i)
+                    if item_str == found_timing_display_name:
+                        self.timing_template_combo_row.set_selected(i)
+                        # Important: also update self.selected_timing_template
+                        self.selected_timing_template = target_timing_arg
+                        found_timing_in_model = True
+                        break
+            
+            if not found_timing_in_model: # Fallback to default if not found
+                self.timing_template_combo_row.set_selected(0) # "Default (T3)"
+                default_timing_display_name = list(self.timing_options.keys())[0]
+                self.selected_timing_template = self.timing_options[default_timing_display_name]
+        else: # No timing template in profile, set to default
+            self.timing_template_combo_row.set_selected(0) # "Default (T3)"
+            default_timing_display_name = list(self.timing_options.keys())[0]
+            self.selected_timing_template = self.timing_options[default_timing_display_name]
+            
+        self._update_nmap_command_preview()
+
+    def _add_target_to_history(self, target: str) -> None:
+        if not target or target.isspace():
+            return
+
+        # Normalize or clean the target string if needed (e.g., strip whitespace)
+        clean_target = target.strip()
+
+        if clean_target in self.target_history_list:
+            self.target_history_list.remove(clean_target)
+        
+        self.target_history_list.insert(0, clean_target) # Add to the beginning
+
+        if len(self.target_history_list) > self.MAX_HISTORY_SIZE:
+            self.target_history_list = self.target_history_list[:self.MAX_HISTORY_SIZE]
+            
+        self.settings.set_strv("target-history", self.target_history_list)
+
+    def _on_target_history_changed(self, settings_obj: Gio.Settings, key_name: str) -> None:
+        # print("DEBUG: Target history GSetting changed, updating completion model.")
+        self.target_history_list = list(self.settings.get_strv(key_name)) 
+        
+        new_model = Gtk.StringList.new(self.target_history_list)
+        self.target_completion_model = new_model 
+        self.target_completion.set_model(self.target_completion_model)
+
     def _initiate_scan_procedure(self) -> None:
         """Core logic to start an Nmap scan based on current UI settings."""
         target: str = self.target_entry_row.get_text().strip()
@@ -284,6 +470,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
             self._update_ui_state("ready", "Empty target")
             return
+
+        self._add_target_to_history(target) 
 
         self._clear_results_ui()
         self._update_ui_state("scanning")
