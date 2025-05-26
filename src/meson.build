@@ -31,10 +31,12 @@ configure_file(
 networkmap_sources = [
   '__init__.py',
   'main.py',
-  'window.py',
   'nmap_scanner.py',
   'preferences_window.py',
+  'profile_editor_dialog.py',
+  'profile_manager.py',
   'utils.py',
+  'window.py',
 ]
 
 py_installation.install_sources(
