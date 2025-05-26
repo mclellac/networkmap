@@ -73,7 +73,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_completion.set_text_column(0) # Specify column for Gtk.ListStore
         self.target_completion.set_inline_completion(True)
         self.target_completion.set_popup_completion(True)
-        self.target_entry_row.set_completion(self.target_completion)
+        self.target_entry_row.set_property("completion", self.target_completion)
         
         self._connect_signals() # Original signals
         
