@@ -64,7 +64,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self._load_and_display_profiles()
 
     def _load_and_display_profiles(self) -> None:
-        # Clear existing rows
         while child := self.profiles_list_box.get_row_at_index(0):
             self.profiles_list_box.remove(child)
 
@@ -72,18 +71,18 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         for profile in profiles:
             row = Adw.ActionRow()
             row.set_title(profile['name'])
-            row.set_activatable(False) # So clicking the row itself does nothing
+            row.set_activatable(False)
 
             button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             
-            edit_button = Gtk.Button(icon_name="document-edit-symbolic") # Using icon instead of text
+            edit_button = Gtk.Button(icon_name="document-edit-symbolic")
             edit_button.add_css_class("flat")
             # The signal connection needs to pass the profile name (or full profile object)
             # Using functools.partial or a lambda:
             edit_button.connect("clicked", lambda b, p_name=profile['name']: self._on_edit_profile_clicked(b, p_name))
             button_box.append(edit_button)
 
-            delete_button = Gtk.Button(icon_name="edit-delete-symbolic") # Using icon
+            delete_button = Gtk.Button(icon_name="edit-delete-symbolic")
             delete_button.add_css_class("flat")
             delete_button.add_css_class("destructive-action")
             delete_button.connect("clicked", lambda b, p_name=profile['name']: self._on_delete_profile_clicked(b, p_name))
@@ -137,7 +136,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             # More advanced: could show a Adw.Toast on the main window if a reference is passed.
         else:
             print(f"Failed to delete profile '{profile_name}'.")
-        self._load_and_display_profiles() # Refresh the list
+        self._load_and_display_profiles()
 
     def _on_font_changed(self, font_button: Gtk.FontButton) -> None:
         """
