@@ -73,7 +73,20 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_completion.set_text_column(0) # Specify column for Gtk.ListStore
         self.target_completion.set_inline_completion(True)
         self.target_completion.set_popup_completion(True)
-        self.target_entry_row.set_property("completion", self.target_completion)
+        
+        # Get the activatable widget from Adw.EntryRow, which should be the Gtk.Entry
+        target_gtk_entry = self.target_entry_row.get_activatable_widget()
+        
+        if isinstance(target_gtk_entry, Gtk.Entry):
+            target_gtk_entry.set_completion(self.target_completion)
+        else:
+            # Fallback or error logging if it's not a Gtk.Entry
+            # This might happen if the Adw.EntryRow's internal structure is different than expected
+            # or if get_activatable_widget() returns something else.
+            print(f"WARNING: Could not set Gtk.EntryCompletion. Activatable widget of target_entry_row is type {type(target_gtk_entry)}, not Gtk.Entry.")
+            # As an alternative, Adw.EntryRow is itself a Gtk.Editable.
+            # However, Gtk.Editable interface does not have set_completion.
+            # If above fails, it implies a deeper issue with accessing the underlying entry for this Adwaita version.
         
         self._connect_signals() # Original signals
         
