@@ -76,7 +76,6 @@
                         <child>
                           <object class="AdwEntryRow" id="nmap_command_preview_row">
                             <property name="title" translatable="yes">Nmap Command Preview</property>
-                            <property name="subtitle" translatable="yes">Read-only preview of the command to be executed.</property>
                             <property name="editable">False</property>
                             <property name="selectable">True</property> 
                             <property name="activatable">False</property>
