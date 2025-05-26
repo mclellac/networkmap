@@ -345,7 +345,7 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
             )
 
 
-        frame = Adw.Frame() # No label for the frame, details are implicit
+        frame = Gtk.Frame() # No label for the frame, details are implicit
         frame.set_child(self._text_view)
         
         # Add some padding or margin to the frame or textview if needed
