@@ -58,7 +58,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._populate_timing_template_combo() # Populate timing options
         self._update_nmap_command_preview() # Initial command preview
         self._update_ui_state("ready")
-        self.port_spec_entry_row.props.placeholder_text = "e.g., 22, 80, 443, 1000-2000"
+        self.port_spec_entry_row.set_property("placeholder-text", "e.g., 22, 80, 443, 1000-2000")
         GLib.idle_add(self._apply_font_preference) # Apply initial font preference after UI is fully initialized
 
     def _populate_timing_template_combo(self) -> None:
