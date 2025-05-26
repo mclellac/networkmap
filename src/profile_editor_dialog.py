@@ -27,6 +27,12 @@ class ProfileEditorDialog(Adw.Dialog):
         content_box.set_margin_end(12)
         self.set_child(content_box)
 
+        # Validation Banner
+        self.validation_banner = Adw.Banner()
+        self.validation_banner.set_use_markup(True)
+        self.validation_banner.set_revealed(False)
+        content_box.prepend(self.validation_banner) # Add to the top
+
         self.name_row = Adw.EntryRow(title="Profile Name")
         content_box.append(self.name_row)
 
@@ -105,14 +111,16 @@ class ProfileEditorDialog(Adw.Dialog):
     def get_profile_data(self) -> Optional[ScanProfile]:
         profile_name = self.name_row.get_text().strip()
         if not profile_name:
-            # Show some validation error - e.g. by returning None and letting caller handle
-            print("Error: Profile name cannot be empty.")
+            self.validation_banner.set_title("Profile name cannot be empty.")
+            self.validation_banner.set_revealed(True)
             return None
         
         if profile_name in self.existing_profile_names:
-            print(f"Error: Profile name '{profile_name}' already exists.")
+            self.validation_banner.set_title(f"Profile name '{profile_name}' already exists.")
+            self.validation_banner.set_revealed(True)
             return None
 
+        self.validation_banner.set_revealed(False) # Hide banner on success
         selected_timing_idx = self.timing_combo_row.get_selected()
         selected_timing_display_name = list(self.timing_options.keys())[selected_timing_idx]
         timing_template_val = self.timing_options[selected_timing_display_name]

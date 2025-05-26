@@ -2,7 +2,10 @@ from gi.repository import Adw, Gtk, GObject, Gio, Pango
 from typing import Optional
 
 from .utils import apply_theme
-from .profile_manager import ProfileManager, ScanProfile
+from .profile_manager import (
+    ProfileManager, ScanProfile,
+    ProfileNotFoundError, ProfileExistsError, ProfileStorageError
+)
 from .profile_editor_dialog import ProfileEditorDialog
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/gtk/preferences.ui")
@@ -65,32 +68,36 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self._load_and_display_profiles()
 
     def _load_and_display_profiles(self) -> None:
+        # Clear existing rows first
         while child := self.profiles_list_box.get_row_at_index(0):
             self.profiles_list_box.remove(child)
+       
+        try:
+            profiles = self.profile_manager.load_profiles()
+            for profile in profiles:
+                row = Adw.ActionRow()
+                row.set_title(profile['name'])
+                row.set_activatable(False)
 
-        profiles = self.profile_manager.load_profiles()
-        for profile in profiles:
-            row = Adw.ActionRow()
-            row.set_title(profile['name'])
-            row.set_activatable(False)
+                button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+               
+                edit_button = Gtk.Button(icon_name="document-edit-symbolic")
+                edit_button.add_css_class("flat")
+                edit_button.connect("clicked", lambda b, p_name=profile['name']: self._on_edit_profile_clicked(b, p_name))
+                button_box.append(edit_button)
 
-            button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            
-            edit_button = Gtk.Button(icon_name="document-edit-symbolic")
-            edit_button.add_css_class("flat")
-            # The signal connection needs to pass the profile name (or full profile object)
-            # Using functools.partial or a lambda:
-            edit_button.connect("clicked", lambda b, p_name=profile['name']: self._on_edit_profile_clicked(b, p_name))
-            button_box.append(edit_button)
-
-            delete_button = Gtk.Button(icon_name="edit-delete-symbolic")
-            delete_button.add_css_class("flat")
-            delete_button.add_css_class("destructive-action")
-            delete_button.connect("clicked", lambda b, p_name=profile['name']: self._on_delete_profile_clicked(b, p_name))
-            button_box.append(delete_button)
-            
-            row.add_suffix(button_box)
-            self.profiles_list_box.append(row)
+                delete_button = Gtk.Button(icon_name="edit-delete-symbolic")
+                delete_button.add_css_class("flat")
+                delete_button.add_css_class("destructive-action")
+                delete_button.connect("clicked", lambda b, p_name=profile['name']: self._on_delete_profile_clicked(b, p_name))
+                button_box.append(delete_button)
+               
+                row.add_suffix(button_box)
+                self.profiles_list_box.append(row)
+        except ProfileStorageError as e:
+            self.add_toast(Adw.Toast.new(f"Error loading profiles: {e}"))
+        except Exception as e: # Catch any other unexpected errors
+            self.add_toast(Adw.Toast.new(f"An unexpected error occurred while loading profiles: {e}"))
 
     def _on_add_profile_clicked(self, button: Gtk.Button) -> None:
         all_profile_names = [p['name'] for p in self.profile_manager.load_profiles()]
@@ -101,39 +108,59 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
 
     def _handle_profile_dialog_action_add(self, dialog_instance, action: str, profile_data: Optional[ScanProfile]) -> None:
         if action == "save" and profile_data:
-            self.profile_manager.add_profile(profile_data)
-            self._load_and_display_profiles()
+            try:
+                self.profile_manager.add_profile(profile_data)
+                self._load_and_display_profiles()
+                self.add_toast(Adw.Toast.new(f"Profile '{profile_data['name']}' added successfully."))
+            except (ProfileExistsError, ProfileStorageError) as e:
+                self.add_toast(Adw.Toast.new(f"Error adding profile: {e}"))
+            except Exception as e: # Catch any other unexpected errors
+                self.add_toast(Adw.Toast.new(f"An unexpected error occurred: {e}"))
         # The dialog closes itself, so no need to call dialog_instance.close() here.
 
     def _on_edit_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
-        profile_to_edit = next((p for p in self.profile_manager.load_profiles() if p['name'] == profile_name), None)
+        # Load profiles once to find the one to edit
+        try:
+            current_profiles = self.profile_manager.load_profiles()
+        except (ProfileStorageError, Exception) as e:
+            self.add_toast(Adw.Toast.new(f"Error loading profiles: {e}"))
+            return
+
+        profile_to_edit = next((p for p in current_profiles if p['name'] == profile_name), None)
         
         if profile_to_edit:
-            all_profile_names = [p['name'] for p in self.profile_manager.load_profiles()]
+            all_profile_names = [p['name'] for p in current_profiles]
             # ProfileEditorDialog's __init__ handles the logic of allowing the current name during edit.
             dialog = ProfileEditorDialog(parent_window=self, profile_to_edit=profile_to_edit, existing_profile_names=all_profile_names)
 
             dialog.connect("profile-action", lambda d, act, data: self._handle_profile_dialog_action_edit(d, act, data, profile_name))
             dialog.present(self)
         else:
-            print(f"Error: Could not find profile '{profile_name}' to edit.")
+            # This case should ideally not happen if the list is up-to-date
+            self.add_toast(Adw.Toast.new(f"Error: Could not find profile '{profile_name}' to edit."))
+            print(f"Error: Could not find profile '{profile_name}' to edit.") # Keep print for console log
 
     def _handle_profile_dialog_action_edit(self, dialog_instance, action: str, profile_data: Optional[ScanProfile], original_profile_name: str) -> None:
         if action == "save" and profile_data:
-            self.profile_manager.update_profile(original_profile_name, profile_data)
-            self._load_and_display_profiles()
+            try:
+                self.profile_manager.update_profile(original_profile_name, profile_data)
+                self._load_and_display_profiles()
+                self.add_toast(Adw.Toast.new(f"Profile '{profile_data['name']}' updated successfully."))
+            except (ProfileNotFoundError, ProfileExistsError, ProfileStorageError) as e:
+                self.add_toast(Adw.Toast.new(f"Error updating profile: {e}"))
+            except Exception as e: # Catch any other unexpected errors
+                self.add_toast(Adw.Toast.new(f"An unexpected error occurred: {e}"))
         # The dialog closes itself.
 
     def _on_delete_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
-        if self.profile_manager.delete_profile(profile_name):
-            print(f"Profile '{profile_name}' deleted.")
-            # Add a toast if Adw.ToastOverlay is available and self.toast_overlay is defined
-            # For Adw.PreferencesWindow, it doesn't have its own toast_overlay by default.
-            # A simple way for now is just to reload.
-            # More advanced: could show a Adw.Toast on the main window if a reference is passed.
-        else:
-            print(f"Failed to delete profile '{profile_name}'.")
-        self._load_and_display_profiles()
+        try:
+            self.profile_manager.delete_profile(profile_name)
+            self._load_and_display_profiles() # Refresh the list
+            self.add_toast(Adw.Toast.new(f"Profile '{profile_name}' deleted successfully."))
+        except (ProfileNotFoundError, ProfileStorageError) as e:
+            self.add_toast(Adw.Toast.new(f"Error deleting profile: {e}"))
+        except Exception as e: # Catch any other unexpected errors
+            self.add_toast(Adw.Toast.new(f"An unexpected error occurred: {e}"))
 
     def _on_font_changed(self, font_button: Gtk.FontButton) -> None:
         """
