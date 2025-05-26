@@ -17,7 +17,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     arguments_entry_row: Adw.EntryRow = Gtk.Template.Child("arguments_entry_row")
     nse_script_combo_row: Adw.ComboRow = Gtk.Template.Child("nse_script_combo_row")
     spinner: Gtk.Spinner = Gtk.Template.Child("spinner")
-    text_view: Gtk.TextView = Gtk.Template.Child("text_view")
+    # text_view: Gtk.TextView = Gtk.Template.Child("text_view") # Removed
     status_page: Adw.StatusPage = Gtk.Template.Child("status_page")
     results_listbox: Gtk.ListBox = Gtk.Template.Child("results_listbox")
     toast_overlay: Adw.ToastOverlay = Gtk.Template.Child("toast_overlay")
@@ -34,10 +34,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         # Initialize and apply CSS provider for font settings
         self.font_css_provider = Gtk.CssProvider()
-        self.text_view.get_style_context().add_provider(
-            self.font_css_provider, 
-            Gtk.STYLE_PROVIDER_PRIORITY_USER
-        )
+        # The following line was removed as self.text_view no longer exists:
+        # self.text_view.get_style_context().add_provider(
+        #     self.font_css_provider, 
+        #     Gtk.STYLE_PROVIDER_PRIORITY_USER
+        # )
         
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self._apply_font_preference() # Apply initial font preference
