@@ -90,22 +90,11 @@
                         <child>
                           <object class="GtkListBox" id="results_listbox">
                             <property name="css-classes">boxed-list</property>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkFrame">
                             <property name="hexpand">True</property>
-                            <property name="margin-start">15</property>
                             <property name="vexpand">True</property>
-                            <child>
-                              <object class="GtkTextView" id="text_view">
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
-                                <property name="vexpand-set">True</property>
-                              </object>
-                            </child>
                           </object>
                         </child>
+                        <!-- The GtkFrame and GtkTextView that were here are now removed -->
                       </object>
                     </child>
                   </object>

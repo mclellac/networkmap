@@ -25,7 +25,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
         super().__init__(**kwargs)
-        self.text_buffer: Gtk.TextBuffer = self.text_view.get_buffer()
 
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
@@ -44,49 +43,52 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._apply_font_preference() # Apply initial font preference
         
         self._connect_signals()
-        self._populate_nse_script_combo()
+        # self._populate_nse_script_combo() # This seems to be called later or not needed here
         self._update_ui_state("ready")
 
     def _apply_font_preference(self) -> None:
-        # Applies the font preference from GSettings to the results text_view using specific CSS properties.
+        # Applies the font preference from GSettings to the Gtk.TextViews within HostInfoExpanderRows.
         font_str = self.settings.get_string("results-font")
-        print(f"DEBUG: Font string from GSettings: '{font_str}'", file=sys.stderr)
+        # print(f"DEBUG: Font string from GSettings: '{font_str}'", file=sys.stderr)
 
-        css_data = ""  # Default to empty CSS (clear override)
+        css_data = ""
         if font_str:
             try:
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
                 size_points = 0
                 
-                if font_desc.get_size_is_set(): # Check if size was explicitly set in the description
+                if font_desc.get_size_is_set():
                     size_points = font_desc.get_size() / Pango.SCALE
                 
-                print(f"DEBUG: Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
+                # print(f"DEBUG: Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
 
                 if family and size_points > 0:
                     css_data = f"* {{ font-family: \"{family}\"; font-size: {size_points}pt; }}"
-                elif family: # Only family is reliably parsed or size is 0/default
-                    css_data = f"* {{ font-family: \"{family}\"; }}" # Apply only family, let size be default
-                    print(f"DEBUG: Applying family only: '{family}'", file=sys.stderr)
-                else:
-                    # This case means Pango.FontDescription couldn't even get a family name.
-                    print(f"Warning: Could not parse family name effectively from font string '{font_str}'. CSS will be empty.", file=sys.stderr)
+                elif family:
+                    css_data = f"* {{ font-family: \"{family}\"; }}"
+                    # print(f"DEBUG: Applying family only: '{family}'", file=sys.stderr)
+                # else:
+                    # print(f"Warning: Could not parse family name effectively from font string '{font_str}'. CSS will be empty.", file=sys.stderr)
             except Exception as e:
-                # Handles errors from Pango.FontDescription.from_string() if font_str is malformed
                 print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will be empty.", file=sys.stderr)
         
-        print(f"DEBUG: Generated CSS data: '{css_data}'", file=sys.stderr)
+        # print(f"DEBUG: Generated CSS data: '{css_data}'", file=sys.stderr)
 
         if hasattr(self, 'font_css_provider'):
             self.font_css_provider.load_from_data(css_data.encode())
-        else:
-            print("Error: font_css_provider not initialized before applying font preference.", file=sys.stderr)
-
-    def _set_text_view_text(self, message: str) -> None:
-        """Sets the text of the text_view's buffer if it exists."""
-        if self.text_buffer:
-            self.text_buffer.set_text(message)
+            # Apply to existing HostInfoExpanderRows
+            for i in range(self.results_listbox.get_n_rows()):
+                row = self.results_listbox.get_row_at_index(i)
+                if isinstance(row, HostInfoExpanderRow):
+                    text_view = row.get_text_view()
+                    if text_view:
+                        text_view.get_style_context().add_provider(
+                            self.font_css_provider,
+                            Gtk.STYLE_PROVIDER_PRIORITY_USER
+                        )
+        # else:
+            # print("Error: font_css_provider not initialized before applying font preference.", file=sys.stderr)
 
     def _populate_nse_script_combo(self) -> None:
         """Populates the NSE script combo box with discovered scripts."""
@@ -155,10 +157,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         """Callback for when the scan is initiated from the target entry row."""
         target: str = self.target_entry_row.get_text().strip()
         if not target:
-            self._set_text_view_text("Please enter a target to scan.")
+            self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
             self._update_ui_state("ready", "Empty target")
-            # Potentially add a toast for empty target if desired, though the StatusPage updates.
-            # self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
             return
 
         self._clear_results_ui()
@@ -226,21 +226,22 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         elif hosts_data is not None and hosts_data:  # Scan successful with results
             self.current_scan_results = hosts_data
             self._populate_results_listbox(hosts_data)
-            self._set_text_view_text("Select a host from the list to see its scan details.")
+            # self._set_text_view_text("Select a host from the list to see its scan details.") # Obsolete
+            self.status_page.set_property("description", "Scan Complete. Select a host to view details.")
             self._update_ui_state("success")
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
         elif hosts_data == [] or (error_type and error_message == "No hosts found."):
             self._clear_results_ui()
-            if error_message == "No hosts found.":
-                self._display_scan_error(error_type, error_message) # Keep existing error display
-            else: # hosts_data == []
-                self._set_text_view_text("No hosts were found matching the criteria.")
-            self._update_ui_state("no_results")
+            if error_message == "No hosts found.": # Specific message from nmap_scanner
+                self.status_page.set_property("description", "Scan Complete: No hosts found.")
+            else: # General case for empty hosts_data
+                self.status_page.set_property("description", "Scan Complete: No hosts were found matching the criteria.")
+            self._update_ui_state("no_results") # This state already sets a generic "No hosts found"
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
             self.current_scan_results = []
         elif hosts_data is None and not error_type: # No data, no specific error
             self._clear_results_ui()
-            self._set_text_view_text("No data received from scan.")
+            self.status_page.set_property("description", "Scan Complete: No data received from scan.")
             self._update_ui_state("no_data")
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
             self.current_scan_results = None
@@ -266,50 +267,98 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         """Clears the results listbox and the text view display."""
         while child := self.results_listbox.get_row_at_index(0):
             self.results_listbox.remove(child)
-        self._set_text_view_text("")
+        # self._set_text_view_text("") # Obsolete
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
         """Populates the results_listbox with discovered hosts from scan data."""
         for host_data in hosts_data:
-            row = Adw.ActionRow()
-            title = host_data.get("hostname") or host_data.get("id", "Unknown Host")
-            row.set_title(title)
-            row.set_subtitle(f"State: {host_data.get('state', 'N/A')}")
-            row.set_icon_name("computer-symbolic")
-            row.set_activatable(True)
-            row.connect("activated", self._on_host_row_activated)
+            raw_details = host_data.get("raw_details_text", "")
+            row = HostInfoExpanderRow(host_data=host_data, raw_details_text=raw_details)
+            # Apply font preference to the new row's text_view
+            if hasattr(self, 'font_css_provider'):
+                 text_view = row.get_text_view()
+                 if text_view:
+                    text_view.get_style_context().add_provider(
+                        self.font_css_provider,
+                        Gtk.STYLE_PROVIDER_PRIORITY_USER
+                    )
             self.results_listbox.append(row)
+        # After populating, ensure font preferences are applied if rows were added.
+        # self._apply_font_preference() # This might be redundant if applied per row, but ensures consistency.
 
     def _display_scan_error(self, error_type: str, error_message: str) -> None:
-        """Displays scan-related errors in the text_view."""
+        """Displays scan-related errors on the status page."""
         self._clear_results_ui()
-        self._set_text_view_text(f"Error Type: {error_type}\n\nMessage: {error_message}")
+        # It's often better to use the specific error message if it's user-friendly,
+        # or a more generic one if it's too technical.
+        # For now, we'll combine them, but this could be refined.
+        friendly_message = f"Scan Error: {error_message}"
+        if error_type and error_type != "ScanMessage": # Avoid showing "Error Type: ScanMessage"
+             friendly_message = f"Error Type: {error_type}\nMessage: {error_message}"
+        
+        self.status_page.set_property("description", friendly_message)
+        # Optionally, also log to console for debugging, or use a toast for less critical errors.
+        print(f"Scan Error Displayed: Type={error_type}, Message={error_message}", file=sys.stderr)
 
-    def _on_host_row_activated(self, row: Adw.ActionRow) -> None:
-        """
-        Callback for when a host row in the results_listbox is activated.
-        Displays detailed scan information for the selected host.
-        """
-        host_index: int = row.get_index()
+# Define HostInfoExpanderRow class
+class HostInfoExpanderRow(Adw.ExpanderRow):
+    __gtype_name__ = "HostInfoExpanderRow"
 
-        if self.current_scan_results is None:
-            self._set_text_view_text(
-                "Cannot display host details: Scan results are currently unavailable."
+    def __init__(self, host_data: Dict[str, Any], raw_details_text: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self.raw_details_text = raw_details_text
+        self.set_title(host_data.get("hostname") or host_data.get("id", "Unknown Host"))
+        self.set_subtitle(f"State: {host_data.get('state', 'N/A')}")
+        self.set_icon_name("computer-symbolic") # Keep icon consistent
+
+        self._text_view = Gtk.TextView(
+            editable=False,
+            cursor_visible=False,
+            wrap_mode=Gtk.WrapMode.WORD_CHAR,
+            vexpand=True, # Allow TextView to expand vertically
+            hexpand=True   # Allow TextView to expand horizontally
+        )
+        
+        # Apply initial font preference if available from the window
+        # This is a bit indirect, ideally the window would manage this centrally
+        app_window = self.get_ancestor(NetworkMapWindow)
+        if app_window and hasattr(app_window, 'font_css_provider'):
+            self._text_view.get_style_context().add_provider(
+                app_window.font_css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_USER
             )
-            return
 
-        if not (0 <= host_index < len(self.current_scan_results)):
-            self._set_text_view_text(
-                f"Error: Invalid host selection (index {host_index}). Please try again."
-            )
-            return
 
-        host_data: Dict[str, Any] = self.current_scan_results[host_index]
-        details: Optional[str] = host_data.get("raw_details_text")
+        frame = Adw.Frame() # No label for the frame, details are implicit
+        frame.set_child(self._text_view)
+        
+        # Add some padding or margin to the frame or textview if needed
+        # frame.set_margin_top(6)
+        # frame.set_margin_bottom(6)
+        # frame.set_margin_start(6)
+        # frame.set_margin_end(6)
+        
+        self.add_row(frame)
+        self.connect("notify::expanded", self._on_expanded_changed)
 
-        if details:
-            self._set_text_view_text(details)
+    def _on_expanded_changed(self, expander_row: Adw.ExpanderRow, pspec: GObject.ParamSpec) -> None:
+        buffer = self._text_view.get_buffer()
+        if expander_row.get_expanded():
+            buffer.set_text("")  # Clear existing content
+            markup_text = self.raw_details_text if self.raw_details_text else "<i>No additional details available.</i>"
+            try:
+                # The -1 argument for length means parse the whole string
+                buffer.insert_markup(buffer.get_end_iter(), markup_text, -1)
+            except GLib.Error as e:
+                # Handle Pango parsing errors, e.g., log and set plain text
+                print(f"Pango markup error: {e}. Setting text plainly.", file=sys.stderr)
+                # Fallback to setting plain text, stripping any potential markup to be safe
+                plain_text_fallback = GLib.markup_escape_text(self.raw_details_text if self.raw_details_text else "No additional details available. (Markup error)")
+                buffer.set_text(plain_text_fallback)
         else:
-            self._set_text_view_text(
-                f"No detailed scan information available for {row.get_title()}."
-            )
+            # Optional: Clear buffer when collapsed
+            buffer.set_text("") 
+
+    def get_text_view(self) -> Optional[Gtk.TextView]:
+        return self._text_view
