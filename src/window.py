@@ -52,13 +52,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview) # Added
-        self._apply_font_preference() # Apply initial font preference
         
         self._connect_signals()
         self._populate_nse_script_combo() # Ensure NSE scripts are loaded at startup
         self._populate_timing_template_combo() # Populate timing options
         self._update_nmap_command_preview() # Initial command preview
         self._update_ui_state("ready")
+        self.port_spec_entry_row.set_placeholder_text("e.g., 22, 80, 443, 1000-2000")
+        GLib.idle_add(self._apply_font_preference) # Apply initial font preference after UI is fully initialized
 
     def _populate_timing_template_combo(self) -> None:
         """Populates the timing template combo box."""
