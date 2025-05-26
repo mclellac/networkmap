@@ -1,3 +1,5 @@
+from gi.repository import GLib # Added for GLib.markup_escape_text
+
 try:
     import nmap
 except ImportError as e:
@@ -227,21 +229,22 @@ class NmapScanner:
                 host_scan_data = self.nm[host_id]
 
                 host_info: Dict[str, Any] = {
-                    "id": host_id,
-                    "hostname": host_scan_data.hostname() or "N/A",
-                    "state": host_scan_data.state() or "N/A",
+                    "id": GLib.markup_escape_text(host_id), # Escaped
+                    "hostname": GLib.markup_escape_text(host_scan_data.hostname() or "N/A"), # Escaped
+                    "state": GLib.markup_escape_text(host_scan_data.state() or "N/A"), # Escaped
                     "protocols": host_scan_data.all_protocols() or [],
                     "ports": [],
                     "os_fingerprint": None,
                     "raw_details_text": ""
                 }
                 raw_details_parts: List[str] = [
-                    f"Host: {host_info['id']} (Hostname: {host_info['hostname']})",
-                    f"State: {host_info['state']}"
+                    f"<b>Host:</b> {host_info['id']} (<b>Hostname:</b> {host_info['hostname']})",
+                    f"<b>State:</b> {host_info['state']}"
                 ]
 
                 for proto in host_info["protocols"]:
-                    raw_details_parts.append(f"\nProtocol: {proto.upper()}")
+                    escaped_proto = GLib.markup_escape_text(proto.upper()) # Escaped
+                    raw_details_parts.append(f"\n<b>Protocol: {escaped_proto}</b>")
                     ports_data = host_scan_data.get(proto, {})
                     if not ports_data:
                         raw_details_parts.append("  No open ports found for this protocol.")
@@ -249,25 +252,31 @@ class NmapScanner:
 
                     for port_id in sorted(ports_data.keys()):
                         port_details = ports_data.get(port_id, {})
-                        service_name = port_details.get('name', 'N/A')
-                        product = port_details.get('product', '')
-                        version = port_details.get('version', '')
-
+                        
+                        # Escape individual service components before joining
+                        service_name = GLib.markup_escape_text(port_details.get('name', 'N/A'))
+                        product = GLib.markup_escape_text(port_details.get('product', ''))
+                        version = GLib.markup_escape_text(port_details.get('version', ''))
+                        
                         service_parts = []
-                        if service_name and service_name != 'N/A': service_parts.append(f"Name: {service_name}")
-                        if product: service_parts.append(f"Product: {product}")
-                        if version: service_parts.append(f"Version: {version}")
-                        service_info_str = ", ".join(service_parts) or "N/A"
+                        if service_name and service_name != 'N/A': service_parts.append(f"<b>Name:</b> {service_name}")
+                        if product: service_parts.append(f"<b>Product:</b> {product}")
+                        if version: service_parts.append(f"<b>Version:</b> {version}")
+                        service_info_str = ", ".join(service_parts) if service_parts else "N/A"
+                        
+                        escaped_port_id = GLib.markup_escape_text(str(port_id)) # Escaped
+                        escaped_proto_short = GLib.markup_escape_text(proto) # Escaped
+                        escaped_port_state = GLib.markup_escape_text(port_details.get("state", "N/A")) # Escaped
 
                         port_state = port_details.get("state", "N/A")
                         port_entry = {
-                            "portid": port_id,
-                            "protocol": proto,
-                            "state": port_state,
+                            "portid": port_id, # Store original, non-escaped for internal data
+                            "protocol": proto, # Store original
+                            "state": port_state, # Store original
                             "service": {
-                                "name": service_name,
-                                "product": product or None,
-                                "version": version or None,
+                                "name": port_details.get('name', 'N/A'), # Store original
+                                "product": port_details.get('product') or None, # Store original
+                                "version": port_details.get('version') or None, # Store original
                                 "extrainfo": port_details.get("extrainfo"),
                                 "conf": str(port_details.get("conf", "N/A")),
                                 "cpe": port_details.get("cpe"),
@@ -275,44 +284,51 @@ class NmapScanner:
                         }
                         host_info["ports"].append(port_entry)
                         raw_details_parts.append(
-                            f"  Port: {port_id}/{proto:<3}  State: {port_state:<10} Service: {service_info_str}"
+                            f"  <b>Port:</b> {escaped_port_id}/{escaped_proto_short:<3}  <b>State:</b> {escaped_port_state:<10} <b>Service:</b> {service_info_str}"
                         )
                 
                 if do_os_fingerprint and "osmatch" in host_scan_data:
                     os_matches = host_scan_data.get("osmatch", [])
                     if os_matches:
                         best_os_match = os_matches[0]
-                        name = best_os_match.get("name", "N/A")
-                        accuracy = str(best_os_match.get("accuracy", "N/A"))
+                        name = GLib.markup_escape_text(best_os_match.get("name", "N/A")) # Escaped
+                        accuracy = GLib.markup_escape_text(str(best_os_match.get("accuracy", "N/A"))) # Escaped
                         
                         os_fingerprint_details = {
-                            "name": name,
-                            "accuracy": accuracy,
+                            "name": best_os_match.get("name", "N/A"), # Store original
+                            "accuracy": str(best_os_match.get("accuracy", "N/A")), # Store original
                             "osclass": []
                         }
-                        raw_details_parts.append("\nOS Fingerprint:")
-                        raw_details_parts.append(f"  Best Match: {name} (Accuracy: {accuracy}%)")
+                        raw_details_parts.append("\n<b>OS Fingerprint:</b>")
+                        raw_details_parts.append(f"  <b>Best Match:</b> {name} (<b>Accuracy:</b> {accuracy}%)")
                         
                         for os_class_data in best_os_match.get("osclass", []):
+                            # Escape individual class info parts
+                            type_val = GLib.markup_escape_text(os_class_data.get('type', 'N/A'))
+                            vendor_val = GLib.markup_escape_text(os_class_data.get('vendor', 'N/A'))
+                            osfamily_val = GLib.markup_escape_text(os_class_data.get('osfamily', 'N/A'))
+                            osgen_val = GLib.markup_escape_text(os_class_data.get('osgen', 'N/A'))
+                            class_accuracy_val = GLib.markup_escape_text(str(os_class_data.get('accuracy', 'N/A')))
+
                             os_class_info_parts = [
-                                f"Type: {os_class_data.get('type', 'N/A')}",
-                                f"Vendor: {os_class_data.get('vendor', 'N/A')}",
-                                f"OS Family: {os_class_data.get('osfamily', 'N/A')}",
-                                f"OS Gen: {os_class_data.get('osgen', 'N/A')}",
-                                f"Accuracy: {str(os_class_data.get('accuracy', 'N/A'))}%"
+                                f"<b>Type:</b> {type_val}",
+                                f"<b>Vendor:</b> {vendor_val}",
+                                f"<b>OS Family:</b> {osfamily_val}",
+                                f"<b>OS Gen:</b> {osgen_val}",
+                                f"<b>Accuracy:</b> {class_accuracy_val}%"
                             ]
-                            raw_details_parts.append(f"    Class: {', '.join(os_class_info_parts)}")
+                            raw_details_parts.append(f"    <b>Class:</b> {', '.join(os_class_info_parts)}")
                             
                             os_fingerprint_details["osclass"].append({
-                                "type": os_class_data.get('type'),
-                                "vendor": os_class_data.get('vendor'),
-                                "osfamily": os_class_data.get('osfamily'),
-                                "osgen": os_class_data.get('osgen'),
-                                "accuracy": str(os_class_data.get('accuracy', 'N/A'))
+                                "type": os_class_data.get('type'), # Store original
+                                "vendor": os_class_data.get('vendor'), # Store original
+                                "osfamily": os_class_data.get('osfamily'), # Store original
+                                "osgen": os_class_data.get('osgen'), # Store original
+                                "accuracy": str(os_class_data.get('accuracy', 'N/A')) # Store original
                             })
                         host_info["os_fingerprint"] = os_fingerprint_details
                     elif do_os_fingerprint:
-                        raw_details_parts.append("\nOS Fingerprint: No OS matches found.")
+                        raw_details_parts.append("\n<b>OS Fingerprint:</b> No OS matches found.")
 
                 host_info["raw_details_text"] = "\n".join(raw_details_parts)
                 hosts_data.append(host_info)
