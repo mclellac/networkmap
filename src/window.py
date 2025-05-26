@@ -155,16 +155,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nse_script_combo_row.set_model(filter_model)
         self.nse_script_combo_row.set_selected(0) # Select "None" by default
 
-    def _on_nse_search_changed(self, search_entry: Gtk.SearchEntry) -> None:
-        """Handles text changes in the NSE script combo's search entry to filter the list."""
-        if self.nse_script_filter: # Ensure filter is initialized
-            search_term = search_entry.get_text()
-            self.nse_script_filter.set_search(search_term if search_term else None)
-            # If search_term is empty, "None" (at index 0 of original model) should be visible.
-            # If Adw.ComboRow doesn't automatically re-select or handle empty search well,
-            # we might need to explicitly call self.nse_script_combo_row.set_selected(0) here
-            # if search_term == "" and self.nse_script_combo_row.get_selected_item() is None.
-            # For now, let's assume standard behavior is sufficient.
+    # Removed _on_nse_search_changed method as Adw.ComboRow handles the filter automatically
 
     def _connect_signals(self) -> None:
         """Connects UI signals to their handlers."""
@@ -175,13 +166,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) # Also updates preview
 
-        # Connect search entry for NSE Comborow
-        nse_search_entry = self.nse_script_combo_row.get_search_entry()
-        if nse_search_entry:
-            nse_search_entry.connect("search-changed", self._on_nse_search_changed)
-        else:
-            print("Warning: Could not get search entry from Adw.ComboRow for NSE scripts.", file=sys.stderr)
-
+        # Manual connection for search_entry's "search-changed" is no longer needed.
+        # Adw.ComboRow with enable-search=True and a Gtk.FilterListModel
+        # (containing a Gtk.StringFilter) handles this internally.
+        # The Gtk.StringFilter's 'search' property is bound/updated by Adw.ComboRow.
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """
