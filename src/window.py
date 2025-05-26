@@ -44,7 +44,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._apply_font_preference() # Apply initial font preference
         
         self._connect_signals()
-        # self._populate_nse_script_combo() # This seems to be called later or not needed here
+        self._populate_nse_script_combo() # Ensure NSE scripts are loaded at startup
         self._update_ui_state("ready")
 
     def _apply_font_preference(self) -> None:
