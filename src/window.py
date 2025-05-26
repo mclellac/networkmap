@@ -24,6 +24,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     nmap_command_preview_row: Adw.EntryRow = Gtk.Template.Child("nmap_command_preview_row")
     start_scan_button: Gtk.Button = Gtk.Template.Child("start_scan_button")
     stealth_scan_switch: Adw.SwitchRow = Gtk.Template.Child("stealth_scan_switch")
+    port_spec_entry_row: Adw.EntryRow = Gtk.Template.Child("port_spec_entry_row")
+    timing_template_combo_row: Adw.ComboRow = Gtk.Template.Child("timing_template_combo_row")
+    no_ping_switch: Adw.SwitchRow = Gtk.Template.Child("no_ping_switch")
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
@@ -33,6 +36,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
         self.selected_nse_script: Optional[str] = None
         self.nse_script_filter: Optional[Gtk.StringFilter] = None # For NSE script search
+        # self.selected_port_spec: Optional[str] = None # Removed, will read directly
+        self.selected_timing_template: Optional[str] = None
+        self.timing_options: Dict[str, Optional[str]] = {} # Will be populated
         
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
         
@@ -50,14 +56,32 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         self._connect_signals()
         self._populate_nse_script_combo() # Ensure NSE scripts are loaded at startup
+        self._populate_timing_template_combo() # Populate timing options
         self._update_nmap_command_preview() # Initial command preview
         self._update_ui_state("ready")
+
+    def _populate_timing_template_combo(self) -> None:
+        """Populates the timing template combo box."""
+        self.timing_options = {
+            "Default (T3)": None, 
+            "Paranoid (T0)": "-T0",
+            "Sneaky (T1)": "-T1",
+            "Polite (T2)": "-T2",
+            "Aggressive (T4)": "-T4",
+            "Insane (T5)": "-T5",
+        }
+        string_list_model = Gtk.StringList.new(list(self.timing_options.keys()))
+        self.timing_template_combo_row.set_model(string_list_model)
+        self.timing_template_combo_row.set_selected(0) # Default to "Default (T3)"
 
     def _update_nmap_command_preview(self, *args) -> None:
         """Updates the Nmap command preview row based on current UI settings."""
         target_text = self.target_entry_row.get_text().strip()
         do_os_fingerprint = self.os_fingerprint_switch.get_active()
-        do_stealth_scan = self.stealth_scan_switch.get_active() # Get stealth scan state
+        do_stealth_scan = self.stealth_scan_switch.get_active()
+        do_no_ping = self.no_ping_switch.get_active() # New
+        port_spec_text = self.port_spec_entry_row.get_text().strip() # New
+        selected_timing = self.selected_timing_template # New
         additional_args_str = self.arguments_entry_row.get_text()
         selected_script = self.selected_nse_script 
         default_args_from_settings = self.settings.get_string("default-nmap-arguments")
@@ -68,7 +92,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 additional_args_str=additional_args_str,
                 nse_script=selected_script,
                 default_args_str=default_args_from_settings,
-                stealth_scan=do_stealth_scan # Pass stealth_scan to build_scan_args
+                stealth_scan=do_stealth_scan,
+                port_spec=port_spec_text,        # New
+                timing_template=selected_timing, # New
+                no_ping=do_no_ping               # New
             )
         except NmapArgumentError as e:
             self.nmap_command_preview_row.set_text(f"Error in arguments: {e}")
@@ -172,9 +199,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # Connect signals for command preview updates
         self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview) # Added
+        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
         self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) # Also updates preview
+        self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
 
         # Manual connection for search_entry's "search-changed" is no longer needed.
         # Adw.ComboRow with enable-search=True and a Gtk.FilterListModel
@@ -198,6 +228,20 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         else:
             self.selected_nse_script = None
         self._update_nmap_command_preview() # Update preview when script changes
+
+    def _on_timing_template_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
+        """Handles selection changes in the timing template combo box."""
+        selected_idx = combo_row.get_selected()
+        model = combo_row.get_model() # This is a Gtk.StringList
+        
+        if isinstance(model, Gtk.StringList) and selected_idx >= 0:
+            display_string = model.get_string(selected_idx)
+            self.selected_timing_template = self.timing_options.get(display_string)
+        else: # Should not happen if model is correctly populated
+            self.selected_timing_template = None
+            
+        self._update_nmap_command_preview()
+
 
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
         """
@@ -251,7 +295,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 target,
                 self.os_fingerprint_switch.get_active(),
                 self.arguments_entry_row.get_text(),
-                self.stealth_scan_switch.get_active(), # Pass stealth_scan_switch state
+                self.stealth_scan_switch.get_active(),
+                self.port_spec_entry_row.get_text().strip(), # New
+                self.selected_timing_template,              # New
+                self.no_ping_switch.get_active()            # New
             ),
         )
         scan_thread.daemon = True
@@ -266,7 +313,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._initiate_scan_procedure()
 
     def _run_scan_worker(
-        self, target: str, do_os_fingerprint: bool, additional_args_str: str, do_stealth_scan: bool
+        self, target: str, do_os_fingerprint: bool, additional_args_str: str, do_stealth_scan: bool,
+        port_spec_str: Optional[str], timing_template_val: Optional[str], do_no_ping_val: bool # New
     ) -> None:
         """
         Worker function to perform the Nmap scan.
@@ -286,7 +334,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 additional_args_str,
                 self.selected_nse_script,
                 default_args_str=default_args_from_settings,
-                stealth_scan=do_stealth_scan # Pass do_stealth_scan to scanner
+                stealth_scan=do_stealth_scan,
+                port_spec=port_spec_str,                # New
+                timing_template=timing_template_val,    # New
+                no_ping=do_no_ping_val                  # New
             )
             if scan_message and not hosts_data:
                 error_type = "ScanMessage"

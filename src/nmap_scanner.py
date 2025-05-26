@@ -42,7 +42,10 @@ class NmapScanner:
         additional_args_str: str,
         nse_script: Optional[str] = None,
         default_args_str: Optional[str] = None,
-        stealth_scan: bool = False, # Added stealth_scan parameter
+        stealth_scan: bool = False,
+        port_spec: Optional[str] = None,        # New
+        timing_template: Optional[str] = None,  # New
+        no_ping: bool = False                   # New
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
         Performs an Nmap scan on the given target with specified options.
@@ -62,8 +65,15 @@ class NmapScanner:
                 - An error message string if an error occurred, otherwise None.
         """
         try:
-            scan_args_str = self.build_scan_args( # Updated call
-                do_os_fingerprint, additional_args_str, nse_script, default_args_str, stealth_scan=stealth_scan # Pass stealth_scan
+            scan_args_str = self.build_scan_args(
+                do_os_fingerprint,
+                additional_args_str,
+                nse_script,
+                default_args_str,
+                stealth_scan=stealth_scan,
+                port_spec=port_spec,                # New
+                timing_template=timing_template,    # New
+                no_ping=no_ping                     # New
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
@@ -145,7 +155,10 @@ class NmapScanner:
         additional_args_str: str,
         nse_script: Optional[str] = None,
         default_args_str: Optional[str] = None,
-        stealth_scan: bool = False, # Added stealth_scan parameter
+        stealth_scan: bool = False,
+        port_spec: Optional[str] = None,        # New
+        timing_template: Optional[str] = None,  # New
+        no_ping: bool = False                   # New
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
@@ -214,6 +227,29 @@ class NmapScanner:
                 # For consistency with other error messages that might be logged or displayed in UI later:
                 import sys # Ensure sys is imported if not already
                 print(f"Warning: Stealth scan (-sS) conflicts with existing scan type arguments: {' '.join(final_args)}. User arguments will take precedence.", file=sys.stderr)
+        
+        if no_ping:
+            if "-Pn" not in final_args: # Avoid duplication
+                final_args.append("-Pn")
+
+        if port_spec and port_spec.strip():
+            # Basic check to avoid adding '-p' if it's already there
+            if not any(arg == "-p" for arg in final_args):
+                final_args.append("-p")
+                final_args.append(port_spec.strip())
+            else:
+                # Ensure sys is imported if not already, for the warning
+                import sys 
+                print(f"Warning: Port specification (-p) might conflict with existing arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=sys.stderr)
+        
+        if timing_template and timing_template.strip():
+            # Basic check for existing -T<num>
+            if not any(arg.startswith("-T") and len(arg) == 3 and arg[2].isdigit() for arg in final_args):
+                final_args.append(timing_template.strip())
+            else:
+                # Ensure sys is imported if not already, for the warning
+                import sys
+                print(f"Warning: Timing template ({timing_template}) might conflict with existing -T arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=sys.stderr)
 
         return " ".join(final_args)
 
