@@ -1,4 +1,5 @@
 from gi.repository import Adw, Gtk, GObject, Gio, Pango
+from typing import Optional
 
 from .utils import apply_theme
 from .profile_manager import ProfileManager, ScanProfile
