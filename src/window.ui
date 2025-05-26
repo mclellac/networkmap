@@ -65,10 +65,21 @@
                             </child>
                             <child>
                               <object class="AdwComboRow" id="nse_script_combo_row">
-                                <property name="subtitle">Include execution of NSE script</property>
                                 <property name="title">NSE Script</property>
+                                <property name="subtitle">Include execution of NSE script</property>
+                                <property name="enable-search">True</property>
                               </object>
                             </child>
+                          </object>
+                        </child>
+                        <!-- New Adw.EntryRow for Command Preview -->
+                        <child>
+                          <object class="AdwEntryRow" id="nmap_command_preview_row">
+                            <property name="title" translatable="yes">Nmap Command Preview</property>
+                            <property name="subtitle" translatable="yes">Read-only preview of the command to be executed.</property>
+                            <property name="editable">False</property>
+                            <property name="selectable">True</property> 
+                            <property name="activatable">False</property>
                           </object>
                         </child>
                       </object>

@@ -21,6 +21,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     status_page: Adw.StatusPage = Gtk.Template.Child("status_page")
     results_listbox: Gtk.ListBox = Gtk.Template.Child("results_listbox")
     toast_overlay: Adw.ToastOverlay = Gtk.Template.Child("toast_overlay")
+    nmap_command_preview_row: Adw.EntryRow = Gtk.Template.Child("nmap_command_preview_row")
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
@@ -41,11 +42,42 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # )
         
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
+        self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview) # Added
         self._apply_font_preference() # Apply initial font preference
         
         self._connect_signals()
         self._populate_nse_script_combo() # Ensure NSE scripts are loaded at startup
+        self._update_nmap_command_preview() # Initial command preview
         self._update_ui_state("ready")
+
+    def _update_nmap_command_preview(self, *args) -> None:
+        """Updates the Nmap command preview row based on current UI settings."""
+        target_text = self.target_entry_row.get_text().strip()
+        do_os_fingerprint = self.os_fingerprint_switch.get_active()
+        additional_args_str = self.arguments_entry_row.get_text()
+        selected_script = self.selected_nse_script 
+        default_args_from_settings = self.settings.get_string("default-nmap-arguments")
+
+        try:
+            args_string = self.nmap_scanner.build_scan_args(
+                do_os_fingerprint=do_os_fingerprint,
+                additional_args_str=additional_args_str,
+                nse_script=selected_script,
+                default_args_str=default_args_from_settings
+            )
+        except NmapArgumentError as e:
+            self.nmap_command_preview_row.set_text(f"Error in arguments: {e}")
+            return
+        except Exception as e: # Catch any other unexpected error
+            self.nmap_command_preview_row.set_text(f"Error building command: {e}")
+            return
+
+        if not target_text:
+            full_command = f"nmap {args_string} <target_host>"
+        else:
+            full_command = f"nmap {args_string} {target_text}"
+        
+        self.nmap_command_preview_row.set_text(full_command)
 
     def _apply_font_preference(self) -> None:
         # Applies the font preference from GSettings to the Gtk.TextViews within HostInfoExpanderRows.
@@ -116,7 +148,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _connect_signals(self) -> None:
         """Connects UI signals to their handlers."""
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
-        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected)
+        # Connect signals for command preview updates
+        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) # Also updates preview
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """
@@ -134,6 +170,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 self.selected_nse_script = selected_value
         else:
             self.selected_nse_script = None
+        self._update_nmap_command_preview() # Update preview when script changes
 
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
         """
