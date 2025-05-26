@@ -58,9 +58,24 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
                 size_points = 0
+                # Pango.VERSION is available from gi.repository.Pango
+                # Pango.version_to_int() converts a string version like "1.44.0" to an integer for comparison.
+                # However, Pango.VERSION itself is an integer, so direct comparison is fine.
+                # For Pango < 1.44, get_size_is_set() is not available.
+                # Pango 1.44 is required for get_size_is_set. Let's assume Pango versions are comparable as integers.
+                # A common way to check Pango version features is by checking Pango.VERSION >= Pango.VERSION_1_44 (if such constants exist)
+                # or by Pango.VERSION >= pango_version_to_int(1,44,0)
+                # For simplicity here, we'll use a hardcoded integer if Pango.VERSION_1_44 is not available.
+                # Pango version encoding: major * 10000 + minor * 100 + micro. So 1.44.0 is 14400.
                 
-                if font_desc.get_size_is_set():
+                # It's safer to check for the attribute directly to avoid issues with Pango.VERSION format/constants
+                if hasattr(font_desc, 'get_size_is_set') and font_desc.get_size_is_set():
                     size_points = font_desc.get_size() / Pango.SCALE
+                elif not hasattr(font_desc, 'get_size_is_set'): # Fallback for older Pango
+                    pango_size = font_desc.get_size()
+                    if pango_size > 0: # get_size() returns 0 if not set in points
+                        size_points = pango_size / Pango.SCALE
+                # If size_points is still 0, it means size was not explicitly set or couldn't be retrieved.
                 
                 # print(f"DEBUG: Parsed - Family: '{family}', Size Points: {size_points}", file=sys.stderr)
 
@@ -79,8 +94,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if hasattr(self, 'font_css_provider'):
             self.font_css_provider.load_from_data(css_data.encode())
             # Apply to existing HostInfoExpanderRows
-            for i in range(self.results_listbox.get_n_rows()):
-                row = self.results_listbox.get_row_at_index(i)
+            for row in self.results_listbox:
                 if isinstance(row, HostInfoExpanderRow):
                     text_view = row.get_text_view()
                     if text_view:
