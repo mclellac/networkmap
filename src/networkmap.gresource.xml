@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<gresources>
-  <gresource prefix="/com/github/mclellac/NetworkMap">
-    <file preprocess="xml-stripblanks">window.ui</file>
-    <file preprocess="xml-stripblanks">gtk/help-overlay.ui</file>
-    <file preprocess="xml-stripblanks">gtk/preferences.ui</file>
-    <file preprocess="xml-stripblanks">gtk/scan_page.ui</file>
-  </gresource>
-</gresources>
