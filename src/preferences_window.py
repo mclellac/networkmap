@@ -95,16 +95,14 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         all_profile_names = [p['name'] for p in self.profile_manager.load_profiles()]
         dialog = ProfileEditorDialog(parent_window=self, existing_profile_names=all_profile_names)
         
-        def on_dialog_response(d, response_id):
-            if response_id == "save":
-                new_profile_data = d.get_profile_data()
-                if new_profile_data:
-                    self.profile_manager.add_profile(new_profile_data)
-                    self._load_and_display_profiles()
-            d.close() 
-        
-        dialog.connect("response", on_dialog_response)
+        dialog.connect("profile-action", self._handle_profile_dialog_action_add)
         dialog.present(self)
+
+    def _handle_profile_dialog_action_add(self, dialog_instance, action: str, profile_data: Optional[ScanProfile]) -> None:
+        if action == "save" and profile_data:
+            self.profile_manager.add_profile(profile_data)
+            self._load_and_display_profiles()
+        # The dialog closes itself, so no need to call dialog_instance.close() here.
 
     def _on_edit_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
         profile_to_edit = next((p for p in self.profile_manager.load_profiles() if p['name'] == profile_name), None)
@@ -114,18 +112,16 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             # ProfileEditorDialog's __init__ handles the logic of allowing the current name during edit.
             dialog = ProfileEditorDialog(parent_window=self, profile_to_edit=profile_to_edit, existing_profile_names=all_profile_names)
 
-            def on_dialog_response(d, response_id):
-                if response_id == "save":
-                    updated_profile_data = d.get_profile_data()
-                    if updated_profile_data:
-                        self.profile_manager.update_profile(profile_name, updated_profile_data)
-                        self._load_and_display_profiles()
-                d.close()
-
-            dialog.connect("response", on_dialog_response)
+            dialog.connect("profile-action", lambda d, act, data: self._handle_profile_dialog_action_edit(d, act, data, profile_name))
             dialog.present(self)
         else:
             print(f"Error: Could not find profile '{profile_name}' to edit.")
+
+    def _handle_profile_dialog_action_edit(self, dialog_instance, action: str, profile_data: Optional[ScanProfile], original_profile_name: str) -> None:
+        if action == "save" and profile_data:
+            self.profile_manager.update_profile(original_profile_name, profile_data)
+            self._load_and_display_profiles()
+        # The dialog closes itself.
 
     def _on_delete_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
         if self.profile_manager.delete_profile(profile_name):

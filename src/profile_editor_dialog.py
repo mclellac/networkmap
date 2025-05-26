@@ -1,8 +1,12 @@
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gtk, GObject
 from typing import Optional, Dict, List
 from .profile_manager import ScanProfile
 
 class ProfileEditorDialog(Adw.Dialog):
+    __gsignals__ = {
+        'profile-action': (GObject.SignalFlags.RUN_FIRST, None, (str, GObject.TYPE_PYOBJECT))
+    }
+
     def __init__(self, parent_window: Gtk.Window, profile_to_edit: Optional[ScanProfile] = None, existing_profile_names: Optional[List[str]] = None):
         super().__init__() 
             
@@ -69,19 +73,33 @@ class ProfileEditorDialog(Adw.Dialog):
                     break
             self.timing_combo_row.set_selected(selected_idx)
 
-        self.add_response("cancel", "Cancel")
-        self.add_response("save", "Save")
-        self.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
-        self.set_default_response("save") 
-        self.connect("response", self._on_response)
+        # Action buttons
+        self.cancel_button = Gtk.Button(label="Cancel")
+        self.cancel_button.connect("clicked", self._handle_cancel_action)
+
+        self.save_button = Gtk.Button(label="Save")
+        self.save_button.add_css_class("suggested-action")
+        self.save_button.connect("clicked", self._handle_save_action)
+
+        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        action_box.set_halign(Gtk.Align.END) # Align buttons to the right
+        action_box.set_margin_top(12) # Add some space above the buttons
+        action_box.append(self.cancel_button)
+        action_box.append(self.save_button)
+        
+        content_box.append(action_box) # Add to the main vertical box
 
 
-    def _on_response(self, dialog, response_id: str):
-        if response_id == "save":
-            # Validation before closing, handled by get_profile_data
-            pass 
-        # For "cancel" or if save validation fails and we want to keep dialog open, do nothing more here
-        # The dialog will close automatically for added responses unless close is inhibited.
+    def _handle_cancel_action(self, button):
+        self.emit("profile-action", "cancel", None)
+        self.close()
+
+    def _handle_save_action(self, button):
+        profile_data = self.get_profile_data()
+        if profile_data:
+            self.emit("profile-action", "save", profile_data)
+            self.close()
+        # If profile_data is None, validation messages are handled by get_profile_data
 
 
     def get_profile_data(self) -> Optional[ScanProfile]:
