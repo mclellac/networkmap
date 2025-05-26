@@ -22,6 +22,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     results_listbox: Gtk.ListBox = Gtk.Template.Child("results_listbox")
     toast_overlay: Adw.ToastOverlay = Gtk.Template.Child("toast_overlay")
     nmap_command_preview_row: Adw.EntryRow = Gtk.Template.Child("nmap_command_preview_row")
+    start_scan_button: Gtk.Button = Gtk.Template.Child("start_scan_button")
+    stealth_scan_switch: Adw.SwitchRow = Gtk.Template.Child("stealth_scan_switch")
 
     def __init__(self, **kwargs) -> None:
         """Initializes the NetworkMapWindow."""
@@ -55,6 +57,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         """Updates the Nmap command preview row based on current UI settings."""
         target_text = self.target_entry_row.get_text().strip()
         do_os_fingerprint = self.os_fingerprint_switch.get_active()
+        do_stealth_scan = self.stealth_scan_switch.get_active() # Get stealth scan state
         additional_args_str = self.arguments_entry_row.get_text()
         selected_script = self.selected_nse_script 
         default_args_from_settings = self.settings.get_string("default-nmap-arguments")
@@ -64,7 +67,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 do_os_fingerprint=do_os_fingerprint,
                 additional_args_str=additional_args_str,
                 nse_script=selected_script,
-                default_args_str=default_args_from_settings
+                default_args_str=default_args_from_settings,
+                stealth_scan=do_stealth_scan # Pass stealth_scan to build_scan_args
             )
         except NmapArgumentError as e:
             self.nmap_command_preview_row.set_text(f"Error in arguments: {e}")
@@ -163,9 +167,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _connect_signals(self) -> None:
         """Connects UI signals to their handlers."""
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
+        self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
+
         # Connect signals for command preview updates
         self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview) # Added
         self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) # Also updates preview
 
@@ -225,8 +232,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             elif state == "no_data":
                 self.status_page.set_property("description", "Scan Complete: No data received.")
 
-    def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
-        """Callback for when the scan is initiated from the target entry row."""
+    def _initiate_scan_procedure(self) -> None:
+        """Core logic to start an Nmap scan based on current UI settings."""
         target: str = self.target_entry_row.get_text().strip()
         if not target:
             self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
@@ -237,19 +244,29 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._update_ui_state("scanning")
         self.toast_overlay.add_toast(Adw.Toast.new(f"Scan started for {target}"))
 
+        # TODO: Update args to include stealth_scan_switch.get_active() in a later step
         scan_thread = threading.Thread(
             target=self._run_scan_worker,
             args=(
                 target,
                 self.os_fingerprint_switch.get_active(),
                 self.arguments_entry_row.get_text(),
+                self.stealth_scan_switch.get_active(), # Pass stealth_scan_switch state
             ),
         )
         scan_thread.daemon = True
         scan_thread.start()
 
+    def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
+        """Callback for when the scan is initiated from the target entry row (e.g., pressing Enter)."""
+        self._initiate_scan_procedure()
+
+    def _on_start_scan_button_clicked(self, button: Gtk.Button) -> None:
+        """Callback for when the 'Start Scan' button is clicked."""
+        self._initiate_scan_procedure()
+
     def _run_scan_worker(
-        self, target: str, do_os_fingerprint: bool, additional_args_str: str
+        self, target: str, do_os_fingerprint: bool, additional_args_str: str, do_stealth_scan: bool
     ) -> None:
         """
         Worker function to perform the Nmap scan.
@@ -269,6 +286,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 additional_args_str,
                 self.selected_nse_script,
                 default_args_str=default_args_from_settings,
+                stealth_scan=do_stealth_scan # Pass do_stealth_scan to scanner
             )
             if scan_message and not hosts_data:
                 error_type = "ScanMessage"

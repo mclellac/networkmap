@@ -42,6 +42,7 @@ class NmapScanner:
         additional_args_str: str,
         nse_script: Optional[str] = None,
         default_args_str: Optional[str] = None,
+        stealth_scan: bool = False, # Added stealth_scan parameter
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
         Performs an Nmap scan on the given target with specified options.
@@ -62,7 +63,7 @@ class NmapScanner:
         """
         try:
             scan_args_str = self.build_scan_args( # Updated call
-                do_os_fingerprint, additional_args_str, nse_script, default_args_str
+                do_os_fingerprint, additional_args_str, nse_script, default_args_str, stealth_scan=stealth_scan # Pass stealth_scan
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
@@ -144,6 +145,7 @@ class NmapScanner:
         additional_args_str: str,
         nse_script: Optional[str] = None,
         default_args_str: Optional[str] = None,
+        stealth_scan: bool = False, # Added stealth_scan parameter
     ) -> str:
         """
         Constructs the Nmap command-line arguments string.
@@ -195,6 +197,23 @@ class NmapScanner:
 
         if nse_script:
             final_args.append(f"--script={nse_script}")
+
+        if stealth_scan:
+            # Avoid adding -sS if other scan type flags are already present from additional_args_str
+            # For simplicity now, we'll check for some common conflicting TCP scan types.
+            # A more robust solution might involve more complex parsing of additional_args_str.
+            has_conflicting_scan_type = any(scan_flag in final_args for scan_flag in ["-sT", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX"])
+            if not has_conflicting_scan_type and "-sS" not in final_args:
+                final_args.append("-sS")
+            elif not has_conflicting_scan_type and "-sS" in final_args:
+                pass # Already there
+            elif has_conflicting_scan_type:
+                # Optionally, log a warning or let user arguments take precedence.
+                # For now, if user specified a scan type, don't override with -sS.
+                # Using GLib for printing to stderr is not conventional here, Python's print to sys.stderr is fine.
+                # For consistency with other error messages that might be logged or displayed in UI later:
+                import sys # Ensure sys is imported if not already
+                print(f"Warning: Stealth scan (-sS) conflicts with existing scan type arguments: {' '.join(final_args)}. User arguments will take precedence.", file=sys.stderr)
 
         return " ".join(final_args)
 
