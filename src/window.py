@@ -216,18 +216,18 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         Handles the selection change in the NSE script combo box.
         Updates `self.selected_nse_script` based on the new selection.
         """
-    selected_item = combo_row.get_selected_item() # This gets the Gtk.StringObject
+        selected_item = combo_row.get_selected_item() # This gets the Gtk.StringObject
 
-    if isinstance(selected_item, Gtk.StringObject):
-        selected_value = selected_item.get_string()
+        if isinstance(selected_item, Gtk.StringObject):
+            selected_value = selected_item.get_string()
             if selected_value == "None":
                 self.selected_nse_script = None
             else:
                 self.selected_nse_script = selected_value
         else:
-        # This case might occur if nothing is selected or model is empty
+            # This case might occur if nothing is selected or model is empty
             self.selected_nse_script = None
-    
+        
         self._update_nmap_command_preview() # Update preview when script changes
 
     def _on_timing_template_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
@@ -258,15 +258,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.target_entry_row.set_sensitive(False)
             self.arguments_entry_row.set_sensitive(False)
             self.os_fingerprint_switch.set_sensitive(False)
-            self.stealth_scan_switch.set_sensitive(False)
-            self.no_ping_switch.set_sensitive(False)
         else:
             self.spinner.set_visible(False)
             self.target_entry_row.set_sensitive(True)
             self.arguments_entry_row.set_sensitive(True)
             self.os_fingerprint_switch.set_sensitive(True)
-            self.stealth_scan_switch.set_sensitive(True)
-            self.no_ping_switch.set_sensitive(True)
 
             if state == "error":
                 self.status_page.set_property(
