@@ -61,7 +61,7 @@ class NmapScanner:
                 - An error message string if an error occurred, otherwise None.
         """
         try:
-            scan_args_str = self._build_scan_args(
+            scan_args_str = self.build_scan_args( # Updated call
                 do_os_fingerprint, additional_args_str, nse_script, default_args_str
             )
         except NmapArgumentError as e:
@@ -138,7 +138,7 @@ class NmapScanner:
         # Fallback, though all paths should return before this.
         return None, "Scan failed due to an unexpected internal error."
 
-    def _build_scan_args(
+    def build_scan_args( # Renamed method
         self,
         do_os_fingerprint: bool,
         additional_args_str: str,
