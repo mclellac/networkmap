@@ -29,5 +29,17 @@
       <summary>Default arguments for Nmap scans</summary>
       <description>These arguments are automatically prepended to every Nmap scan initiated through the application. Arguments specified in the main window's 'Additional Arguments' field can override or supplement these defaults.</description>
     </key>
+
+    <key name="scan-profiles" type="as">
+      <default>[]</default>
+      <summary>Saved scan profiles</summary>
+      <description>Stores user-defined scan profiles. Each profile is a JSON string containing settings like OS fingerprinting, stealth scan, no ping, port specification, NSE script, timing template, and additional arguments. These profiles allow users to quickly apply a set of common scan configurations.</description>
+    </key>
+
+    <key name="target-history" type="as">
+      <default>[]</default>
+      <summary>History of scanned targets</summary>
+      <description>Stores a list of recently scanned targets to provide autofill suggestions in the target entry field.</description>
+    </key>
 	</schema>
 </schemalist>
