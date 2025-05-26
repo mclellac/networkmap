@@ -1,6 +1,7 @@
 from gi.repository import Adw, Gtk, GObject
 from typing import Optional, Dict, List
 from .profile_manager import ScanProfile
+from .nse_script_selection_dialog import NseScriptSelectionDialog
 
 class ProfileEditorDialog(Adw.Dialog):
     __gsignals__ = {
@@ -48,6 +49,13 @@ class ProfileEditorDialog(Adw.Dialog):
 
         # NSE Script
         self.nse_script_row = Adw.EntryRow(title="NSE Script")
+        # Create the "Select Scripts..." button
+        self.select_nse_scripts_button = Gtk.Button(label="Select...")
+        self.select_nse_scripts_button.set_tooltip_text("Select NSE Scripts or enter manually")
+        # Add button as suffix to nse_script_row
+        self.nse_script_row.add_suffix(self.select_nse_scripts_button)
+        # Connect the button's "clicked" signal
+        self.select_nse_scripts_button.connect("clicked", self._on_select_nse_scripts_clicked)
         content_box.append(self.nse_script_row)
         
         self.timing_options: Dict[str, Optional[str]] = {
@@ -135,3 +143,14 @@ class ProfileEditorDialog(Adw.Dialog):
             timing_template=timing_template_val if timing_template_val else "", # Ensure empty string not None for consistency
             additional_args=self.additional_args_row.get_text()
         )
+
+    def _on_select_nse_scripts_clicked(self, button: Gtk.Button) -> None:
+        current_scripts = self.nse_script_row.get_text()
+        # Pass `self` as the parent_window for the dialog
+        script_dialog = NseScriptSelectionDialog(parent_window=self, current_scripts_str=current_scripts)
+        
+        script_dialog.connect("scripts-selected", self._on_nse_scripts_selected_from_dialog)
+        script_dialog.present() 
+
+    def _on_nse_scripts_selected_from_dialog(self, dialog_instance, selected_scripts_string: str) -> None:
+        self.nse_script_row.set_text(selected_scripts_string)
