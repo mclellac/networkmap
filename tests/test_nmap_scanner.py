@@ -542,6 +542,145 @@ class TestNmapScanner(unittest.TestCase):
         self.assertIn("-sP", called_args_str)  # The user-provided arg should still be there.
 
 
+    # --- Tests for pkexec logic in NmapScanner.scan() ---
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=False) # User is NOT root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_not_root_sS_uses_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run):
+        # Configure GSettings mock
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", # No defaults that might add -sS
+            "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        
+        # Configure subprocess.run mock to simulate a successful pkexec call
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<?xml version=\"1.0\"?><nmaprun></nmaprun>", stderr="")
+        # Mock analyse_nmap_xml_scan as it's called within the pkexec path
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+
+        # Call scan with stealth_scan=True, which should make build_scan_args add -sS
+        self.scanner.scan("localhost", do_os_fingerprint=False, additional_args_str="", stealth_scan=True)
+
+        mock_subprocess_run.assert_called_once()
+        pkexec_cmd_list = mock_subprocess_run.call_args[0][0]
+        self.assertEqual(pkexec_cmd_list[0], "pkexec")
+        self.assertIn("-sS", pkexec_cmd_list)
+        self.scanner.nm.scan.assert_not_called() # Direct nmap scan should not be called
+
+    @patch('src.nmap_scanner.nmap.PortScanner.scan') # Mock the direct nmap library call
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=True) # User IS root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_is_root_sS_no_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run, mock_direct_nmap_scan_method):
+        # self.scanner.nm.scan is the one to check for direct calls. Let's re-assign to the passed mock.
+        self.scanner.nm.scan = mock_direct_nmap_scan_method
+
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        self.scanner.scan("localhost", do_os_fingerprint=False, additional_args_str="", stealth_scan=True)
+
+        mock_subprocess_run.assert_not_called()
+        self.scanner.nm.scan.assert_called_once()
+        called_args_str = self.scanner.nm.scan.call_args.kwargs['arguments']
+        self.assertIn("-sS", called_args_str)
+
+    @patch('src.nmap_scanner.nmap.PortScanner.scan')
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=False) # User is NOT root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_not_root_no_sS_no_os_no_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run, mock_direct_nmap_scan_method):
+        self.scanner.nm.scan = mock_direct_nmap_scan_method
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        self.scanner.scan("localhost", do_os_fingerprint=False, additional_args_str="-T4", stealth_scan=False)
+
+        mock_subprocess_run.assert_not_called()
+        self.scanner.nm.scan.assert_called_once()
+        called_args_str = self.scanner.nm.scan.call_args.kwargs['arguments']
+        self.assertNotIn("-sS", called_args_str)
+        self.assertNotIn("-O", called_args_str)
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=False) # User is NOT root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_not_root_os_fingerprint_uses_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<?xml version=\"1.0\"?><nmaprun></nmaprun>", stderr="")
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="", stealth_scan=False)
+
+        mock_subprocess_run.assert_called_once()
+        pkexec_cmd_list = mock_subprocess_run.call_args[0][0]
+        self.assertEqual(pkexec_cmd_list[0], "pkexec")
+        self.assertIn("-O", pkexec_cmd_list)
+        self.scanner.nm.scan.assert_not_called()
+
+    @patch('src.nmap_scanner.nmap.PortScanner.scan')
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=True) # User IS root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_is_root_os_fingerprint_no_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run, mock_direct_nmap_scan_method):
+        self.scanner.nm.scan = mock_direct_nmap_scan_method
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="", stealth_scan=False)
+
+        mock_subprocess_run.assert_not_called()
+        self.scanner.nm.scan.assert_called_once()
+        called_args_str = self.scanner.nm.scan.call_args.kwargs['arguments']
+        self.assertIn("-O", called_args_str)
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_root', return_value=False) # User is NOT root
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_not_root_os_fingerprint_and_sS_uses_pkexec(self, mock_gio_settings_constructor, mock_is_root, mock_subprocess_run):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "", "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<?xml version=\"1.0\"?><nmaprun></nmaprun>", stderr="")
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="", stealth_scan=True)
+
+        mock_subprocess_run.assert_called_once()
+        pkexec_cmd_list = mock_subprocess_run.call_args[0][0]
+        self.assertEqual(pkexec_cmd_list[0], "pkexec")
+        self.assertIn("-O", pkexec_cmd_list)
+        self.assertIn("-sS", pkexec_cmd_list)
+        self.scanner.nm.scan.assert_not_called()
+
+    # --- End of pkexec logic Tests ---
+
+
     # --- End of New GSettings Tests ---
 
 

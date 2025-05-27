@@ -89,11 +89,28 @@ class NmapScanner:
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
 
-        needs_pkexec = do_os_fingerprint and not is_root()
+        # Determine if pkexec is needed
+        current_scan_args_list = [] # Initialize with a default type
+        try:
+            # This list will be used for both pkexec check and the pkexec command itself.
+            current_scan_args_list = shlex.split(scan_args_str)
+        except ValueError as e:
+            # This should ideally not happen if build_scan_args and shlex.split there work correctly.
+            # However, if scan_args_str is somehow malformed at this stage.
+            return None, f"Internal error splitting scan arguments: {e}"
+
+        requires_root_argument_present = False
+        if "-sS" in current_scan_args_list: # Check in the split list
+            requires_root_argument_present = True
+        # Future: elif "-some_other_root_arg" in current_scan_args_list:
+        # requires_root_argument_present = True
+        
+        needs_pkexec = not is_root() and (do_os_fingerprint or requires_root_argument_present)
 
         if needs_pkexec:
             try:
-                current_scan_args_list = shlex.split(scan_args_str)
+                # current_scan_args_list is already appropriately populated from shlex.split(scan_args_str) above.
+                # No need to redefine or re-split it here.
                 
                 # Add '-oX -' for XML output to stdout if no other XML output option is present.
                 # This ensures we get XML for python-nmap to parse.

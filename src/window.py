@@ -58,6 +58,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview) # Added
+        self.settings.connect("changed::dns-servers", self._update_nmap_command_preview) # Added for DNS servers
         
         self.profile_manager = ProfileManager()
         self.settings.connect(f"changed::{PROFILES_SCHEMA_KEY}", lambda s, k: self._populate_profile_combo())
@@ -324,13 +325,27 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.spinner.set_visible(True)
             self.status_page.set_property("description", "Scanning...")
             self.target_entry_row.set_sensitive(False)
-            self.arguments_entry_row.set_sensitive(False)
             self.os_fingerprint_switch.set_sensitive(False)
+            self.arguments_entry_row.set_sensitive(False)
+            self.stealth_scan_switch.set_sensitive(False)
+            self.port_spec_entry_row.set_sensitive(False)
+            self.timing_template_combo_row.set_sensitive(False)
+            self.no_ping_switch.set_sensitive(False)
+            self.nse_script_combo_row.set_sensitive(False)
+            self.profile_combo_row.set_sensitive(False)
+            self.start_scan_button.set_sensitive(False)
         else:
             self.spinner.set_visible(False)
             self.target_entry_row.set_sensitive(True)
-            self.arguments_entry_row.set_sensitive(True)
             self.os_fingerprint_switch.set_sensitive(True)
+            self.arguments_entry_row.set_sensitive(True)
+            self.stealth_scan_switch.set_sensitive(True)
+            self.port_spec_entry_row.set_sensitive(True)
+            self.timing_template_combo_row.set_sensitive(True)
+            self.no_ping_switch.set_sensitive(True)
+            self.nse_script_combo_row.set_sensitive(True)
+            self.profile_combo_row.set_sensitive(True)
+            self.start_scan_button.set_sensitive(True)
 
             if state == "error":
                 self.status_page.set_property(
@@ -574,15 +589,18 @@ class NetworkMapWindow(Adw.ApplicationWindow):
              self.current_scan_results = None
 
         # Correctly hide spinner and restore sensitivity
-        if self.spinner.get_visible():
-            self.spinner.set_visible(False)
-        if (
-            not self.target_entry_row.get_sensitive()
-            and self.status_page.get_property("description") != "Scanning..."
-        ):
-            self.target_entry_row.set_sensitive(True)
-            self.arguments_entry_row.set_sensitive(True)
-            self.os_fingerprint_switch.set_sensitive(True)
+        # This logic is now fully handled by the _update_ui_state method's else block.
+        # if self.spinner.get_visible(): # This is handled by _update_ui_state
+        #     self.spinner.set_visible(False)
+        # The following block is now redundant as _update_ui_state handles all widgets.
+        # if (
+        #     not self.target_entry_row.get_sensitive()
+        #     and self.status_page.get_property("description") != "Scanning..."
+        # ):
+        #     self.target_entry_row.set_sensitive(True)
+        #     self.arguments_entry_row.set_sensitive(True)
+        #     self.os_fingerprint_switch.set_sensitive(True)
+        pass # No specific action needed here anymore regarding widget sensitivity
 
     def _clear_results_ui(self) -> None:
         """Clears the results listbox and the text view display."""
