@@ -25,54 +25,77 @@ def discover_nse_scripts() -> List[str]:
         A sorted list of script names (without .nse extension).
         Returns an empty list if the directory is not accessible or an error occurs.
     """
-    categorized_scripts: List[Tuple[str, str]] = []
-    default_path = "/usr/share/nmap/scripts/" # Standard Nmap script directory
+    # Standard Nmap script directory locations for Linux/macOS.
+    # Order matters: check user-specific paths first, then system paths.
+    # Flatpak sandboxed paths are not directly accessible; Nmap inside Flatpak would use its own paths.
+    potential_paths = [
+        os.path.expanduser("~/.nmap/scripts/"), # User's local Nmap scripts
+        "/usr/local/share/nmap/scripts/",      # Common for locally compiled Nmap on macOS/Linux
+        "/usr/share/nmap/scripts/",            # Standard system path for Nmap on Linux
+    ]
+    
+    # For Flatpak, Nmap scripts are bundled within the Flatpak environment.
+    # Accessing host system Nmap scripts from a sandboxed Flatpak app is generally not done.
+    # If this code runs INSIDE a Flatpak that bundles Nmap, Nmap itself would find its scripts.
+    # This discovery function is more for a system-installed app or if Nmap is on the host.
+    # If running in Flatpak and needing to list scripts from a bundled Nmap,
+    # the path would be relative to the Flatpak's file system structure, e.g., /app/share/nmap/scripts/.
+    # This requires knowing how Nmap is bundled in the specific Flatpak.
+    # For now, this function assumes access to system Nmap script paths.
+    
+    scripts_directory: Optional[str] = None
+    for path in potential_paths:
+        if os.path.isdir(path) and os.access(path, os.R_OK):
+            scripts_directory = path
+            break # Use the first valid path found
 
+    if not scripts_directory:
+        logging.warning("No accessible Nmap NSE script directory found in standard locations.")
+        # If running in Flatpak, this might be expected if Nmap isn't bundled in a way this function can find.
+        # The application might rely on Nmap finding its own scripts internally.
+        # Consider if an empty list is appropriate or if this indicates a setup issue outside Flatpak.
+        return []
+
+    categorized_scripts: List[Tuple[str, str]] = []
     # Define common prefixes for categorization.
     # Using "zzz_" for the default category ensures it sorts last for display.
-    DEFAULT_CATEGORY = "zzz_other"
-    SCRIPT_PREFIXES = [
+    DEFAULT_CATEGORY = "zzz_other" # For scripts that don't match common prefixes
+    SCRIPT_PREFIXES = sorted([ # Sorted for consistent category checking order, if it matters
         'http', 'smb', 'dns', 'ssh', 'smtp', 'ftp', 'imap', 'pop3', 
         'mysql', 'oracle', 'ms-sql', 'rdp', 'vnc', 'ssl', 'tls', 'snmp', 'whois',
         'broadcast', 'discovery', 'dos', 'exploit', 'external', 'fuzzer', 
-        'intrusive', 'malware', 'safe', 'version', 'vuln' 
-        # 'auth' can be too generic; specific auth types might be better if needed.
-    ]
-
-    if not os.path.isdir(default_path) or not os.access(default_path, os.R_OK):
-        logging.warning(f"NSE script directory {default_path} not found or not readable.")
-        return [] 
+        'intrusive', 'malware', 'safe', 'version', 'vuln', 'auth' # 'auth' added back
+    ], reverse=True) # Process longer prefixes first if there's overlap (e.g. 'ms-sql' vs 'sql') - not strictly necessary here
 
     try:
-        for item_name in os.listdir(default_path):
-            if item_name.endswith(".nse"):
-                full_item_path = os.path.join(default_path, item_name)
-                if os.path.isfile(full_item_path):
-                    script_name_no_ext = item_name[:-4]
-                    
-                    assigned_category = DEFAULT_CATEGORY
-                    for prefix in SCRIPT_PREFIXES:
-                        # Check for "prefix-" or "prefix_" to be more specific than just startswith(prefix),
-                        # e.g., to avoid 'http' matching 'httpfoo' if 'httpfoo' isn't a category,
-                        # or if a script is named 'sshnoop.nse', it won't be miscategorized as 'ssh'.
-                        if script_name_no_ext.startswith(prefix + '-') or \
-                           script_name_no_ext.startswith(prefix + '_'):
-                            assigned_category = prefix
-                            break 
-                        # Scripts named just the prefix (e.g., "banner.nse") are implicitly handled
-                        # as they won't start with "prefix-".
-                    
-                    categorized_scripts.append((assigned_category, script_name_no_ext))
+        for item_name in os.listdir(scripts_directory):
+            if item_name.endswith(".nse") and os.path.isfile(os.path.join(scripts_directory, item_name)):
+                script_name_no_ext = item_name[:-4] # Remove .nse
+                
+                assigned_category = DEFAULT_CATEGORY
+                # Attempt to categorize based on prefixes
+                for prefix in SCRIPT_PREFIXES:
+                    if script_name_no_ext.startswith(prefix + '-') or \
+                       script_name_no_ext.startswith(prefix + '_') or \
+                       script_name_no_ext == prefix: # Handles exact matches like "smb.nse"
+                        assigned_category = prefix
+                        break 
+                
+                categorized_scripts.append((assigned_category, script_name_no_ext))
 
-        # Sorts by category (prefix alphabetical), then by script name within each category.
+        # Sort by category (prefix alphabetical), then by script name within each category.
         categorized_scripts.sort() 
         
+        # Extract just the script names, now sorted
         final_script_names = [name for category, name in categorized_scripts]
 
     except OSError as e:
-        logging.warning(f"Error reading NSE script directory {default_path}: {e}")
-        return [] 
+        logging.error(f"Error reading NSE script directory {scripts_directory}: {e}") # Changed to error
+        return [] # Return empty list on error
 
+    if not final_script_names:
+        logging.info(f"No NSE scripts found in {scripts_directory}.") # Info if dir was found but no scripts
+        
     return final_script_names
 
 

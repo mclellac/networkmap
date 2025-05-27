@@ -37,13 +37,25 @@ class NmapScanner:
         Initializes the NmapScanner with an nmap.PortScanner instance and Nmap path.
         """
         self.nm = nmap.PortScanner()
-        self.nmap_executable_path = shutil.which('nmap')
-        if not self.nmap_executable_path:
-            default_path = '/usr/local/bin/nmap' if is_macos() else '/usr/bin/nmap'
-            self.nmap_executable_path = default_path
-            print(f"Warning: Nmap not found in PATH, defaulting to {self.nmap_executable_path}. "
-                  "Ensure Nmap is installed and in your system's PATH or at this default location.",
-                  file=sys.stderr)
+        self.nmap_executable_path = self._find_nmap_executable()
+
+    def _find_nmap_executable(self) -> str:
+        """Finds the Nmap executable path or defaults to a common location."""
+        nmap_path = shutil.which('nmap')
+        if nmap_path:
+            return nmap_path
+        
+        # Fallback to default paths if not in PATH
+        # This is particularly relevant for non-Flatpak scenarios or when PATH might be minimal.
+        default_path = '/usr/local/bin/nmap' if is_macos() else '/usr/bin/nmap'
+        if not shutil.which(default_path): # Check if default path is actually an executable
+             print(f"Warning: Nmap not found in PATH or at the default location ({default_path}). "
+                  "Please ensure Nmap is installed and accessible.", file=sys.stderr)
+        else:
+            print(f"Warning: Nmap not found in PATH. Using default location: {default_path}. "
+                  "Consider adding Nmap's directory to your system's PATH.", file=sys.stderr)
+        return default_path
+
 
     def _prepare_scan_args_list(
         self, 
@@ -89,82 +101,113 @@ class NmapScanner:
         """
         Determines if privilege escalation is needed for the scan.
         """
-        ROOT_REQUIRING_ARGS = [
-            "-sS", "-sU", "-sN", "-sF", "-sX", "-sA", "-sW", "-sM", 
-            "-sI", "-sY", "-sZ",                                   
-            "-sO",                                                 
-            "-O",                                                  
-            "-D",                                                  
-            "-S",                                                  
-            "--send-eth", "--send-ip",                             
-            "--privileged"                                         
-        ]
+        # Nmap arguments that typically require root privileges.
+        # Source: Nmap documentation and common usage.
+        # Note: This list might not be exhaustive for all Nmap versions/features.
+        ROOT_REQUIRING_ARGS = {
+            "-sS",  # TCP SYN scan
+            "-sU",  # UDP scan
+            "-sN",  # TCP Null scan
+            "-sF",  # TCP FIN scan
+            "-sX",  # TCP Xmas scan
+            "-sA",  # TCP ACK scan
+            "-sW",  # TCP Window scan
+            "-sM",  # TCP Maimon scan
+            "-sI",  # Idle scan
+            "-sY",  # SCTP INIT scan
+            "-sZ",  # SCTP COOKIE-ECHO scan
+            "-sO",  # IP protocol scan
+            "-O",   # OS detection
+            # "-D",   # Decoy scan (can sometimes work without root but often needs raw sockets)
+            # "-S",   # Spoof source address (definitely needs root)
+            "--send-eth", # Send raw Ethernet packets
+            "--send-ip",  # Send raw IP packets
+            "--privileged", # Explicitly request privileged operations
+            # Consider also NSE scripts that might require root, though this is harder to check generically.
+        }
         
-        requires_root_argument_present = False
+        # If '--unprivileged' is explicitly passed, Nmap attempts to run without root privileges,
+        # even if some options would normally require them (it will fail if those options truly need root).
         if "--unprivileged" in current_scan_args_list:
-            requires_root_argument_present = False 
-        else:
-            for arg in ROOT_REQUIRING_ARGS:
-                if arg in current_scan_args_list:
-                    requires_root_argument_present = True
-                    break
+            return False 
         
-        return not is_root() and (do_os_fingerprint or requires_root_argument_present)
+        # Check if any of the specified arguments require root.
+        # This uses set intersection for efficient checking.
+        if not ROOT_REQUIRING_ARGS.isdisjoint(current_scan_args_list):
+            return not is_root() # Needs escalation if not already root
+
+        # OS fingerprinting (-O) itself requires root.
+        if do_os_fingerprint:
+            return not is_root()
+        
+        return False # No escalation needed by default
 
     def _get_nmap_escalation_command_path(self) -> str:
         """
         Determines the Nmap command/path to use for privilege escalation.
+        Uses the path found during initialization.
         """
-        # Default to 'nmap', assuming it's in PATH for the escalation environment (e.g., host for Flatpak).
-        nmap_cmd = 'nmap' 
-        if is_macos():
-            # On macOS, Nmap is often in /usr/local/bin. shutil.which should find it if in PATH.
-            nmap_cmd = shutil.which('nmap') or '/usr/local/bin/nmap'
-        elif is_linux() and not is_flatpak():
-            # For non-Flatpak Linux, ensure pkexec can find nmap.
-            # Using a resolved path is safer if nmap isn't in root's secure_path.
-            nmap_cmd = shutil.which('nmap') or '/usr/bin/nmap'
-        # For Flatpak, 'nmap' (the default) is appropriate as flatpak-spawn --host pkexec will use the host's PATH.
-        return nmap_cmd
+        # self.nmap_executable_path is determined in __init__
+        return self.nmap_executable_path
+
 
     def _execute_with_privileges(
-        self, nmap_base_cmd_list: List[str], scan_args_list: List[str], target: str
-    ) -> subprocess.CompletedProcess:
+        self, nmap_base_cmd: str, scan_args_list: List[str], target: str
+    ) -> subprocess.CompletedProcess[str]: # Added type hint for CompletedProcess
         """
         Executes the Nmap command with privileges using a platform-specific method.
         `scan_args_list` should already include -oX - if XML output is desired.
-        `nmap_base_cmd_list` is typically `['/path/to/nmap']` or `['nmap']`.
+        `nmap_base_cmd` is the path to the nmap executable.
         """
-        final_nmap_command_parts = nmap_base_cmd_list + scan_args_list + [target]
+        # Ensure nmap_base_cmd is a single command/path, not a list.
+        if not isinstance(nmap_base_cmd, str):
+            # This case should ideally not be reached if _get_nmap_escalation_command_path is used correctly.
+            raise ValueError("nmap_base_cmd must be a string path to the Nmap executable.")
+
+        final_nmap_command_parts = [nmap_base_cmd] + scan_args_list + [target]
         escalation_cmd: List[str] = []
 
-        if is_macos():
-            nmap_command_str = shlex.join(final_nmap_command_parts)
-            escaped_nmap_cmd_str = nmap_command_str.replace('"', '\\"') 
-            applescript_cmd = f'do shell script "{escaped_nmap_cmd_str}" with administrator privileges'
-            escalation_cmd = ["osascript", "-e", applescript_cmd]
-        elif is_flatpak():
-            escalation_cmd = ["flatpak-spawn", "--host", "pkexec"] + final_nmap_command_parts
-        elif is_linux():
-            escalation_cmd = ["pkexec"] + final_nmap_command_parts
-        else:
-            return subprocess.CompletedProcess(
-                args=final_nmap_command_parts, returncode=1, stdout="",
-                stderr=f"Privilege escalation not supported on this platform: {sys.platform}"
-            )
-
         try:
-            return subprocess.run(escalation_cmd, capture_output=True, text=True, check=False)
+            if is_macos():
+                # For macOS, osascript is used to request administrator privileges.
+                # shlex.join is important here to correctly quote arguments for the shell script.
+                nmap_command_str = shlex.join(final_nmap_command_parts)
+                # Further escape for AppleScript string literal if necessary, though shlex.join often handles this.
+                # However, double quotes within the command itself need to be escaped for AppleScript.
+                escaped_nmap_cmd_str = nmap_command_str.replace('"', '\\"')
+                applescript_cmd = f'do shell script "{escaped_nmap_cmd_str}" with administrator privileges'
+                escalation_cmd = ["osascript", "-e", applescript_cmd]
+            elif is_flatpak():
+                # For Flatpak, flatpak-spawn --host is used with pkexec.
+                # The Nmap command and its arguments are passed directly.
+                escalation_cmd = ["flatpak-spawn", "--host", "pkexec"] + final_nmap_command_parts
+            elif is_linux(): # Covers non-Flatpak Linux
+                # For general Linux, pkexec is used.
+                escalation_cmd = ["pkexec"] + final_nmap_command_parts
+            else:
+                # Platform not supported for privilege escalation.
+                # Return a CompletedProcess indicating failure.
+                unsupported_msg = f"Privilege escalation not supported on this platform: {sys.platform}"
+                return subprocess.CompletedProcess(
+                    args=final_nmap_command_parts, returncode=1, stdout="", stderr=unsupported_msg
+                )
+
+            # Execute the escalation command.
+            return subprocess.run(
+                escalation_cmd, capture_output=True, text=True, check=False, timeout=300 # Added timeout
+            )
         except FileNotFoundError as e:
-            return subprocess.CompletedProcess(
-                args=escalation_cmd, returncode=127, stdout="",
-                stderr=f"Escalation command '{escalation_cmd[0]}' not found. Is it installed and in PATH? Original error: {e}"
-            )
-        except Exception as e: 
-            return subprocess.CompletedProcess(
-                args=escalation_cmd, returncode=1, stdout="",
-                stderr=f"An unexpected error occurred during privileged execution ({type(e).__name__}): {e}"
-            )
+            # This occurs if 'osascript', 'flatpak-spawn', or 'pkexec' is not found.
+            error_msg = f"Escalation command '{escalation_cmd[0] if escalation_cmd else 'N/A'}' not found. Is it installed? Original error: {e}"
+            return subprocess.CompletedProcess(args=escalation_cmd, returncode=127, stdout="", stderr=error_msg)
+        except subprocess.TimeoutExpired as e:
+            error_msg = f"Privileged scan timed out after {e.timeout} seconds. Command: {' '.join(e.cmd or [])}"
+            return subprocess.CompletedProcess(args=e.cmd, returncode=-1, stdout=e.stdout or "", stderr=e.stderr or error_msg)
+        except Exception as e:
+            # Catch any other unexpected errors during subprocess execution.
+            error_msg = f"An unexpected error occurred during privileged execution ({type(e).__name__}): {e}"
+            return subprocess.CompletedProcess(args=escalation_cmd, returncode=1, stdout="", stderr=error_msg)
+
 
     def scan(
         self,
@@ -190,39 +233,90 @@ class NmapScanner:
 
         if needs_privilege_escalation:
             xml_output_options = ["-oX", "-oA"]
-            if not any(opt in current_scan_args_list for opt in xml_output_options):
-                current_scan_args_list.extend(["-oX", "-"])
+            # Ensure XML output for parsing if not already specified by user for other output types like -oA.
+            # We need XML (`-oX -`) for python-nmap's parsing method.
+            # Check if -oX or -oA (which includes XML) is already present.
+            # If user specified e.g. -oG -, we still need -oX - for our parsing.
+            # A more robust check would parse existing args to see if XML output to stdout is already configured.
+            # For now, add `-oX -` if not obviously present.
+            # This assumes that if the user wants a file, they'd use -oX <file> or -oA <file>,
+            # and if they use -oX - or -oA -, they intend for stdout.
+            # It's complex because user args can be arbitrary.
+            # A simple check: if "-oX" or "-oA" is present as a standalone arg, assume user handles output.
+            # Otherwise, add "-oX -" for our processing.
+            # This might lead to duplicate nmap processes if user wants e.g. only Grepable output to stdout.
+            # A better approach: if user specified *any* -o* that isn't -oX - or -oA -,
+            # it's tricky. Let's assume for now: if we escalate, we control XML output for parsing.
+            # If the user added their own -oX <file> or -oA <file>, this will run Nmap twice
+            # if they *also* wanted stdout for some reason. This is a compromise.
+            # A simpler rule: if we escalate, we add `-oX -` unless `-oA` (to any target) or `-oX -` is already there.
+            has_xml_stdout = any(arg == "-oX" and current_scan_args_list[i+1] == "-" if i+1 < len(current_scan_args_list) else False 
+                                 for i, arg in enumerate(current_scan_args_list))
+            has_oA_anywhere = "-oA" in current_scan_args_list
             
-            nmap_cmd_for_escalation = self._get_nmap_escalation_command_path()
+            if not has_xml_stdout and not has_oA_anywhere:
+                 # Avoid adding if -oX <file> is present, as that means user wants file output.
+                 # This is hard to perfectly get right without full arg parsing.
+                 # For now, let's be cautious: if "-oX" is there but not followed by "-", don't add our own.
+                is_oX_to_file = False
+                try:
+                    idx_oX = current_scan_args_list.index("-oX")
+                    if idx_oX + 1 < len(current_scan_args_list) and current_scan_args_list[idx_oX+1] != "-":
+                        is_oX_to_file = True
+                except ValueError:
+                    pass # -oX not in list
+
+                if not is_oX_to_file:
+                    current_scan_args_list.extend(["-oX", "-"]) # Request XML output to stdout for parsing
+            
+            nmap_cmd_path = self._get_nmap_escalation_command_path() # This is now just self.nmap_executable_path
 
             completed_process = self._execute_with_privileges(
-                [nmap_cmd_for_escalation], current_scan_args_list, target
+                nmap_cmd_path, current_scan_args_list, target
             )
             
-            if completed_process.returncode == 0:
-                self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout or "")
-                return self._parse_scan_results(do_os_fingerprint)
-            else:
+            if completed_process.returncode == 0 and completed_process.stdout:
+                try:
+                    # Analyse the XML output from stdout
+                    self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout)
+                    return self._parse_scan_results(do_os_fingerprint)
+                except nmap.PortScannerError as e: # Catch parsing errors specifically
+                    return None, f"Failed to parse Nmap XML output: {getattr(e, 'value', str(e))}"
+                except Exception as e: # Catch other unexpected errors during parsing
+                    return None, f"An unexpected error occurred parsing Nmap output: {e}"
+
+            else: # Privileged scan failed
                 error_message = f"Privileged scan execution error (Code {completed_process.returncode}): "
+                # Prefer stderr if available, else stdout, else a generic message.
                 if completed_process.stderr:
                     error_message += completed_process.stderr.strip()
-                elif completed_process.stdout: 
+                elif completed_process.stdout: # Sometimes errors (like nmap not found by pkexec) go to stdout
                     error_message += completed_process.stdout.strip()
-                else: 
-                    error_message += "Unknown error during privileged scan execution."
+                else:
+                    error_message += "Unknown error during privileged scan execution. Nmap command might not be found by the escalation tool (e.g., pkexec)."
                 return None, error_message
-        else:
+        else: # No privilege escalation needed, run directly using python-nmap
             try:
-                # For direct scans, python-nmap uses its own logic to find nmap,
-                # or one can configure self.nm.nmap_search_path if needed.
-                # self.nmap_executable_path (from __init__) could be used here if necessary.
-                self.nm.scan(hosts=target, arguments=scan_args_str_for_direct_scan)
+                # python-nmap uses its own logic to find nmap.
+                # If self.nmap_executable_path is reliable, we could potentially guide it,
+                # but python-nmap's nmap_search_path is a list of directories, not a direct executable path.
+                # For now, rely on python-nmap's default search or system PATH.
+                # Add -oX - to arguments if not already present, to ensure we get XML for parsing.
+                # Similar logic as above, but for direct scan.
+                # However, python-nmap's scan() method handles -oX - implicitly for parsing.
+                # So, scan_args_str_for_direct_scan should be fine as is.
+                self.nm.scan(hosts=target, arguments=scan_args_str_for_direct_scan, sudo=False) # Explicitly sudo=False
                 return self._parse_scan_results(do_os_fingerprint)
             except nmap.PortScannerError as e:
+                # Extract a cleaner error message from PortScannerError if possible.
                 nmap_error_output = getattr(e, 'value', str(e)).strip()
-                if not nmap_error_output: nmap_error_output = str(e)
+                # Sometimes the error is just "nmap program was not found in path", make it more user-friendly.
+                if "program was not found in path" in nmap_error_output:
+                    nmap_error_output = f"Nmap executable not found. Please ensure Nmap is installed and in your system's PATH. (Original error: {nmap_error_output})"
+                elif not nmap_error_output: # Ensure there's always some message.
+                    nmap_error_output = str(e)
                 return None, f"Nmap execution error: {nmap_error_output}"
-            except Exception as e: 
+            except Exception as e: # Catch any other unexpected errors
                 return None, f"An unexpected error occurred during direct scan ({type(e).__name__}): {e}"
         
     def build_scan_args(
@@ -237,74 +331,108 @@ class NmapScanner:
         no_ping: bool = False                    
     ) -> str:
         """
-        Constructs the Nmap command-line arguments string by combining various sources:
+        Constructs the Nmap command-line arguments list by combining various sources:
         GSettings defaults, user-provided additional arguments, and UI-selected options.
+        Returns a string representation suitable for `nmap.PortScanner().scan()`.
         """
         if not isinstance(additional_args_str, str):
             raise NmapArgumentError("Additional arguments must be a string.")
 
-        base_args: List[str] = []
-        if default_args_str: 
+        # Use a set for args to automatically handle duplicates from different sources,
+        # then convert to list for order-dependent args or specific placements.
+        # However, Nmap args order can matter (e.g., -p before target).
+        # A list-based approach with careful checks for existing args is safer.
+        
+        final_args_list: List[str] = []
+
+        # 1. Add GSettings default arguments first
+        if default_args_str:
             try:
-                base_args.extend(shlex.split(default_args_str))
+                final_args_list.extend(shlex.split(default_args_str))
             except ValueError as e:
                 raise NmapArgumentError(f"Error parsing default arguments from GSettings: {e}")
 
-        user_args: List[str] = []
-        if additional_args_str: 
+        # 2. Add user-provided additional arguments (from UI text entry)
+        # These can override or supplement GSettings defaults.
+        if additional_args_str:
             try:
-                user_args.extend(shlex.split(additional_args_str))
+                # Split user args and add them. If an arg is already there, this might duplicate.
+                # Nmap usually handles duplicates okay (last one wins or they combine if applicable).
+                # More sophisticated merging could be done here if needed.
+                final_args_list.extend(shlex.split(additional_args_str))
             except ValueError as e:
                 raise NmapArgumentError(f"Error parsing additional arguments from UI: {e}")
-
-        final_args: List[str] = base_args + user_args
-
-        if do_os_fingerprint and "-O" not in final_args:
-            final_args.append("-O")
-
-        script_arg_already_present = any(
-            arg == f"--script={nse_script}" or arg.startswith("--script=") or arg == "--script" 
-            for arg in final_args
-        )
-        if nse_script and not script_arg_already_present:
-            final_args.append(f"--script={nse_script}")
-
-        if stealth_scan:
-            has_conflicting_scan_type = any(scan_flag in final_args for scan_flag in 
-                                            ["-sT", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX"])
-            if not has_conflicting_scan_type and "-sS" not in final_args:
-                final_args.append("-sS")
-            elif has_conflicting_scan_type and "-sS" not in final_args: 
-                 print(f"Warning: Stealth scan (-sS) conflicts with existing scan type arguments: {' '.join(final_args)}. "
-                       "User arguments will take precedence.", file=sys.stderr)
-
-        if no_ping and "-Pn" not in final_args:
-            final_args.append("-Pn")
-
-        if port_spec and port_spec.strip():
-            port_arg_present = any(arg == "-p" or (arg.startswith("-p") and not arg[2:].isdigit()) for arg in final_args)
-            if not port_arg_present: 
-                final_args.extend(["-p", port_spec.strip()])
         
-        if timing_template and timing_template.strip():
-            timing_arg_present = any(arg.startswith("-T") and len(arg) == 3 and arg[2].isdigit() for arg in final_args)
-            if not timing_arg_present:
-                final_args.append(timing_template.strip())
+        # 3. Add UI-selected options if not already specified by the above
+        #    These are conditional additions based on UI toggles/selections.
+
+        # OS Fingerprint (-O)
+        if do_os_fingerprint and not self._is_arg_present(final_args_list, ["-O"]):
+            final_args_list.append("-O")
+
+        # NSE Script (--script)
+        if nse_script and not self._is_arg_present(final_args_list, ["--script"], True):
+            final_args_list.extend(["--script", nse_script])
+
+        # Stealth Scan (-sS)
+        # Add -sS only if no other scan type (e.g., -sT, -sU, -sA) is already specified.
+        SCAN_TYPE_ARGS = ["-sS", "-sT", "-sU", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX", "-sY", "-sZ", "-sO", "-PR"]
+        if stealth_scan and not self._is_arg_present(final_args_list, SCAN_TYPE_ARGS):
+            final_args_list.append("-sS")
+        elif stealth_scan and self._is_arg_present(final_args_list, SCAN_TYPE_ARGS) and not self._is_arg_present(final_args_list, ["-sS"]):
+             print(f"Warning: Stealth scan (-sS) selected, but conflicting scan type arguments are already present: "
+                   f"{' '.join(final_args_list)}. User/default arguments will take precedence.", file=sys.stderr)
+
+        # No Ping (-Pn)
+        if no_ping and not self._is_arg_present(final_args_list, ["-Pn"]):
+            final_args_list.append("-Pn")
+
+        # Port Specification (-p)
+        if port_spec and port_spec.strip() and not self._is_arg_present(final_args_list, ["-p"], True):
+            final_args_list.extend(["-p", port_spec.strip()])
+        
+        # Timing Template (-T<0-5>)
+        if timing_template and timing_template.strip() and not self._is_arg_present(final_args_list, ["-T0","-T1","-T2","-T3","-T4","-T5"], False):
+             # Ensure it's a valid -T option format before adding
+            if timing_template in {"-T0", "-T1", "-T2", "-T3", "-T4", "-T5"}:
+                final_args_list.append(timing_template.strip())
+            else:
+                print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
             
+        # DNS Servers (--dns-servers) from GSettings (applied last as a global setting)
         try:
             gsettings_dns = Gio.Settings.new("com.github.mclellac.NetworkMap") 
             dns_servers_str = gsettings_dns.get_string("dns-servers")
             if dns_servers_str:
                 dns_servers = [server.strip() for server in dns_servers_str.split(',') if server.strip()]
-                if dns_servers and not any(arg.startswith("--dns-servers") for arg in final_args):
-                    final_args.append(f"--dns-servers={','.join(dns_servers)}")
-                elif any(arg.startswith("--dns-servers") for arg in final_args) and dns_servers:
-                     print("Warning: --dns-servers argument already provided by user or GSettings defaults. "
+                if dns_servers and not self._is_arg_present(final_args_list, ["--dns-servers"], True):
+                    final_args_list.extend(["--dns-servers", ','.join(dns_servers)])
+                elif dns_servers and self._is_arg_present(final_args_list, ["--dns-servers"], True):
+                     # This means user/default_args_str already provided it.
+                     print("Info: --dns-servers argument already provided by user or default arguments. "
                            "GSettings value for DNS will not override.", file=sys.stderr)
-        except Exception as e:
-            print(f"Warning: Could not retrieve DNS servers from GSettings for build_scan_args: {e}", file=sys.stderr)
+        except GLib.Error as e: # Catch GSettings specific errors
+            print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
+        except Exception as e: # Catch other unexpected errors
+            print(f"Warning: An unexpected error occurred while retrieving DNS servers from GSettings: {e}", file=sys.stderr)
 
-        return " ".join(final_args)
+        # Use shlex.join for proper quoting of arguments, especially those with spaces (like some NSE script args)
+        return shlex.join(final_args_list)
+
+    def _is_arg_present(self, args_list: List[str], check_args: List[str], is_prefix_check: bool = False) -> bool:
+        """
+        Helper to check if any of `check_args` are present in `args_list`.
+        If `is_prefix_check` is True, checks if any arg in `args_list` starts with an arg in `check_args`.
+        Example: `check_args = ["--script"]`, `args_list = ["--script=default"]` -> True with prefix check.
+        """
+        for arg_to_check in check_args:
+            if is_prefix_check:
+                if any(existing_arg.startswith(arg_to_check) for existing_arg in args_list):
+                    return True
+            else:
+                if arg_to_check in args_list:
+                    return True
+        return False
 
     def _parse_scan_results(
         self, do_os_fingerprint: bool

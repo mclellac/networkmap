@@ -9,6 +9,12 @@ Network Map is a simple GTK application that uses `nmap` to scan your network an
 *   Option to add custom nmap arguments.
 *   Displays a list of found hosts.
 *   Shows detailed nmap output for the selected host.
+*   **Scan Profiles:** Save and manage frequently used scan configurations.
+    *   Create, edit, and delete scan profiles.
+    *   Import and export profiles in JSON format, allowing you to share configurations.
+*   **Customizable Appearance:** Choose between light, dark, or system theme, and select a custom font for scan results.
+*   **Configurable DNS Servers:** Specify custom DNS servers for Nmap scans.
+*   **Default Nmap Arguments:** Set default arguments that apply to all scans.
 
 ## Usage
 
@@ -16,7 +22,8 @@ Network Map is a simple GTK application that uses `nmap` to scan your network an
 2.  **Set Options (Optional):**
     *   Toggle the "OS Fingerprinting" switch if you want to attempt OS detection (often requires root/administrator privileges).
     *   Enter any additional valid `nmap` arguments (e.g., `-p 1-1000`, `-sU`) in the "additional arguments" field.
-3.  **Start Scan:** Click the "Apply" button next to the Target field (or press Enter in the Target field).
+    *   Select or create a **Scan Profile** to quickly apply a set of pre-configured options.
+3.  **Start Scan:** Click the "Start Scan" button (or press Enter in the Target field).
 4.  **View Results:**
     *   The application will show a spinner and "Scanning..." status while `nmap` is working.
     *   Once complete, a list of discovered hosts will appear on the left.
@@ -31,10 +38,10 @@ This project uses the Meson build system.
 
 *   Python 3 (usually `python3`)
 *   GTK4 and LibAdwaita libraries and their development files.
-    *   On Debian/Ubuntu: `sudo apt install libgtk-4-dev libadwaita-1-dev gir1.2-gtk-4.0 gir1.2-adw-1`
-    *   On Fedora: `sudo dnf install gtk4-devel libadwaita-devel gobject-introspection-devel`
-*   `nmap` executable (must be in your system's PATH).
-*   Python `python-nmap` module: `pip install python-nmap`
+    *   On Debian/Ubuntu: `sudo apt install libgtk-4-dev libadwaita-1-dev gir1.2-gtk-4.0 gir1.2-adw-1 python3-gi python3-gi-cairo gir1.2-pango-1.0`
+    *   On Fedora: `sudo dnf install gtk4-devel libadwaita-devel gobject-introspection-devel python3-gobject cairo-gobject-devel pango-devel`
+*   `nmap` executable (must be in your system's PATH or at a standard location like `/usr/bin/nmap` or `/usr/local/bin/nmap`). The application will try to find it.
+*   Python `python-nmap` module: `pip install python-nmap` (This is also handled by the Flatpak build if using Flatpak).
 *   Meson (`meson`) and Ninja (`ninja` or `ninja-build`).
     *   `pip install meson ninja` or use your system's package manager.
 
@@ -65,33 +72,61 @@ This project uses the Meson build system.
     ```bash
     ./builddir/src/networkmap 
     ```
-    (The executable might be directly in `builddir/networkmap` or `builddir/src/com.github.mclellac.NetworkMap` depending on meson setup - check `meson.build` for `executable()` name if unsure. The current `src/meson.build` suggests `networkmap` which is then renamed by `meson.install_script` for the actual installation, but for running from build dir, it's likely `builddir/src/networkmap`)
-
-    Alternatively, you might be able to run:
-    ```bash
-    python3 src/main.py
-    ```
-    from the root of the repository if all dependencies are met and paths resolve correctly, but using the meson-built executable is preferred.
+    (The executable is typically `builddir/src/networkmap`)
 
 *   **Install and run (after compiling):**
     ```bash
     sudo ninja -C builddir install
     ```
     (Or `sudo meson install -C builddir`).
-    After installation, the application should be available in your system's application menu (as `com.github.mclellac.NetworkMap`) or runnable from the command line using its application ID if the `.desktop` file is correctly installed and your prefix is standard:
+    After installation, the application should be available in your system's application menu (as `Network Map`) or runnable from the command line:
     ```bash
     com.github.mclellac.NetworkMap
     ```
-    Or just:
-    ```bash
-    networkmap
-    ```
-    (Depending on how it's installed and if the install path is in your `PATH`).
 
+### Flatpak
+
+A Flatpak manifest (`com.github.mclellac.NetworkMap.json`) is provided for building and distributing the application as a Flatpak.
+
+**Build and Install Flatpak:**
+
+1.  **Install `flatpak` and `flatpak-builder`:**
+    *   On Debian/Ubuntu: `sudo apt install flatpak flatpak-builder`
+    *   On Fedora: `sudo dnf install flatpak flatpak-builder`
+    *   Ensure Flathub remote is added: `flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo`
+
+2.  **Install GNOME SDK (if not already installed):**
+    ```bash
+    flatpak install org.gnome.Sdk//48 
+    flatpak install org.gnome.Platform//48
+    ```
+    (Replace `48` with the version specified in the manifest if it changes).
+
+3.  **Build and install the application:**
+    Navigate to the root directory of this repository (where `com.github.mclellac.NetworkMap.json` is located).
+    ```bash
+    flatpak-builder --user --install --force-clean build-dir com.github.mclellac.NetworkMap.json
+    ```
+
+4.  **Run the Flatpak application:**
+    ```bash
+    flatpak run com.github.mclellac.NetworkMap
+    ```
+
+## Preferences
+
+The application settings can be accessed via the primary menu (top-right corner of the window) -> Preferences.
+You can configure:
+*   **Theme:** System, Light, or Dark.
+*   **Results Font:** Font family and size for the scan results text view.
+*   **DNS Servers:** Comma-separated list of DNS servers for Nmap to use.
+*   **Default Nmap Arguments:** Arguments to be included with every Nmap scan by default.
+*   **Scan Profiles:** Manage your saved scan configurations (see "Scan Profiles" under Features).
 
 ## Troubleshooting
 
 *   **Freezing:** If the application freezes, ensure `nmap` is working correctly on your system and that the target is responsive or correctly handled by `nmap`'s timeouts.
-*   **`RuntimeError: Data access methods are unsupported...`:** This was a bug in previous versions. Ensure you have the latest version where this is fixed.
-*   **Permissions:** OS Fingerprinting (`-O`) and some other advanced `nmap` options may require root/administrator privileges to run correctly. If scans fail or hang with these options, try running the application (or `nmap` itself) with elevated privileges.
+*   **Permissions:** OS Fingerprinting (`-O`) and some other advanced `nmap` options may require root/administrator privileges to run correctly. If scans fail or hang with these options, the application will attempt to request privileges (e.g., via `pkexec` or macOS administrator prompt). Ensure these mechanisms are available and configured on your system if you intend to use these features. For Flatpak, privilege escalation for Nmap works via `flatpak-spawn --host pkexec`.
+*   **Nmap Not Found:** If the application reports that Nmap is not found, ensure `nmap` is installed and accessible either via your system's `PATH` or in a standard location (e.g., `/usr/bin/nmap`, `/usr/local/bin/nmap`). For Flatpak, Nmap is bundled.
+*   **Flatpak Build Issues:** If `flatpak-builder` fails, check that you have the correct GNOME SDK version installed and that Flathub is configured. Environment issues with `flatpak-builder` caching can sometimes occur; try building on a clean system or VM if persistent cache errors occur.
 ```

@@ -21,12 +21,6 @@ from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
 from .utils import apply_theme
 
-import os
-import sys
-
-print(f"DEBUG: sys.path = {sys.path}", file=sys.stderr)
-print(f"DEBUG: networkmap.__file__ = {__file__}", file=sys.stderr)
-
 APP_ID: str = "com.github.mclellac.NetworkMap"
 APP_NAME: str = "Network Map"
 APP_VERSION: str = "0.1.0"
@@ -89,15 +83,18 @@ class NetworkMapApplication(Adw.Application):
             website=PRIMARY_WEBSITE,
             issue_url=ISSUE_TRACKER_URL,
         )
-        # about_dialog.set_transient_for(self.get_active_window())
+        about_dialog.set_transient_for(self.get_active_window())
 
+        # Handle translator credits if available
         try:
-            if callable(_):
-                translator_credits = _("translator-credits")
-                if translator_credits != "translator-credits":
+            # Assuming '_' is part of localization setup (e.g., gettext)
+            if callable(_):  # type: ignore[name-defined]
+                translator_credits = _("translator-credits")  # type: ignore[name-defined]
+                if translator_credits != "translator-credits": # type: ignore[name-defined]
                     about_dialog.set_translator_credits(translator_credits)
         except NameError:
-            pass
+            # '_' function is not defined (e.g. gettext not set up)
+            pass # It's okay if translator_credits are not set
 
         about_dialog.present()
 
@@ -106,8 +103,11 @@ class NetworkMapApplication(Adw.Application):
     ) -> None:
         """Handles the 'preferences' action by creating and presenting the preferences window."""
         active_window = self.get_active_window()
-        if not active_window:
-            print(f"Warning: Action 'app.{action.get_name()}' called without an active window.")
+        if active_window is None:
+            # This should ideally not happen for an action that requires a window
+            print(f"Warning: Action 'app.{action.get_name()}' called without an active window.", file=sys.stderr)
+            # Optionally, create a new window or disable the action if no window context.
+            # For now, just return to prevent None errors.
             return
 
         prefs_window = NetworkMapPreferencesWindow(parent_window=active_window)
