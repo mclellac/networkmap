@@ -79,9 +79,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _initialize_ui_elements(self) -> None:
         """Initializes UI elements like combo boxes and sets the initial UI state."""
-        self._populate_profile_combo()
+        self._populate_timing_template_combo() # Ensure timing options are populated first
+        self._populate_profile_combo() # Then profiles, which might apply a default profile
         self._populate_nse_script_combo()
-        self._populate_timing_template_combo()
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
 
