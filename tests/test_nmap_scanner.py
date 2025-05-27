@@ -889,6 +889,49 @@ class TestNmapScannerPrivilegeExecution(unittest.TestCase):
         # For this test, we are interested in the args to _execute_with_privileges.
         # It's simpler to just assert the argument.
 
+    @patch('src.nmap_scanner.is_root', return_value=False) # User is NOT root
+    @patch('src.nmap_scanner.is_macos', return_value=False) # Assume Linux non-Flatpak for escalation path
+    @patch('src.nmap_scanner.is_linux', return_value=True)
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.shutil.which', return_value='/usr/bin/nmap') # Mock shutil.which
+    @patch('src.nmap_scanner.Gio.Settings') # Mock GSettings
+    def test_scan_not_root_O_in_text_args_uses_priv_esc(self, mock_gio_settings_constructor, 
+                                                           mock_shutil_which, 
+                                                           mock_is_flatpak, mock_is_linux, mock_is_macos, 
+                                                           mock_is_root):
+        # Configure GSettings to return empty default arguments
+        self._configure_gsettings_mock(mock_gio_settings_constructor, defaults="")
+        
+        # Spy on the _execute_with_privileges method of the instance
+        with patch.object(self.scanner, '_execute_with_privileges', 
+                          return_value=MagicMock(spec=subprocess.CompletedProcess, 
+                                                 returncode=0, stdout="<nmaprun></nmaprun>", stderr="")) as mock_execute_method:
+            
+            # Mock methods called after _execute_with_privileges or if it's not called
+            self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+            self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+            self.scanner.scan(
+                target="localhost",
+                do_os_fingerprint=False,  # Explicitly False for this test's purpose
+                additional_args_str="-O", # -O is provided as a text argument
+                nse_script=None,
+                stealth_scan=False, # Ensure -sS is not also triggering escalation
+                port_spec=None,
+                timing_template=None,
+                no_ping=False
+            )
+
+            mock_execute_method.assert_called_once()
+            # Verify that "-O" was in the arguments passed to _execute_with_privileges
+            args, kwargs = mock_execute_method.call_args
+            # args[0] is nmap_base_cmd_list, args[1] is scan_args_list
+            passed_scan_args_list = args[1] 
+            self.assertIn("-O", passed_scan_args_list)
+            # Ensure -sS is not present if stealth_scan was False, to isolate -O as the cause
+            self.assertNotIn("-sS", passed_scan_args_list)
+
+
     # --- End of New GSettings Tests ---
 
 
