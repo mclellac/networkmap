@@ -1,4 +1,5 @@
 import json
+import sys # Added to fix NameError for sys.stderr
 from typing import List, Dict, Any, TypedDict, Optional, Tuple
 from gi.repository import Gio
 
