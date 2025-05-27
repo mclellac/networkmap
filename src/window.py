@@ -54,6 +54,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._initialize_ui_elements()
         GLib.idle_add(self._apply_font_preference) # Apply initial font once UI is ready
 
+    def _show_toast(self, message: str):
+        print(f"MAIN WINDOW TOAST: {message}", file=sys.stderr)
+        self.toast_overlay.add_toast(Adw.Toast.new(message))
+
     def _connect_settings_signals(self) -> None:
         """Connects signals from GSettings to their handlers."""
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
@@ -405,14 +409,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         target: str = scan_params["target"]
 
         if not target:
-            self.toast_overlay.add_toast(Adw.Toast.new("Error: Target cannot be empty"))
+            self._show_toast("Error: Target cannot be empty")
             self._update_ui_state("ready", "Empty target")
             return
 
         self._add_target_to_history(target) 
         self._clear_results_ui()
         self._update_ui_state("scanning")
-        self.toast_overlay.add_toast(Adw.Toast.new(f"Scan started for {target}"))
+        self._show_toast(f"Scan started for {target}")
         
         # Prepare kwargs for _run_scan_worker, matching its signature
         # _get_current_scan_parameters uses NmapScanner.scan keys, so map them
@@ -488,7 +492,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
             self._update_ui_state("error", error_message)
-            self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'Unknown error'}"))
+            self._show_toast(f"Scan failed: {error_message or 'Unknown error'}")
         elif hosts_data:
             self._populate_results_listbox(hosts_data)
             # If there's a scan_message (e.g. warnings from nmap), it could be shown, but typically success means hosts found.
@@ -497,23 +501,23 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 status_desc = f"Scan Complete: {scan_message}" # e.g. if nmap had specific warnings but still found hosts
             self.status_page.set_property("description", status_desc)
             self._update_ui_state("success")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
+            self._show_toast("Scan complete.")
         elif scan_message == "No hosts found.": # Explicitly check for "No hosts found"
             self._clear_results_ui() # Ensure UI is clean
             self.status_page.set_property("description", "Scan Complete: No hosts found.")
             self._update_ui_state("no_results")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
+            self._show_toast("Scan complete: No hosts found.")
         # Case: No hosts_data, no error, but scan_message might indicate other issues or empty results
         elif scan_message: 
             self._clear_results_ui()
             self.status_page.set_property("description", f"Scan Complete: {scan_message}")
             self._update_ui_state("no_data") # Or a more specific state based on message
-            self.toast_overlay.add_toast(Adw.Toast.new(f"Scan finished: {scan_message}"))
+            self._show_toast(f"Scan finished: {scan_message}")
         else: # Fallback for truly empty/unexpected results without error or message
             self._clear_results_ui()
             self.status_page.set_property("description", "Scan Complete: No data received and no specific messages.")
             self._update_ui_state("no_data")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data."))
+            self._show_toast("Scan complete: No data.")
         
         # No 'pass' needed here explicitly.
 

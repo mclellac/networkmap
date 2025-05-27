@@ -1,3 +1,4 @@
+import sys
 from gi.repository import Adw, Gtk, GObject, Gio, Pango
 from typing import Optional
 
@@ -50,6 +51,10 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self._connect_signals()
         
         self._load_and_display_profiles() # Initial population
+
+    def _show_toast(self, message: str):
+        print(f"PREFERENCES TOAST: {message}", file=sys.stderr)
+        self.add_toast(Adw.Toast.new(message))
 
     def _init_settings_and_bindings(self) -> None:
         """Initializes GSettings and binds them to UI elements."""
@@ -208,19 +213,17 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                         # This could be a more complex dialog if many details are needed.
                         # For now, a toast with a summary is used.
                         # Logging in ProfileManager provides console details for malformed entries.
-                        self.add_toast(Adw.Toast.new(summary_message))
+                        self._show_toast(summary_message)
                         self._load_and_display_profiles() # Refresh the list UI
                     
                     except ProfileStorageError as e:
                         # Handle errors specifically raised by ProfileManager (e.g., file not found, JSON error)
-                        error_toast = Adw.Toast.new(f"Import failed: {e}")
-                        self.add_toast(error_toast)
+                        self._show_toast(f"Import failed: {e}")
                     except Exception as e: # Catch any other unexpected errors during the process
                         print(f"Unexpected error during profile import: {e}", file=sys.stderr) # Log for debugging
-                        error_toast = Adw.Toast.new("An unexpected error occurred during import.")
-                        self.add_toast(error_toast)
+                        self._show_toast("An unexpected error occurred during import.")
                 else: # Should not happen if gfile is valid, but as a safeguard
-                     self.add_toast(Adw.Toast.new("Failed to get file path for import."))
+                     self._show_toast("Failed to get file path for import.")
         
         dialog.destroy() # Ensure dialog is destroyed
 
@@ -245,17 +248,15 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 if filepath:
                     try:
                         self.profile_manager.export_profiles_to_file(filepath)
-                        self.add_toast(Adw.Toast.new(f"Profiles successfully exported to: {filepath}"))
+                        self._show_toast(f"Profiles successfully exported to: {filepath}")
                     except ProfileStorageError as e:
                         # Handle errors specifically raised by ProfileManager (e.g., file write error)
-                        error_toast = Adw.Toast.new(f"Export failed: {e}")
-                        self.add_toast(error_toast)
+                        self._show_toast(f"Export failed: {e}")
                     except Exception as e: # Catch any other unexpected errors
                         print(f"Unexpected error during profile export: {e}", file=sys.stderr) # Log for debugging
-                        error_toast = Adw.Toast.new("An unexpected error occurred during export.")
-                        self.add_toast(error_toast)
+                        self._show_toast("An unexpected error occurred during export.")
                 else: # Safeguard
-                    self.add_toast(Adw.Toast.new("Failed to get file path for export."))
+                    self._show_toast("Failed to get file path for export.")
         
         dialog.destroy() # Ensure dialog is destroyed
 
@@ -291,10 +292,10 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 row.add_suffix(button_box)
                 self.profiles_list_box.append(row)
         except ProfileStorageError as e:
-            self.add_toast(Adw.Toast.new(f"Error loading profiles: {e}"))
+            self._show_toast(f"Error loading profiles: {e}")
             # Optionally, display an error message in the list box itself
         except Exception as e: # Catch any other unexpected errors
-            self.add_toast(Adw.Toast.new(f"An unexpected error occurred while loading profiles: {e}"))
+            self._show_toast(f"An unexpected error occurred while loading profiles: {e}")
 
 
     def _on_add_profile_clicked(self, button: Gtk.Button) -> None:
@@ -302,7 +303,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         try:
             all_profile_names = [p['name'] for p in self.profile_manager.load_profiles()]
         except ProfileStorageError as e:
-            self.add_toast(Adw.Toast.new(f"Could not load existing profiles to check names: {e}"))
+            self._show_toast(f"Could not load existing profiles to check names: {e}")
             all_profile_names = [] # Proceed with caution or disallow adding
         
         dialog = ProfileEditorDialog(parent_window=self, existing_profile_names=all_profile_names)
@@ -319,11 +320,11 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             try:
                 self.profile_manager.add_profile(profile_data)
                 self._load_and_display_profiles() # Refresh list
-                self.add_toast(Adw.Toast.new(f"Profile '{profile_data['name']}' added successfully."))
+                self._show_toast(f"Profile '{profile_data['name']}' added successfully.")
             except (ProfileExistsError, ProfileStorageError) as e:
-                self.add_toast(Adw.Toast.new(f"Failed to add profile: {e}"))
+                self._show_toast(f"Failed to add profile: {e}")
             except Exception as e: # Catch any other unexpected errors
-                self.add_toast(Adw.Toast.new(f"An unexpected error occurred while adding profile: {e}"))
+                self._show_toast(f"An unexpected error occurred while adding profile: {e}")
         # Dialog closes itself on "save" or "cancel"
 
     def _on_edit_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
@@ -344,9 +345,9 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 # dialog.present(self) # Adw.Dialog.present() issue as above
                 dialog.present()
             else:
-                self.add_toast(Adw.Toast.new(f"Error: Profile '{profile_name}' not found for editing."))
+                self._show_toast(f"Error: Profile '{profile_name}' not found for editing.")
         except (ProfileStorageError, Exception) as e: # Catch loading or other errors
-            self.add_toast(Adw.Toast.new(f"Failed to load profile for editing: {e}"))
+            self._show_toast(f"Failed to load profile for editing: {e}")
 
 
     def _handle_profile_dialog_action_edit(self, dialog: ProfileEditorDialog, action: str, profile_data: Optional[ScanProfile], original_profile_name: str) -> None:
@@ -355,11 +356,11 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             try:
                 self.profile_manager.update_profile(original_profile_name, profile_data)
                 self._load_and_display_profiles() # Refresh list
-                self.add_toast(Adw.Toast.new(f"Profile '{profile_data['name']}' updated successfully."))
+                self._show_toast(f"Profile '{profile_data['name']}' updated successfully.")
             except (ProfileNotFoundError, ProfileExistsError, ProfileStorageError) as e:
-                self.add_toast(Adw.Toast.new(f"Failed to update profile: {e}"))
+                self._show_toast(f"Failed to update profile: {e}")
             except Exception as e: # Catch any other unexpected errors
-                self.add_toast(Adw.Toast.new(f"An unexpected error occurred while updating profile: {e}"))
+                self._show_toast(f"An unexpected error occurred while updating profile: {e}")
         # Dialog closes itself
 
     def _on_delete_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
@@ -368,11 +369,11 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         try:
             self.profile_manager.delete_profile(profile_name)
             self._load_and_display_profiles() # Refresh list
-            self.add_toast(Adw.Toast.new(f"Profile '{profile_name}' deleted successfully."))
+            self._show_toast(f"Profile '{profile_name}' deleted successfully.")
         except (ProfileNotFoundError, ProfileStorageError) as e:
-            self.add_toast(Adw.Toast.new(f"Failed to delete profile: {e}"))
+            self._show_toast(f"Failed to delete profile: {e}")
         except Exception as e: # Catch any other unexpected errors
-            self.add_toast(Adw.Toast.new(f"An unexpected error occurred while deleting profile: {e}"))
+            self._show_toast(f"An unexpected error occurred while deleting profile: {e}")
 
 
     def _on_font_changed(self, font_button: Gtk.FontButton) -> None:
