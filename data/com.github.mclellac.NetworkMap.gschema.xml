@@ -25,7 +25,7 @@
     </key>
 
     <key name="default-nmap-arguments" type="s">
-      <default>''</default>
+      <default>'-sV --host-timeout=60s'</default>
       <summary>Default arguments for Nmap scans</summary>
       <description>These arguments are automatically prepended to every Nmap scan initiated through the application. Arguments specified in the main window's 'Additional Arguments' field can override or supplement these defaults.</description>
     </key>

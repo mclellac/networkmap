@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 import sys
 import os
 
@@ -14,14 +14,14 @@ try:
 except ImportError:
     # Define dummy classes if python-nmap is not installed,
     # tests relying on its actual presence might be skipped or adapted.
-    class PortScannerError(Exception):
+    class PortScannerError(Exception): # type: ignore
         pass
-    class PortScannerHostDict(dict): # Simple mock for the type
+    class PortScannerHostDict(dict): # type: ignore # Simple mock for the type
         def hostname(self): return self.get('hostname', "")
-        def state(self): return self.get('state', {}).get('state', "")
-        def all_protocols(self): return list(self.get('protocols', {}).keys())
+        def state(self): return self.get('state', {}).get('state', "") # type: ignore
+        def all_protocols(self): return list(self.get('protocols', {}).keys()) # type: ignore
         # Add .get() to mimic dict behavior for protocol access like host_scan_data.get(proto, {})
-        def get(self, key, default=None):
+        def get(self, key, default=None): # type: ignore
             if key in self: # Check if key exists directly (e.g. 'tcp', 'udp', 'osmatch')
                 return self[key]
             # Fallback for other attributes that might be accessed via .get()
@@ -31,12 +31,29 @@ except ImportError:
 
 from nmap_scanner import NmapArgumentError, NmapScanParseError # Import custom exceptions
 
+# Mock Gio before NmapScanner is imported if NmapScanner uses Gio at module level
+# However, Gio is used within methods, so patching at test method/class level is fine.
+# For simplicity, we'll patch it where needed.
+
 class TestNmapScanner(unittest.TestCase):
 
     def setUp(self):
         self.scanner = NmapScanner()
         # Mock the nmap.PortScanner instance (self.nm)
+        # self.scanner.nm is an instance of nmap.PortScanner
+        # We need to mock the scan method on this instance for some tests
         self.scanner.nm = MagicMock()
+        # If NmapScanner() itself instantiated Gio.Settings at __init__, we'd mock it here.
+        # But it's done within methods like scan() and build_scan_args().
+
+    def _mock_gsettings_get_string(self, settings_dict):
+        """
+        Helper to create a side_effect function for Gio.Settings.get_string.
+        `settings_dict` is a dictionary like {"dns-servers": "1.1.1.1", "default-nmap-arguments": "-T4"}.
+        """
+        def mock_get_string(key):
+            return settings_dict.get(key, "") # Default to empty string if key not in mock
+        return mock_get_string
 
     def test_parse_results_no_hosts_found(self):
         # Mock nmap.PortScanner().all_hosts() to return an empty list
@@ -46,6 +63,9 @@ class TestNmapScanner(unittest.TestCase):
         
         self.assertEqual(hosts_data, [])
         self.assertEqual(error_message, "No hosts found.")
+
+    # Existing tests for _parse_scan_results seem okay and don't directly interact with GSettings.
+    # We will leave them as is for now.
 
     def test_parse_results_single_host_no_os(self):
         mock_host_ip = '192.168.1.1'
@@ -138,93 +158,402 @@ class TestNmapScanner(unittest.TestCase):
     def test_scan_invalid_arguments_type(self):
         target_host = "localhost"
         # Pass integer 123 as additional_args_str, expecting NmapArgumentError
-        result_data, error_msg = self.scanner.scan(target_host, False, 123)
-        
-        self.assertIsNone(result_data)
-        self.assertIsNotNone(error_msg)
-        self.assertIn("Argument error: Additional arguments must be a string.", error_msg)
+        # This test needs to be adapted because scan() now fetches GSettings.
+        # We can mock GSettings to return empty defaults for this specific test.
+        with patch('src.nmap_scanner.Gio.Settings') as mock_gio_settings_constructor:
+            mock_settings_instance = MagicMock()
+            mock_settings_instance.get_string.return_value = "" # No default args, no dns
+            mock_gio_settings_constructor.return_value = mock_settings_instance
+            
+            target_host = "localhost"
+            result_data, error_msg = self.scanner.scan(target_host, False, 123) # type: ignore
+            
+            self.assertIsNone(result_data)
+            self.assertIsNotNone(error_msg)
+            self.assertIn("Argument error: Additional arguments must be a string.", error_msg)
 
+    @patch('src.nmap_scanner.Gio.Settings') # Mock GSettings for the scan method
+    def test_scan_nmap_execution_error(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "-sV", # Provide some default
+            "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
 
-    def test_scan_nmap_execution_error(self):
         self.scanner.nm.scan.side_effect = PortScannerError("Test Nmap Execution Error")
         
         target_host = "localhost"
-        result_data, error_msg = self.scanner.scan(target_host, False, "-sV")
+        # Note: `scan` no longer takes `default_args_str`. It's fetched from GSettings.
+        result_data, error_msg = self.scanner.scan(target_host, False, "") # additional_args_str is empty
         
         self.assertIsNone(result_data)
         self.assertIsNotNone(error_msg)
         self.assertIn("Nmap execution error: Test Nmap Execution Error", error_msg)
 
-    def test_build_scan_args_os_fingerprint(self):
-        args = self.scanner._build_scan_args(do_os_fingerprint=True, additional_args_str="-T4")
-        self.assertIn("-O", args.split())
-        self.assertIn("-sV", args.split())
-        self.assertIn("-T4", args.split())
 
-    def test_build_scan_args_no_os_fingerprint(self):
-        args = self.scanner._build_scan_args(do_os_fingerprint=False, additional_args_str="--top-ports 10")
-        self.assertNotIn("-O", args.split())
-        self.assertIn("-sV", args.split())
-        self.assertIn("--top-ports", [a.split('=')[0] for a in args.split()])
-        self.assertIn("10", args.split())
+    # --- Tests for build_scan_args ---
+    # These tests will now need to mock Gio.Settings for "dns-servers"
+    # and pass the equivalent of "default-nmap-arguments" via the default_args_str parameter.
 
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_os_fingerprint(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        # Simulate no custom DNS servers from GSettings for this test
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
 
-    def test_build_scan_args_additional_args_sV_handling(self):
-        args_user_sV = self.scanner._build_scan_args(False, "-sV -p 80,443")
+        # Simulate default_args_str coming from GSettings (e.g. containing -sV)
+        args = self.scanner.build_scan_args(
+            do_os_fingerprint=True, 
+            additional_args_str="-T4",
+            default_args_str="-sV --host-timeout=30s" # Explicitly pass defaults
+        )
+        args_list = args.split()
+        self.assertIn("-O", args_list)
+        self.assertIn("-sV", args_list)
+        self.assertIn("--host-timeout=30s", args) # Check the full arg with value
+        self.assertIn("-T4", args_list)
+        self.assertNotIn("--dns-servers", args) # Ensure DNS not added if GSetting for it is empty
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_no_os_fingerprint(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        args = self.scanner.build_scan_args(
+            do_os_fingerprint=False, 
+            additional_args_str="--top-ports 10",
+            default_args_str="-sV" # Simulate GSettings providing -sV
+        )
+        args_list = args.split()
+        self.assertNotIn("-O", args_list)
+        self.assertIn("-sV", args_list)
+        self.assertIn("--top-ports", args_list)
+        self.assertIn("10", args_list)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_additional_args_sV_handling(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        # Case 1: User provides -sV in additional_args_str, GSettings default is empty for this part
+        args_user_sV = self.scanner.build_scan_args(False, "-sV -p 80,443", default_args_str="")
         self.assertEqual(args_user_sV.count("-sV"), 1)
         self.assertIn("-p", args_user_sV.split())
 
-        args_user_A = self.scanner._build_scan_args(False, "-A")
+        # Case 2: User provides -A, GSettings default is empty
+        args_user_A = self.scanner.build_scan_args(False, "-A", default_args_str="")
         self.assertIn("-A", args_user_A.split())
-        # -sV should not be added separately if -A is present as -A implies -sV
-        self.assertNotIn("-sV", args_user_A.split()[1:])
+        self.assertNotIn("-sV", args_user_A.split()[1:]) # -A implies -sV, so -sV shouldn't be added again
+
+        # Case 3: GSettings provides -sV, user provides nothing that implies -sV
+        args_gsettings_sV = self.scanner.build_scan_args(False, "-T4", default_args_str="-sV")
+        self.assertIn("-sV", args_gsettings_sV.split())
+        self.assertIn("-T4", args_gsettings_sV.split())
+        
+        # Case 4: GSettings provides -sV, user also provides -sV. Should only be one.
+        args_both_sV = self.scanner.build_scan_args(False, "-sV -p 123", default_args_str="-sV --host-timeout=10s")
+        self.assertEqual(args_both_sV.count("-sV"), 1, f"Args: {args_both_sV}")
+        self.assertIn("-p", args_both_sV.split())
+        self.assertIn("123", args_both_sV.split())
+        self.assertIn("--host-timeout=10s", args_both_sV)
 
 
-    # --- Tests for _build_scan_args (New) ---
-
-    def test_build_scan_args_with_nse_script(self):
-        args = self.scanner._build_scan_args(False, "", nse_script="vuln")
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_with_nse_script(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        
+        args = self.scanner.build_scan_args(False, "", nse_script="vuln", default_args_str="")
         self.assertIn("--script=vuln", args)
 
-    def test_build_scan_args_default_host_timeout(self):
-        args = self.scanner._build_scan_args(False, "")
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_default_host_timeout_from_gsettings(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        # This default is now expected to come from GSettings via default_args_str
+        args = self.scanner.build_scan_args(False, "", default_args_str="--host-timeout=60s")
         self.assertIn("--host-timeout=60s", args)
 
-    def test_build_scan_args_user_host_timeout_preserved(self):
-        args_custom_s = self.scanner._build_scan_args(False, "--host-timeout=120s")
+        # Test that it's NOT added if not in default_args_str
+        args_no_timeout = self.scanner.build_scan_args(False, "", default_args_str="-T4")
+        self.assertNotIn("--host-timeout", args_no_timeout)
+
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_user_host_timeout_preserved(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        
+        # User provides timeout in additional_args, GSettings default might or might not have it
+        args_custom_s = self.scanner.build_scan_args(False, "--host-timeout=120s", default_args_str="")
         self.assertIn("--host-timeout=120s", args_custom_s)
         self.assertEqual(args_custom_s.count("--host-timeout"), 1)
 
-        args_custom_ms = self.scanner._build_scan_args(False, "--host-timeout 30ms")
-        # shlex.split will handle "--host-timeout 30ms" as two items if not for shlex.join
-        # but _build_scan_args joins them back. Result string should contain it.
-        self.assertIn("--host-timeout 30ms", args_custom_ms) 
-        # Ensure only one instance of --host-timeout is present
-        found_timeout_arg = [arg for arg in args_custom_ms.split() if arg.startswith('--host-timeout') or arg == '30ms']
-        # This reconstruction is a bit tricky because of shlex.split and join behavior.
-        # A simpler check is if the exact string "--host-timeout 30ms" (if that was the input) or
-        # "--host-timeout=30ms" is present. The current code joins with " ".
-        # So, if input is "--host-timeout 30ms", it becomes part of the list as two elements
-        # and then joined.
+        args_custom_ms = self.scanner.build_scan_args(False, "--host-timeout 30ms", default_args_str="-T1")
+        self.assertIn("--host-timeout 30ms", args_custom_ms)
         self.assertTrue(any(arg.startswith("--host-timeout") for arg in args_custom_ms.split()))
         self.assertIn("30ms", args_custom_ms.split())
+        self.assertIn("-T1", args_custom_ms.split()) # Ensure default arg is also there
+
+        # User timeout should take precedence if GSettings also has one
+        args_both_timeouts = self.scanner.build_scan_args(False, "--host-timeout=20s", default_args_str="--host-timeout=50s -sV")
+        # shlex.split works on the string parts. User args are appended.
+        # Nmap usually takes the last specified one.
+        # Our build_scan_args concatenates: default_args + user_args
+        # So, "--host-timeout=50s -sV --host-timeout=20s" (order might vary due to shlex)
+        # We expect "--host-timeout=20s" to be the effective one if nmap uses the last.
+        # The string will contain both if not carefully managed.
+        # Current NmapScanner code simply concatenates lists from shlex.split.
+        # This means both will be present in the string.
+        self.assertIn("--host-timeout=20s", args_both_timeouts)
+        self.assertIn("--host-timeout=50s", args_both_timeouts) # Both will be in the string
+        self.assertIn("-sV", args_both_timeouts.split())
 
 
-    def test_build_scan_args_shlex_split_failure(self):
+    def test_build_scan_args_shlex_split_failure_default_args(self):
+        # Test shlex failure for default_args_str
+        with self.assertRaisesRegex(NmapArgumentError, "Error parsing default arguments:"):
+            self.scanner.build_scan_args(False, "", default_args_str="-sV 'mismatched_quote")
+
+    def test_build_scan_args_shlex_split_failure_additional_args(self):
+        # Test shlex failure for additional_args_str
         with self.assertRaisesRegex(NmapArgumentError, "Error parsing additional arguments:"):
-            self.scanner._build_scan_args(False, "-sV 'mismatched_quote")
+            self.scanner.build_scan_args(False, "-sV 'mismatched_quote", default_args_str="")
 
-    # --- Tests for _parse_scan_results (New) ---
+
+    # --- New Tests for GSettings Interaction ---
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_dns_servers_empty(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        args = self.scanner.build_scan_args(False, "-T4", default_args_str="-sV")
+        self.assertNotIn("--dns-servers", args)
+        self.assertIn("-T4", args)
+        self.assertIn("-sV", args)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_dns_servers_single(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": "1.1.1.1"})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        args = self.scanner.build_scan_args(False, "-T4", default_args_str="-sV")
+        self.assertIn("--dns-servers=1.1.1.1", args)
+        self.assertIn("-T4", args)
+        self.assertIn("-sV", args)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_dns_servers_multiple(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": "8.8.8.8,1.1.1.1"})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        args = self.scanner.build_scan_args(False, "-T4", default_args_str="-sV")
+        self.assertIn("--dns-servers=8.8.8.8,1.1.1.1", args)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_dns_servers_with_spaces(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": " 8.8.8.8 , 1.1.1.1 , 4.4.4.4"})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        args = self.scanner.build_scan_args(False, "", default_args_str="")
+        self.assertIn("--dns-servers=8.8.8.8,1.1.1.1,4.4.4.4", args)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_dns_servers_already_in_additional_args(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": "1.1.1.1"})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        # User provides --dns-servers in additional_args_str
+        args = self.scanner.build_scan_args(False, "--dns-servers 9.9.9.9", default_args_str="")
+        # GSettings should be ignored, user's arg takes precedence (or rather, GSettings one is not added)
+        self.assertIn("--dns-servers 9.9.9.9", args) # From additional_args
+        self.assertNotIn("1.1.1.1", args) # From GSettings, should not be added
+        # Check that the argument appears only once
+        self.assertEqual(args.count("--dns-servers"), 1)
+
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_gsettings_default_args_empty(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""}) # No DNS
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        
+        # Pass empty string for default_args_str, simulating empty GSettings for "default-nmap-arguments"
+        args = self.scanner.build_scan_args(False, "-Pn", default_args_str="")
+        self.assertIn("-Pn", args.split())
+        self.assertNotIn("-sV", args.split()) # Old hardcoded default
+        self.assertFalse(any(a.startswith("--host-timeout") for a in args.split())) # Old hardcoded default
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_gsettings_default_args_custom(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        gsettings_defaults = "-T4 -F --reason"
+        args = self.scanner.build_scan_args(False, "-O", default_args_str=gsettings_defaults)
+        args_list = args.split()
+        self.assertIn("-T4", args_list)
+        self.assertIn("-F", args_list)
+        self.assertIn("--reason", args_list)
+        self.assertIn("-O", args_list) # From additional_args_str
+        self.assertNotIn("-sV", args_list) # Old hardcoded, should not be there unless in gsettings_defaults
+        self.assertFalse(any(a.startswith("--host-timeout") for a in args_list))
+
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_gsettings_includes_sV_and_timeout(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        gsettings_defaults = "-sV --host-timeout=90s -T3"
+        args = self.scanner.build_scan_args(False, "", default_args_str=gsettings_defaults)
+        args_list = args.split()
+        self.assertIn("-sV", args_list)
+        self.assertIn("--host-timeout=90s", args) # Check full string
+        self.assertIn("-T3", args_list)
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_interaction_gsettings_and_additional(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({"dns-servers": ""})
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        gsettings_defaults = "-T4 --datadir /tmp"
+        additional_args = "-sL -p 80"
+        # Expected: default args followed by user args
+        args = self.scanner.build_scan_args(False, additional_args, default_args_str=gsettings_defaults)
+        
+        # Test presence of all parts
+        self.assertIn("-T4", args)
+        self.assertIn("--datadir /tmp", args) # This might be split by shlex if not careful, but join should restore
+        self.assertIn("-sL", args)
+        self.assertIn("-p 80", args)
+
+        # Test order (additional args should come after default args if split by shlex and re-joined)
+        # This is a bit fragile to test precisely without knowing shlex output for complex cases
+        # A simple check:
+        if "--datadir" in args and "-sL" in args: # Make sure both are there before find
+             self.assertTrue(args.find("--datadir") < args.find("-sL") or args.find("/tmp") < args.find("-sL"), 
+                            f"Order check failed for args: {args}")
+
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_combined_dns_and_gsettings_defaults(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "dns-servers": "1.0.0.1,8.8.4.4",
+            # "default-nmap-arguments" is passed via default_args_str for build_scan_args tests
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        gsettings_default_nmap_args = "-A -T5"
+        args = self.scanner.build_scan_args(False, "-Pn", default_args_str=gsettings_default_nmap_args)
+        
+        self.assertIn("--dns-servers=1.0.0.1,8.8.4.4", args)
+        self.assertIn("-A", args)
+        self.assertIn("-T5", args)
+        self.assertIn("-Pn", args) # From additional_args_str
+
+
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_build_scan_args_gsettings_retrieval_exception(self, mock_gio_settings_constructor):
+        # Simulate Gio.Settings.new() or get_string() raising an exception for DNS servers
+        mock_gio_settings_constructor.side_effect = Exception("GSettings schema not found")
+
+        # When build_scan_args tries to get "dns-servers", it should catch the exception
+        # and proceed without adding --dns-servers.
+        # We expect a warning to be printed to stderr (can't easily check that without more mocking).
+        args = self.scanner.build_scan_args(False, "-T0", default_args_str="-sC")
+        
+        self.assertNotIn("--dns-servers", args)
+        self.assertIn("-T0", args)
+        self.assertIn("-sC", args)
+
+
+    # --- Tests for the scan() method (higher level, ensuring GSettings are fetched) ---
+
+    @patch('src.nmap_scanner.nmap.PortScanner.scan') # Mock the actual nmap scan call
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_method_with_gsettings_dns_and_defaults(self, mock_gio_settings_constructor, mock_nmap_lib_scan):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "dns-servers": "1.1.1.1",
+            "default-nmap-arguments": "-T4 -sV"
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
+        # Mock _parse_scan_results to return some valid data and avoid its internal logic
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+
+        target = "example.com"
+        additional_args = "-O --top-ports 10"
+        self.scanner.scan(target, True, additional_args, nse_script="vulners")
+
+        mock_nmap_lib_scan.assert_called_once()
+        called_args_str = mock_nmap_lib_scan.call_args[1]['arguments']
+        
+        self.assertIn("--dns-servers=1.1.1.1", called_args_str)
+        self.assertIn("-T4", called_args_str)    # From GSettings default
+        self.assertIn("-sV", called_args_str)    # From GSettings default
+        self.assertIn("-O", called_args_str)     # From additional_args (and do_os_fingerprint=True)
+        self.assertIn("--top-ports 10", called_args_str) # From additional_args
+        self.assertIn("--script=vulners", called_args_str) # From nse_script parameter
+
+    @patch('src.nmap_scanner.nmap.PortScanner.scan')
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_method_gsettings_retrieval_exception(self, mock_gio_settings_constructor, mock_nmap_lib_scan):
+        # Simulate Gio.Settings.new() raising an exception for default arguments
+        mock_gio_settings_constructor.side_effect = Exception("Cannot connect to GSettings")
+
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+        
+        target = "testhost.lan"
+        additional_args = "-sP" # Simple ping scan
+        self.scanner.scan(target, False, additional_args)
+
+        mock_nmap_lib_scan.assert_called_once()
+        called_args_str = mock_nmap_lib_scan.call_args[1]['arguments']
+
+        # We expect that if GSettings fails, the scan proceeds with only other args.
+        # DNS servers are also fetched via GSettings in build_scan_args, so that would also fail
+        # or be skipped if the initial Gio.Settings.new in scan() fails.
+        # If Gio.Settings.new in scan() fails, gsettings_default_args is None.
+        # If Gio.Settings.new in build_scan_args() fails, --dns-servers is not added.
+        
+        self.assertNotIn("--dns-servers", called_args_str) # Should not be present if GSettings failed broadly
+        self.assertNotIn("-T4", called_args_str) # Example default, should not be present
+        self.assertNotIn("-sV", called_args_str) # Example default, should not be present
+        self.assertIn("-sP", called_args_str)  # The user-provided arg should still be there.
+
+
+    # --- End of New GSettings Tests ---
+
 
     def test_parse_results_with_udp_port_data(self):
         mock_host_ip = '192.168.1.3'
         mock_host_scan_data_dict = {
             'hostname': 'udphost.local',
-            'state': {'state': 'up'},
-            'protocols': {
-                'udp': {
-                    53: {'state': 'open|filtered', 'name': 'domain'},
-                    161: {'state': 'open', 'name': 'snmp', 'product': 'SNMPv1 server'}
+            'state': {'state': 'up'}, # type: ignore
+            'protocols': { # type: ignore
+                'udp': { # type: ignore
+                    53: {'state': 'open|filtered', 'name': 'domain'}, # type: ignore
+                    161: {'state': 'open', 'name': 'snmp', 'product': 'SNMPv1 server'} # type: ignore
                 }
             }
         }
@@ -250,10 +579,10 @@ class TestNmapScanner(unittest.TestCase):
 
     def test_parse_results_protocol_with_no_port_entries(self):
         mock_host_ip = '192.168.1.4'
-        mock_host_scan_data_dict = {
-            'hostname': 'noports.local',
-            'state': {'state': 'up'},
-            'protocols': {'tcp': {}} # TCP protocol listed, but no ports
+        mock_host_scan_data_dict = { # type: ignore
+            'hostname': 'noports.local', # type: ignore
+            'state': {'state': 'up'}, # type: ignore
+            'protocols': {'tcp': {}} # TCP protocol listed, but no ports # type: ignore
         }
         self.scanner.nm.all_hosts.return_value = [mock_host_ip]
         self.scanner.nm.__getitem__.return_value = PortScannerHostDict(mock_host_scan_data_dict)
@@ -271,16 +600,23 @@ class TestNmapScanner(unittest.TestCase):
         # Case 1: 'osmatch' key present but list is empty
         mock_data_empty_osmatch = {'hostname': 'noos1','state':{'state':'up'}, 'protocols':{}, 'osmatch': []}
         self.scanner.nm.all_hosts.return_value = [mock_host_ip]
-        self.scanner.nm.__getitem__.return_value = PortScannerHostDict(mock_data_empty_osmatch)
+        self.scanner.nm.__getitem__.return_value = PortScannerHostDict(mock_data_empty_osmatch) # type: ignore
         hosts_data, _ = self.scanner._parse_scan_results(do_os_fingerprint=True)
         self.assertIsNone(hosts_data[0]['os_fingerprint'])
         self.assertIn("OS Fingerprint: No OS matches found.", hosts_data[0]['raw_details_text'])
 
         # Case 2: 'osmatch' key not present
-        mock_data_no_osmatch_key = {'hostname': 'noos2','state':{'state':'up'}, 'protocols':{}}
-        self.scanner.nm.__getitem__.return_value = PortScannerHostDict(mock_data_no_osmatch_key)
+        mock_data_no_osmatch_key = {'hostname': 'noos2','state':{'state':'up'}, 'protocols':{}} # type: ignore
+        self.scanner.nm.__getitem__.return_value = PortScannerHostDict(mock_data_no_osmatch_key) # type: ignore
         hosts_data, _ = self.scanner._parse_scan_results(do_os_fingerprint=True)
         self.assertIsNone(hosts_data[0]['os_fingerprint'])
+        # If 'osmatch' is not present AND do_os_fingerprint is true, the "OS Fingerprint:" header
+        # for raw_details_text might not be added. This is fine.
+        # The check `host_info["os_fingerprint"] is None` is more important.
+        # Let's verify if the current code adds "OS Fingerprint:" section if osmatch is missing
+        # Current code: if do_os_fingerprint and "osmatch" in host_scan_data: ... else if do_os_fingerprint:
+        # This means if 'osmatch' is not in host_scan_data, it won't add "No OS matches found."
+        # It will simply not have an OS section. This is acceptable.
         self.assertNotIn("OS Fingerprint:", hosts_data[0]['raw_details_text'])
 
 
@@ -303,21 +639,28 @@ class TestNmapScanner(unittest.TestCase):
         # Create a MagicMock that can have its methods individually mocked
         # This replaces the simple PortScannerHostDict for this test case
         detailed_mock_host_obj = MagicMock(spec=PortScannerHostDict)
-        detailed_mock_host_obj.hostname.side_effect = faulty_hostname
+        detailed_mock_host_obj.hostname.side_effect = faulty_hostname # type: ignore
         # Need to provide other methods that are called before the error, if any.
         # .state() is called after .hostname() in current implementation for raw_details_parts.
         # However, the error should occur on .hostname() first.
         # .all_protocols() is called before .hostname() for the host_info dict.
-        detailed_mock_host_obj.all_protocols.return_value = [] # Assume no protocols for simplicity
+        detailed_mock_host_obj.all_protocols.return_value = [] # Assume no protocols for simplicity # type: ignore
 
         self.scanner.nm.__getitem__.return_value = detailed_mock_host_obj
         
         with self.assertRaisesRegex(NmapScanParseError, "Error parsing data for host 192.168.1.6: Missing key"):
             self.scanner._parse_scan_results(do_os_fingerprint=False)
 
-    # --- Tests for scan (integration - New) ---
 
-    def test_scan_successful_with_nse_script(self):
+    @patch('src.nmap_scanner.Gio.Settings') # Mock GSettings for the scan method
+    def test_scan_successful_with_nse_script(self, mock_gio_settings_constructor):
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = self._mock_gsettings_get_string({
+            "default-nmap-arguments": "-sV", # Provide some default
+            "dns-servers": ""
+        })
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+
         target_host = "testhost.com"
         nse_script_name = "http-title"
         additional_args = "-p 80"
