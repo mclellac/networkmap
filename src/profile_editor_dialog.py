@@ -12,9 +12,7 @@ class ProfileEditorDialog(Adw.Dialog):
                  parent_window: Optional[Gtk.Window] = None, 
                  profile_to_edit: Optional[ScanProfile] = None, 
                  existing_profile_names: Optional[List[str]] = None):
-        super().__init__()
-        if parent_window:
-            self.set_transient_for(parent_window)
+        super().__init__(transient_for=parent_window if parent_window else None)
             
         self.profile_to_edit = profile_to_edit
         self.is_editing = profile_to_edit is not None
