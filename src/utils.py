@@ -1,4 +1,5 @@
 import os
+import sys # Added
 from typing import List
 import logging
 
@@ -84,3 +85,26 @@ def is_root() -> bool:
         True if the effective user ID is 0, False otherwise.
     """
     return os.geteuid() == 0
+
+
+def is_macos() -> bool:
+    """Checks if the current platform is macOS."""
+    return sys.platform == "darwin"
+
+def is_linux() -> bool:
+    """Checks if the current platform is Linux."""
+    return sys.platform.startswith("linux")
+
+def is_flatpak() -> bool:
+    """
+    Checks if the application is running inside a Flatpak sandbox.
+    Tries to detect Flatpak by checking for the /.flatpak-info file
+    or the FLATPAK_ID environment variable.
+    """
+    # Check for the presence of a known Flatpak file
+    if os.path.exists('/.flatpak-info'):
+        return True
+    # Check for a Flatpak-specific environment variable
+    if os.environ.get('FLATPAK_ID'):
+        return True
+    return False

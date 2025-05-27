@@ -680,6 +680,214 @@ class TestNmapScanner(unittest.TestCase):
 
     # --- End of pkexec logic Tests ---
 
+# Separate class for testing the _execute_with_privileges method and its integration in scan()
+class TestNmapScannerPrivilegeExecution(unittest.TestCase):
+    def setUp(self):
+        # We need a scanner instance.
+        # Since __init__ now calls shutil.which, we might need to patch it globally for this test class
+        # if we don't want actual file system checks during setup.
+        # For now, let's assume NmapScanner() can be instantiated; specific tests will patch shutil.which as needed.
+        with patch('src.nmap_scanner.shutil.which', return_value='/fake/nmap'): # Default mock for setup
+            self.scanner = NmapScanner()
+        self.scanner.nm = MagicMock() # Mock the PortScanner object within NmapScanner
+
+    def _configure_gsettings_mock(self, mock_gio_settings_constructor, defaults=None, dns=""):
+        if defaults is None:
+            defaults = "" # Default to empty string for nmap arguments
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.get_string.side_effect = lambda key: defaults if key == "default-nmap-arguments" else dns if key == "dns-servers" else ""
+        mock_gio_settings_constructor.return_value = mock_settings_instance
+        return mock_settings_instance
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=False)
+    @patch('src.nmap_scanner.is_macos', return_value=True)
+    def test_execute_privileges_macos(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_subprocess_run):
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+        nmap_base = ['/usr/local/bin/nmap']
+        scan_args = ['-sS', '-p', '80']
+        target = 'localhost'
+        
+        # Expected Nmap command string for AppleScript
+        # shlex.join will handle spaces in args if any: e.g., shlex.join(['nmap', '--script', 'http-title, "safe space"'])
+        # -> "nmap --script 'http-title, \"safe space\"'" or similar.
+        # Then, internal quotes are escaped: "nmap --script 'http-title, \\\"safe space\\\"'"
+        expected_nmap_cmd_str = '/usr/local/bin/nmap -sS -p 80 localhost' # Simple case, no complex quoting by shlex.join
+        expected_applescript_cmd = f'do shell script "{expected_nmap_cmd_str.replace("\"", "\\\"")}" with administrator privileges'
+
+        self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        
+        mock_subprocess_run.assert_called_once()
+        called_cmd = mock_subprocess_run.call_args[0][0]
+        self.assertEqual(called_cmd[0], "osascript")
+        self.assertEqual(called_cmd[1], "-e")
+        self.assertEqual(called_cmd[2], expected_applescript_cmd)
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=False)
+    @patch('src.nmap_scanner.is_macos', return_value=True)
+    def test_execute_privileges_macos_complex_args(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_subprocess_run):
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+        nmap_base = ['/usr/local/bin/nmap']
+        # Argument that shlex.join will likely quote: an argument with a space
+        scan_args = ['--script-args', 'http.useragent="My Nmap Agent 1.0"'] 
+        target = 'localhost'
+        
+        # How shlex.join might format it: /usr/local/bin/nmap --script-args 'http.useragent="My Nmap Agent 1.0"' localhost
+        # Then replace('"', '\\"') makes it: /usr/local/bin/nmap --script-args 'http.useragent=\\\"My Nmap Agent 1.0\\\"' localhost
+        # This seems correct for AppleScript's `do shell script "..."`
+        joined_nmap_cmd = shlex.join(nmap_base + scan_args + [target])
+        expected_applescript_cmd = f'do shell script "{joined_nmap_cmd.replace("\"", "\\\"")}" with administrator privileges'
+
+        self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        
+        mock_subprocess_run.assert_called_once()
+        called_cmd = mock_subprocess_run.call_args[0][0]
+        self.assertEqual(called_cmd[0], "osascript")
+        self.assertEqual(called_cmd[2], expected_applescript_cmd)
+
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_flatpak', return_value=True)
+    @patch('src.nmap_scanner.is_linux', return_value=True) # is_flatpak should take precedence
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    def test_execute_privileges_flatpak(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_subprocess_run):
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+        nmap_base = ['nmap'] # Typically 'nmap' for flatpak-spawn --host
+        scan_args = ['-O']
+        target = 'host2'
+        
+        self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        expected_cmd = ['flatpak-spawn', '--host', 'pkexec', 'nmap', '-O', 'host2']
+        mock_subprocess_run.assert_called_once_with(expected_cmd, capture_output=True, text=True, check=False)
+
+    @patch('src.nmap_scanner.subprocess.run')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=True)
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    def test_execute_privileges_linux(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_subprocess_run):
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+        nmap_base = ['/usr/bin/nmap']
+        scan_args = ['-sU', '-p', '161']
+        target = 'host3'
+
+        self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        expected_cmd = ['pkexec', '/usr/bin/nmap', '-sU', '-p', '161', 'host3']
+        mock_subprocess_run.assert_called_once_with(expected_cmd, capture_output=True, text=True, check=False)
+
+    @patch('src.nmap_scanner.sys.platform', "win32") # Mock sys.platform directly for unsupported
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=False)
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    def test_execute_privileges_unsupported_os(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_sys_platform_val):
+        # mock_sys_platform_val is not used directly, but sys.platform is patched
+        nmap_base = ['nmap']
+        scan_args = ['-T4']
+        target = 'host4'
+
+        result = self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Privilege escalation not supported on this platform: win32", result.stderr)
+
+    @patch('src.nmap_scanner.subprocess.run', side_effect=FileNotFoundError("pkexec not found"))
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=True) # Simulate Linux for pkexec
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    def test_execute_privileges_escalation_tool_not_found(self, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_subprocess_run):
+        nmap_base = ['/usr/bin/nmap']
+        scan_args = ['-sS']
+        target = 'host5'
+
+        result = self.scanner._execute_with_privileges(nmap_base, scan_args, target)
+        self.assertEqual(result.returncode, 127)
+        self.assertIn("Escalation command 'pkexec' not found", result.stderr)
+
+    # Tests for scan() method's determination of nmap_cmd_for_escalation
+    @patch('src.nmap_scanner.NmapScanner._execute_with_privileges') # Spy on this method
+    @patch('src.nmap_scanner.is_root', return_value=False) # Needs escalation
+    @patch('src.nmap_scanner.shutil.which')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=False)
+    @patch('src.nmap_scanner.is_macos', return_value=True)
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_macos_nmap_path_found(self, mock_gio_settings, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_shutil_which, mock_is_root, mock_execute_priv):
+        self._configure_gsettings_mock(mock_gio_settings)
+        mock_shutil_which.return_value = '/opt/local/bin/nmap'
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock() # Avoid issues with parsing None
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None)) # Avoid issues
+        mock_execute_priv.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="") # OS fingerprint needs root
+        mock_execute_priv.assert_called_once()
+        called_nmap_base_cmd_list = mock_execute_priv.call_args[0][0]
+        self.assertEqual(called_nmap_base_cmd_list, ['/opt/local/bin/nmap'])
+
+    @patch('src.nmap_scanner.NmapScanner._execute_with_privileges')
+    @patch('src.nmap_scanner.is_root', return_value=False)
+    @patch('src.nmap_scanner.shutil.which')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=False)
+    @patch('src.nmap_scanner.is_macos', return_value=True)
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_macos_nmap_path_fallback(self, mock_gio_settings, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_shutil_which, mock_is_root, mock_execute_priv):
+        self._configure_gsettings_mock(mock_gio_settings)
+        mock_shutil_which.return_value = None # Simulate nmap not in PATH
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+        mock_execute_priv.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="")
+        mock_execute_priv.assert_called_once()
+        called_nmap_base_cmd_list = mock_execute_priv.call_args[0][0]
+        self.assertEqual(called_nmap_base_cmd_list, ['/usr/local/bin/nmap']) # Default for macOS
+
+    @patch('src.nmap_scanner.NmapScanner._execute_with_privileges')
+    @patch('src.nmap_scanner.is_root', return_value=False)
+    @patch('src.nmap_scanner.shutil.which')
+    @patch('src.nmap_scanner.is_flatpak', return_value=False)
+    @patch('src.nmap_scanner.is_linux', return_value=True) # Linux, not Flatpak
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_linux_nmap_path_fallback(self, mock_gio_settings, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_shutil_which, mock_is_root, mock_execute_priv):
+        self._configure_gsettings_mock(mock_gio_settings)
+        mock_shutil_which.return_value = None # Simulate nmap not in PATH
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+        mock_execute_priv.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="")
+        mock_execute_priv.assert_called_once()
+        called_nmap_base_cmd_list = mock_execute_priv.call_args[0][0]
+        self.assertEqual(called_nmap_base_cmd_list, ['/usr/bin/nmap']) # Default for Linux
+
+    @patch('src.nmap_scanner.NmapScanner._execute_with_privileges')
+    @patch('src.nmap_scanner.is_root', return_value=False)
+    @patch('src.nmap_scanner.shutil.which') # Should ideally not be called for flatpak path logic for escalation
+    @patch('src.nmap_scanner.is_flatpak', return_value=True) # Flatpak
+    @patch('src.nmap_scanner.is_linux', return_value=True) # is_flatpak takes precedence
+    @patch('src.nmap_scanner.is_macos', return_value=False)
+    @patch('src.nmap_scanner.Gio.Settings')
+    def test_scan_flatpak_nmap_path(self, mock_gio_settings, mock_is_macos, mock_is_linux, mock_is_flatpak, mock_shutil_which, mock_is_root, mock_execute_priv):
+        self._configure_gsettings_mock(mock_gio_settings)
+        self.scanner.nm.analyse_nmap_xml_scan = MagicMock()
+        self.scanner._parse_scan_results = MagicMock(return_value=([], None))
+        mock_execute_priv.return_value = MagicMock(returncode=0, stdout="<nmaprun></nmaprun>", stderr="")
+
+        self.scanner.scan("localhost", do_os_fingerprint=True, additional_args_str="")
+        mock_execute_priv.assert_called_once()
+        called_nmap_base_cmd_list = mock_execute_priv.call_args[0][0]
+        self.assertEqual(called_nmap_base_cmd_list, ['nmap']) # 'nmap' for flatpak-spawn --host
+        # Verify shutil.which was NOT called in the Flatpak path determination for escalation cmd
+        # This depends on the implementation detail in scan()
+        # The current implementation of scan() for flatpak defaults to 'nmap' for nmap_cmd_for_escalation
+        # without calling shutil.which in that specific branch.
+        # So, if is_flatpak() is true, shutil.which should not be called for determining nmap_cmd_for_escalation
+        # (it might be called by NmapScanner.__init__ though, so clear its mock if needed for this specific check)
+        # For this test, we are interested in the args to _execute_with_privileges.
+        # It's simpler to just assert the argument.
 
     # --- End of New GSettings Tests ---
 
