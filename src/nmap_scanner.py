@@ -148,7 +148,7 @@ class NmapScanner:
 
         ROOT_REQUIRING_ARGS = [
             "-sS", "-sU", "-sN", "-sF", "-sX", "-sA", "-sW", "-sM",
-            "-sI", "-sY", "-sZ", "-sO",
+            "-sI", "-sY", "-sZ", "-sO", "-O", # Added -O (OS detection), -sO is protocol scan
             "-D", "-S", "--send-eth", "--send-ip", "--privileged"
         ]
         
