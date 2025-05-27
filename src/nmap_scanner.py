@@ -1,4 +1,5 @@
 from gi.repository import GLib # Added for GLib.markup_escape_text
+from gi.repository import Gio
 
 try:
     import nmap
@@ -41,7 +42,7 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
-        default_args_str: Optional[str] = None,
+        # default_args_str: Optional[str] = None, # Removed
         stealth_scan: bool = False,
         port_spec: Optional[str] = None,        # New
         timing_template: Optional[str] = None,  # New
@@ -55,7 +56,7 @@ class NmapScanner:
             do_os_fingerprint: Whether to perform OS fingerprinting (-O).
             additional_args_str: A string of additional Nmap arguments.
             nse_script: Optional name of an NSE script to run.
-            default_args_str: Optional string of default arguments to prepend.
+            # default_args_str: Optional string of default arguments to prepend. # Removed
 
         Returns:
             A tuple containing:
@@ -64,12 +65,22 @@ class NmapScanner:
                   Nmap error occurs.
                 - An error message string if an error occurred, otherwise None.
         """
+        gsettings_default_args: Optional[str] = None
+        try:
+            settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+            gsettings_default_args = settings.get_string("default-nmap-arguments")
+        except Exception as e:
+            # Log or print warning if GSettings access fails
+            import sys
+            print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=sys.stderr)
+            # gsettings_default_args remains None, build_scan_args should handle it
+
         try:
             scan_args_str = self.build_scan_args(
                 do_os_fingerprint,
                 additional_args_str,
                 nse_script,
-                default_args_str,
+                gsettings_default_args, # Use GSettings value
                 stealth_scan=stealth_scan,
                 port_spec=port_spec,                # New
                 timing_template=timing_template,    # New
@@ -199,14 +210,14 @@ class NmapScanner:
         if do_os_fingerprint and "-O" not in final_args:
             final_args.append("-O")
 
-        sV_implied = any(arg in ["-sV", "-A"] for arg in final_args)
-        if not sV_implied:
-            final_args.append("-sV")
+        # sV_implied = any(arg in ["-sV", "-A"] for arg in final_args) # Removed
+        # if not sV_implied: # Removed
+        #     final_args.append("-sV") # Removed
 
-        host_timeout_present = any(arg.startswith("--host-timeout") for arg in final_args)
-        if not host_timeout_present:
-            DEFAULT_HOST_TIMEOUT = "60s"
-            final_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}")
+        # host_timeout_present = any(arg.startswith("--host-timeout") for arg in final_args) # Removed
+        # if not host_timeout_present: # Removed
+        #     DEFAULT_HOST_TIMEOUT = "60s" # Removed
+        #     final_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}") # Removed
 
         if nse_script:
             final_args.append(f"--script={nse_script}")
@@ -250,6 +261,26 @@ class NmapScanner:
                 # Ensure sys is imported if not already, for the warning
                 import sys
                 print(f"Warning: Timing template ({timing_template}) might conflict with existing -T arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=sys.stderr)
+
+        # Add DNS servers from GSettings
+        try:
+            settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
+            dns_servers_str = settings.get_string("dns-servers")
+            if dns_servers_str:
+                dns_servers = [server.strip() for server in dns_servers_str.split(',') if server.strip()]
+                if dns_servers:
+                    # Check if --dns-servers is already present
+                    if not any(arg.startswith("--dns-servers") for arg in final_args):
+                        final_args.append(f"--dns-servers={','.join(dns_servers)}")
+                    else:
+                        # Optionally, print a warning if it's already set by the user
+                        import sys
+                        print("Warning: --dns-servers argument already provided by user or default args. GSettings will not override.", file=sys.stderr)
+        except Exception as e:
+            # Handle cases where GSettings might not be available (e.g., running in a non-desktop environment)
+            # or the schema is not found. Print a warning or log this.
+            import sys
+            print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
 
         return " ".join(final_args)
 
