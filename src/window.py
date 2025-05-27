@@ -500,8 +500,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         Worker function to perform the Nmap scan.
         This method is run in a separate thread.
         """
-        settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
-        default_args_from_settings: str = settings.get_string("default-nmap-arguments")
+        # settings = Gio.Settings.new("com.github.mclellac.NetworkMap") # No longer needed here for default_args
+        # default_args_from_settings: str = settings.get_string("default-nmap-arguments") # Removed
 
         error_type: Optional[str] = None
         error_message: Optional[str] = None
@@ -513,7 +513,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 do_os_fingerprint,
                 additional_args_str,
                 self.selected_nse_script,
-                default_args_str=default_args_from_settings,
+                # default_args_str=default_args_from_settings, # Removed
                 stealth_scan=do_stealth_scan,
                 port_spec=port_spec_str,                # New
                 timing_template=timing_template_val,    # New
