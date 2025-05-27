@@ -21,96 +21,76 @@ class NseScriptSelectionDialog(Adw.Dialog):
         'scripts-selected': (GObject.SignalFlags.RUN_FIRST, None, (str,))
     }
 
-    def __init__(self, parent_window: Gtk.Window, current_scripts_str: Optional[str] = None):
-        # super().__init__(transient_for=parent_window, modal=True) # Adw.Dialog doesn't take these in constructor
-                                                                  # We set them after super if needed,
-                                                                  # but for Adw.Dialog, present(parent) handles transiency
-                                                                  # and they are modal by nature.
-                                                                  # Let's remove these from super() call for Adw.Dialog.
-        # super().__init__() # Correct for Adw.Dialog that doesn't take these in constructor.
-        # Actually, Adw.Dialog can take transient_for and modal in its PyGObject constructor
-        # Let's stick to what works for Adw.Dialog based on PyGObject bindings.
-        # The most reliable for Adw.Dialog is often to set them after if not using a .ui file.
-        # However, for this task, let's assume the simpler Adw.Dialog constructor without explicit parent/modal here,
-        # as it will be presented modally via profile_editor_dialog.
+    def __init__(self, parent_window: Optional[Gtk.Window] = None, current_scripts_str: Optional[str] = None):
+        super().__init__()
 
-        super().__init__() # Simplest Adw.Dialog constructor
         if parent_window:
-             self.set_transient_for(parent_window) # Standard GTK Window method
-        self.set_modal(True) # Standard GTK Window method
-
-
+            self.set_transient_for(parent_window)
+        self.set_modal(True)
         self.set_title("Select NSE Scripts")
         self.set_default_size(500, 400)
 
-        self.current_selected_scripts = set(s.strip() for s in current_scripts_str.split(',') if s.strip()) if current_scripts_str else set()
+        # Parse current scripts string into a set for efficient lookup
+        self.current_selected_scripts: set[str] = set()
+        if current_scripts_str:
+            self.current_selected_scripts = set(s.strip() for s in current_scripts_str.split(',') if s.strip())
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        main_box.set_margin_top(12)
-        main_box.set_margin_bottom(12)
-        main_box.set_margin_start(12)
-        main_box.set_margin_end(12)
-        self.set_child(main_box) # For Adw.Dialog
+        # Main layout box
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        self.set_child(main_box)
 
-        # Scrolled Window for script list
-        scrolled_window = Gtk.ScrolledWindow()
-        scrolled_window.set_has_frame(True)
-        scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled_window.set_vexpand(True)
+        # Scrolled window for the list of scripts
+        scrolled_window = Gtk.ScrolledWindow(has_frame=True, policy=(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC), vexpand=True)
         main_box.append(scrolled_window)
 
-        self.list_box = Gtk.ListBox()
-        self.list_box.set_selection_mode(Gtk.SelectionMode.NONE)
+        # ListBox to hold script rows
+        self.list_box = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         scrolled_window.set_child(self.list_box)
 
-        self.check_buttons = {} # To store script_name: Gtk.CheckButton
+        self.check_buttons: dict[str, Gtk.CheckButton] = {} # Stores script_name: Gtk.CheckButton
 
+        # Populate list with predefined NSE scripts
         for display_name, script_name in PREDEFINED_NSE_SCRIPTS:
             row = Adw.ActionRow(title=display_name)
-            check_button = Gtk.CheckButton()
-            check_button.set_active(script_name in self.current_selected_scripts)
-            # Store a reference or the script name with the check_button
+            check_button = Gtk.CheckButton(active=(script_name in self.current_selected_scripts))
             self.check_buttons[script_name] = check_button
             
             row.add_suffix(check_button)
-            row.set_activatable_widget(check_button) # Click row to toggle checkbutton
+            row.set_activatable_widget(check_button) # Allows toggling by clicking the row
             self.list_box.append(row)
 
-        # Action buttons
-        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.END)
-        action_box.set_margin_top(12)
+        # Action buttons (Cancel, Select)
+        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.END, margin_top=12)
         
-        self.cancel_button = Gtk.Button(label="Cancel")
-        self.cancel_button.connect("clicked", self._on_cancel_clicked)
-        action_box.append(self.cancel_button)
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.connect("clicked", self._on_cancel_clicked)
+        action_box.append(cancel_button)
 
-        self.select_button = Gtk.Button(label="Select")
-        self.select_button.add_css_class("suggested-action")
-        self.select_button.connect("clicked", self._on_select_clicked)
-        action_box.append(self.select_button)
+        select_button = Gtk.Button(label="Select", css_classes=["suggested-action"])
+        select_button.connect("clicked", self._on_select_clicked)
+        action_box.append(select_button)
         
         main_box.append(action_box)
 
-    def _on_cancel_clicked(self, button: Gtk.Button):
+    def _on_cancel_clicked(self, button: Gtk.Button) -> None:
+        """Handles the Cancel button click event."""
         self.close()
 
-    def _on_select_clicked(self, button: Gtk.Button):
-        selected_scripts_list = []
-        for script_name, check_button in self.check_buttons.items():
-            if check_button.get_active():
-                selected_scripts_list.append(script_name)
+    def _on_select_clicked(self, button: Gtk.Button) -> None:
+        """Handles the Select button click event, emitting selected scripts."""
+        selected_scripts_list = [
+            script_name for script_name, check_button in self.check_buttons.items() if check_button.get_active()
+        ]
         
-        # (Optional: If an EntryRow for custom scripts was added, append its content too)
-        # custom_scripts = self.custom_script_entry.get_text().strip()
-        # if custom_scripts:
-        #    selected_scripts_list.extend([s.strip() for s in custom_scripts.split(',') if s.strip()])
+        # Future extension: Add custom scripts from an entry if implemented
+        # custom_scripts_text = self.custom_script_entry.get_text().strip()
+        # if custom_scripts_text:
+        #     selected_scripts_list.extend([s.strip() for s in custom_scripts_text.split(',') if s.strip()])
 
-        # Remove duplicates that might arise if custom entry duplicated a checked one
-        # final_scripts_set = set(selected_scripts_list) 
-        # final_scripts_str = ",".join(sorted(list(final_scripts_set))) # Sorted for consistency
-
-        final_scripts_str = ",".join(sorted(selected_scripts_list))
-
+        # Join sorted list of unique script names
+        # Using a set then list ensures uniqueness if custom scripts could duplicate checked ones.
+        # For now, only predefined scripts are handled, so direct list comprehension is fine.
+        final_scripts_str = ",".join(sorted(list(set(selected_scripts_list))))
 
         self.emit("scripts-selected", final_scripts_str)
         self.close()

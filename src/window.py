@@ -45,27 +45,45 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
         self.target_history_list: List[str] = list(self.settings.get_strv(self.TARGET_HISTORY_SCHEMA_KEY))
-        
         self.font_css_provider = Gtk.CssProvider()
+        self.profile_manager = ProfileManager()
+
+        self._connect_settings_signals()
+        self._connect_ui_element_signals()
         
+        self._initialize_ui_elements()
+        GLib.idle_add(self._apply_font_preference) # Apply initial font once UI is ready
+
+    def _connect_settings_signals(self) -> None:
+        """Connects signals from GSettings to their handlers."""
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview)
         self.settings.connect("changed::dns-servers", self._update_nmap_command_preview)
-        
-        self.profile_manager = ProfileManager()
         self.settings.connect(f"changed::{PROFILES_SCHEMA_KEY}", lambda s, k: self._populate_profile_combo())
         self.settings.connect(f"changed::{self.TARGET_HISTORY_SCHEMA_KEY}", self._on_target_history_changed)
-        
-        self._connect_signals()
-        
-        self._populate_profile_combo() 
-        self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
 
-        self._populate_nse_script_combo() 
-        self._populate_timing_template_combo() 
-        self._update_nmap_command_preview() 
+    def _connect_ui_element_signals(self) -> None:
+        """Connects signals from UI elements to their handlers."""
+        self.target_entry_row.connect("apply", self._on_scan_button_clicked)
+        self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
+        self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
+        # Signals for updating Nmap command preview
+        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
+        self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
+
+    def _initialize_ui_elements(self) -> None:
+        """Initializes UI elements like combo boxes and sets the initial UI state."""
+        self._populate_profile_combo()
+        self._populate_nse_script_combo()
+        self._populate_timing_template_combo()
+        self._update_nmap_command_preview()
         self._update_ui_state("ready")
-        GLib.idle_add(self._apply_font_preference)
 
     def _populate_profile_combo(self) -> None:
         """Populates the scan profile selection combobox."""
@@ -74,7 +92,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         
         string_list_model = Gtk.StringList.new(profile_names)
         self.profile_combo_row.set_model(string_list_model)
-        self.profile_combo_row.set_selected(0) 
+        # Ensure selection is valid, especially if profiles list is empty.
+        if string_list_model.get_n_items() > 0:
+            self.profile_combo_row.set_selected(0)
+        else:
+            # Handle case with no profiles (should at least have "Manual Configuration")
+            # This might indicate an issue if "Manual Configuration" isn't even there.
+            print("Warning: Profile combo box is empty after population.", file=sys.stderr)
+
 
     def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """Handles changes in the selected scan profile."""
@@ -154,37 +179,46 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _apply_font_preference(self) -> None:
         """Applies the font preference from GSettings to dynamic Gtk.TextViews."""
         font_str = self.settings.get_string("results-font")
-        css_data = ""
+        css_data = b""  # Start with empty bytes for CSS data
+
         if font_str:
             try:
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
+                # Attempt to get size, check if it's set, and convert from Pango units
                 size_points = 0
-                if hasattr(font_desc, 'get_size_is_set') and font_desc.get_size_is_set():
+                if font_desc.get_size() != 0 : # Checks if size is set (0 means not set for Pango.FontDescription)
                     size_points = font_desc.get_size() / Pango.SCALE
-                elif not hasattr(font_desc, 'get_size_is_set'): 
-                    pango_size = font_desc.get_size()
-                    if pango_size > 0: size_points = pango_size / Pango.SCALE
                 
-                if family and size_points > 0:
-                    css_data = f"* {{ font-family: \"{family}\"; font-size: {size_points}pt; }}"
-                elif family:
-                    css_data = f"* {{ font-family: \"{family}\"; }}"
-            except Exception as e:
-                print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will be empty.", file=sys.stderr)
-        
-        if hasattr(self, 'font_css_provider'):
-            self.font_css_provider.load_from_data(css_data.encode())
-            # Iterate over ListBox children safely
-            child = self.results_listbox.get_first_child()
-            while child:
-                if isinstance(child, HostInfoExpanderRow):
-                    text_view = child.get_text_view()
-                    if text_view:
-                        text_view.get_style_context().add_provider(
-                            self.font_css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-                child = child.get_next_sibling()
+                css_rules = []
+                if family:
+                    css_rules.append(f"font-family: \"{family}\";")
+                if size_points > 0:
+                    css_rules.append(f"font-size: {size_points}pt;")
+                
+                if css_rules:
+                    css_data = f"* {{ {' '.join(css_rules)} }}".encode()
 
+            except GLib.Error as e: # More specific error handling for Pango
+                print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will not be applied.", file=sys.stderr)
+            except Exception as e: # Catch any other unexpected errors
+                print(f"An unexpected error occurred while parsing font string '{font_str}': {e}. CSS will not be applied.", file=sys.stderr)
+        
+        self.font_css_provider.load_from_data(css_data) # load_from_data expects bytes
+        
+        # Apply to existing and future HostInfoExpanderRow TextViews
+        # This ensures dynamically added rows also get the style.
+        # Iterate over ListBox children safely
+        child = self.results_listbox.get_first_child()
+        while child:
+            if isinstance(child, HostInfoExpanderRow):
+                text_view = child.get_text_view()
+                if text_view: # Ensure text_view is not None
+                    style_context = text_view.get_style_context()
+                    # Remove provider first to prevent multiple additions if this is called multiple times
+                    style_context.remove_provider(self.font_css_provider)
+                    style_context.add_provider(self.font_css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
+            child = child.get_next_sibling()
 
     def _populate_nse_script_combo(self) -> None:
         """Populates the NSE script combo box with discovered scripts."""
@@ -199,30 +233,33 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
         filter_model = Gtk.FilterListModel.new(string_list_model, self.nse_script_filter)
         self.nse_script_combo_row.set_model(filter_model)
-        self.nse_script_combo_row.set_selected(0) 
+        if filter_model.get_n_items() > 0: # Ensure there's something to select
+            self.nse_script_combo_row.set_selected(0)
+        else:
+            print("Warning: NSE script combo box is empty after population.", file=sys.stderr)
 
-    def _connect_signals(self) -> None:
-        """Connects UI signals to their handlers."""
-        self.target_entry_row.connect("apply", self._on_scan_button_clicked)
-        self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
-
-        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
-        self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
-        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
-        self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
-        self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """Handles selection change in the NSE script combo box."""
-        selected_item = combo_row.get_selected_item() 
+        selected_item = combo_row.get_selected_item()
+        
+        # The item in a FilterListModel wrapping a StringList is a StringObject
         if isinstance(selected_item, Gtk.StringObject):
             selected_value = selected_item.get_string()
+            # "None" is the placeholder for no script
             self.selected_nse_script = None if selected_value == "None" else selected_value
-        else:
+        elif selected_item is None and combo_row.get_selected() == Gtk.INVALID_LIST_POSITION:
+            # This case handles when the filter might result in no selectable items or an explicit deselection
             self.selected_nse_script = None
+            # Optionally, reset combo to a default if current filter text doesn't match "None"
+            # and "None" is a valid item (which it should be, at index 0 of the base model).
+            # This logic might be complex depending on desired UX with filtering.
+            # For now, simply setting to None if nothing valid is selected.
+        else:
+            # Fallback or if the model structure changes unexpectedly
+            self.selected_nse_script = None
+            print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
+
         self._update_nmap_command_preview()
 
     def _on_timing_template_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
@@ -268,51 +305,82 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _apply_scan_profile(self, profile: Optional[ScanProfile]) -> None:
         """Applies settings from a scan profile to the UI. Resets if profile is None."""
-        if not profile: 
-            self.os_fingerprint_switch.set_active(False)
-            self.stealth_scan_switch.set_active(False)
-            self.no_ping_switch.set_active(False)
-            self.port_spec_entry_row.set_text("")
-            self.arguments_entry_row.set_text("")
-            self.nse_script_combo_row.set_selected(0) 
-            self.timing_template_combo_row.set_selected(0) 
-            self.selected_nse_script = None 
-            self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
+        # Default/reset values
+        defaults = {
+            'os_fingerprint': False, 'stealth_scan': False, 'no_ping': False,
+            'ports': "", 'additional_args': "", 'nse_script': None,
+            'timing_template': self.timing_options.get(list(self.timing_options.keys())[0]) # Default T3
+        }
+
+        config = profile if profile else defaults
+
+        self.os_fingerprint_switch.set_active(config['os_fingerprint'])
+        self.stealth_scan_switch.set_active(config['stealth_scan'])
+        self.no_ping_switch.set_active(config['no_ping'])
+        self.port_spec_entry_row.set_text(config['ports'])
+        self.arguments_entry_row.set_text(config['additional_args'])
+
+        # Handle NSE script selection
+        self.selected_nse_script = config.get('nse_script') # Use .get for safety
+        if self.selected_nse_script:
+            # The model for nse_script_combo_row is a FilterListModel -> StringList
+            base_model = self.nse_script_combo_row.get_model()
+            if isinstance(base_model, Gtk.FilterListModel):
+                source_model = base_model.get_model()
+                if isinstance(source_model, Gtk.StringList):
+                    # Find the index of the script in the source model
+                    # Note: This assumes script names are unique and directly in the list.
+                    # If the list can be very long, a more efficient lookup might be needed.
+                    # However, for typical NSE script counts, this linear scan is acceptable.
+                    item_found = False
+                    for i in range(source_model.get_n_items()):
+                        if source_model.get_string(i) == self.selected_nse_script:
+                            # Need to map this index to the filtered model if a filter is active.
+                            # This part is tricky if the filter hides the item.
+                            # For simplicity, assume if a profile sets it, it should be findable.
+                            # Or, we might need to ensure the filter is cleared/adjusted.
+                            # A direct self.nse_script_combo_row.set_selected(i) might not work as expected
+                            # if 'i' is an index from the source_model and not the filter_model.
+                            # A robust way is to iterate selected_item.get_string() over the filter_model.
+                            # However, Adw.ComboRow allows setting selected by finding the item.
+                            # Let's try to find it in the filtered model directly.
+                            # This requires iterating items in the *filtered* model.
+                            current_filter_model = self.nse_script_combo_row.get_model() # This is the FilterListModel
+                            for j in range(current_filter_model.get_n_items()):
+                                item = current_filter_model.get_item(j) # Gtk.StringObject
+                                if isinstance(item, Gtk.StringObject) and item.get_string() == self.selected_nse_script:
+                                    self.nse_script_combo_row.set_selected(j)
+                                    item_found = True
+                                    break
+                            if not item_found:
+                                self.nse_script_combo_row.set_selected(0) # Fallback to "None"
+                                self.selected_nse_script = None
+                            break 
+                    if not item_found and not self.selected_nse_script : # If loop completed and not found
+                         self.nse_script_combo_row.set_selected(0) # Fallback to "None"
+                         self.selected_nse_script = None
         else:
-            self.os_fingerprint_switch.set_active(profile['os_fingerprint'])
-            self.stealth_scan_switch.set_active(profile['stealth_scan'])
-            self.no_ping_switch.set_active(profile['no_ping'])
-            self.port_spec_entry_row.set_text(profile['ports'])
-            self.arguments_entry_row.set_text(profile['additional_args'])
+            self.nse_script_combo_row.set_selected(0) # "None"
+            self.selected_nse_script = None
 
-            self.selected_nse_script = None 
-            if profile['nse_script']:
-                string_list_model = self.nse_script_combo_row.get_model()
-                if isinstance(string_list_model, Gtk.FilterListModel):
-                    string_list_model = string_list_model.get_model() 
-                if isinstance(string_list_model, Gtk.StringList):
-                    for i in range(string_list_model.get_n_items()):
-                        if string_list_model.get_string(i) == profile['nse_script']:
-                            self.nse_script_combo_row.set_selected(i)
-                            self.selected_nse_script = profile['nse_script']
-                            break
-            if not self.selected_nse_script and profile['nse_script']: 
-                self.nse_script_combo_row.set_selected(0)
-
-            self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0]) 
-            if profile['timing_template']:
-                target_timing_arg = profile['timing_template']
-                found_timing_display_name = next((dn for dn, arg in self.timing_options.items() if arg == target_timing_arg), None)
-                
+        # Handle timing template selection
+        self.selected_timing_template = config.get('timing_template', self.timing_options.get(list(self.timing_options.keys())[0]))
+        if self.selected_timing_template:
+            # Find the display name for this timing argument
+            display_name = next((dn for dn, arg in self.timing_options.items() if arg == self.selected_timing_template), None)
+            if display_name:
                 timing_model = self.timing_template_combo_row.get_model()
-                if found_timing_display_name and isinstance(timing_model, Gtk.StringList):
+                if isinstance(timing_model, Gtk.StringList): # Timing combo uses StringList directly
                     for i in range(timing_model.get_n_items()):
-                        if timing_model.get_string(i) == found_timing_display_name:
+                        if timing_model.get_string(i) == display_name:
                             self.timing_template_combo_row.set_selected(i)
-                            self.selected_timing_template = target_timing_arg
                             break
-            if not self.selected_timing_template and profile['timing_template']: 
-                 self.timing_template_combo_row.set_selected(0)
+            else: # If timing_template from profile is not in known options, reset
+                self.timing_template_combo_row.set_selected(0) # Default T3
+                self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
+        else: # No timing template specified or it was None
+            self.timing_template_combo_row.set_selected(0) # Default T3
+            self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
             
         self._update_nmap_command_preview()
 
@@ -375,67 +443,79 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                          nse_script: Optional[str], stealth_scan: bool, port_spec_str: Optional[str], 
                          timing_template_val: Optional[str], do_no_ping_val: bool) -> None:
         """Worker function to perform Nmap scan (runs in a separate thread)."""
-        error_type: Optional[str] = None
-        error_message: Optional[str] = None
-        hosts_data: Optional[List[Dict[str, Any]]] = None
+        scan_result: Dict[str, Any] = {
+            "hosts_data": None,
+            "error_type": None,
+            "error_message": None,
+            "scan_message": None # For messages like "No hosts found"
+        }
 
         try:
             hosts_data, scan_message = self.nmap_scanner.scan(
                 target=target,
                 do_os_fingerprint=do_os_fingerprint,
                 additional_args_str=additional_args_str,
-                nse_script=nse_script, 
+                nse_script=nse_script,
                 stealth_scan=stealth_scan,
-                port_spec=port_spec_str, # Corrected key
-                timing_template=timing_template_val, # Corrected key
-                no_ping=do_no_ping_val # Corrected key
+                port_spec=port_spec_str,
+                timing_template=timing_template_val,
+                no_ping=do_no_ping_val
             )
-            if scan_message and not hosts_data: 
-                error_type = "ScanMessage" 
-                error_message = scan_message
+            scan_result["hosts_data"] = hosts_data
+            scan_result["scan_message"] = scan_message # Store message even if hosts_data is present
+
         except (NmapArgumentError, NmapScanParseError) as e:
-            error_type = type(e).__name__
-            error_message = str(e)
-        except Exception as e: 
-            error_type = type(e).__name__
-            error_message = f"An unexpected error occurred in the scan worker: {str(e)}"
+            scan_result["error_type"] = type(e).__name__
+            scan_result["error_message"] = str(e)
+        except Exception as e:
+            scan_result["error_type"] = "UnexpectedError" # More generic type
+            scan_result["error_message"] = f"An unexpected error occurred in the scan worker: {str(e)}"
+            # Optionally log traceback here for debugging unexpected errors
+            # import traceback
+            # print(traceback.format_exc(), file=sys.stderr)
 
-        GLib.idle_add(self._process_scan_completion, hosts_data, error_type, error_message)
+        GLib.idle_add(self._process_scan_completion, scan_result)
 
-    def _process_scan_completion(
-        self, hosts_data: Optional[List[Dict[str, Any]]], error_type: Optional[str], error_message: Optional[str]
-    ) -> None:
+    def _process_scan_completion(self, scan_result: Dict[str, Any]) -> None:
         """Handles UI updates after the Nmap scan worker finishes."""
-        if error_type and error_message != "No hosts found.": 
-            self.current_scan_results = None
+        hosts_data = scan_result["hosts_data"]
+        error_type = scan_result["error_type"]
+        error_message = scan_result["error_message"]
+        scan_message = scan_result["scan_message"] # Message from nmap_scanner.scan
+
+        self.current_scan_results = hosts_data if hosts_data is not None else []
+
+        if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
             self._update_ui_state("error", error_message)
             self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'Unknown error'}"))
-        elif hosts_data:  
-            self.current_scan_results = hosts_data
+        elif hosts_data:
             self._populate_results_listbox(hosts_data)
-            self.status_page.set_property("description", "Scan Complete. Select a host to view details.")
+            # If there's a scan_message (e.g. warnings from nmap), it could be shown, but typically success means hosts found.
+            status_desc = "Scan Complete. Select a host to view details."
+            if scan_message and scan_message != "Scan completed successfully.": # Avoid redundant messages
+                status_desc = f"Scan Complete: {scan_message}" # e.g. if nmap had specific warnings but still found hosts
+            self.status_page.set_property("description", status_desc)
             self._update_ui_state("success")
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete."))
-        elif error_type == "ScanMessage" and error_message == "No hosts found.": 
-            self.current_scan_results = []
-            self._clear_results_ui()
+        elif scan_message == "No hosts found.": # Explicitly check for "No hosts found"
+            self._clear_results_ui() # Ensure UI is clean
             self.status_page.set_property("description", "Scan Complete: No hosts found.")
             self._update_ui_state("no_results")
             self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No hosts found."))
-        elif not hosts_data and not error_type: 
-            self.current_scan_results = []
+        # Case: No hosts_data, no error, but scan_message might indicate other issues or empty results
+        elif scan_message: 
             self._clear_results_ui()
-            self.status_page.set_property("description", "Scan Complete: No data received from scan.")
+            self.status_page.set_property("description", f"Scan Complete: {scan_message}")
+            self._update_ui_state("no_data") # Or a more specific state based on message
+            self.toast_overlay.add_toast(Adw.Toast.new(f"Scan finished: {scan_message}"))
+        else: # Fallback for truly empty/unexpected results without error or message
+            self._clear_results_ui()
+            self.status_page.set_property("description", "Scan Complete: No data received and no specific messages.")
             self._update_ui_state("no_data")
-            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data received."))
-        else: 
-             self.current_scan_results = None
-             self._display_scan_error(error_type or "UnknownError", error_message or "An unspecified error occurred.")
-             self._update_ui_state("error", error_message or "An unspecified error occurred.")
-             self.toast_overlay.add_toast(Adw.Toast.new(f"Scan failed: {error_message or 'An unspecified error occurred'}"))
+            self.toast_overlay.add_toast(Adw.Toast.new("Scan complete: No data."))
         
-        pass
+        # No 'pass' needed here explicitly.
 
     def _clear_results_ui(self) -> None:
         """Clears the results listbox."""

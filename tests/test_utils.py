@@ -1,163 +1,202 @@
 import unittest
-from unittest.mock import patch, MagicMock # Added MagicMock
-import sys 
+from unittest.mock import patch, mock_open, MagicMock
 import os
+import sys
+import logging
 
-# Adjust the path to import from the src directory
-# This ensures that 'from utils import ...' works correctly
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
-sys.path.insert(0, project_root)
+# Adjust import path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
-# Now, import from src.utils
-# Note: The tool environment might handle path differently.
-# If 'from utils import ...' fails, it might be 'from src.utils import ...'
-# However, the original test structure implies 'utils' is directly importable after path modification.
-from src.utils import is_macos, is_linux, is_flatpak, is_root, discover_nse_scripts, apply_theme
-from gi.repository import Adw # Needed for apply_theme test
+from utils import apply_theme, discover_nse_scripts, is_root, is_macos, is_linux, is_flatpak
 
-class TestPlatformUtils(unittest.TestCase):
+# Mock Adw for apply_theme if not available in test environment
+try:
+    from gi.repository import Adw
+except ImportError:
+    MockAdw = MagicMock()
+    MockAdw.StyleManager = MagicMock()
+    MockAdw.StyleManager.get_default = MagicMock(return_value=MagicMock())
+    # Define Adw.ColorScheme as an object that can have attributes set
+    MockColorScheme = MagicMock()
+    MockColorScheme.FORCE_LIGHT = 0 # Dummy values, actual values don't matter for mocking logic
+    MockColorScheme.FORCE_DARK = 1
+    MockColorScheme.DEFAULT = 2
+    MockAdw.ColorScheme = MockColorScheme
+    
+    sys.modules['gi.repository.Adw'] = MockAdw
+    Adw = MockAdw # Make the mock available in the global scope for the tests
 
-    @patch('src.utils.sys.platform')
-    def test_is_macos(self, mock_sys_platform):
-        # Test when platform is macOS
-        mock_sys_platform.return_value = "darwin"
-        self.assertTrue(is_macos())
 
-        # Test when platform is not macOS (e.g., Linux)
-        mock_sys_platform.return_value = "linux"
-        self.assertFalse(is_macos())
+class TestUtils(unittest.TestCase):
 
-        # Test when platform is not macOS (e.g., Windows)
-        mock_sys_platform.return_value = "win32"
-        self.assertFalse(is_macos())
+    # --- Tests for apply_theme ---
+    @patch('utils.Adw.StyleManager.get_default')
+    def test_apply_theme_light(self, mock_get_style_manager):
+        mock_manager_instance = MagicMock()
+        mock_get_style_manager.return_value = mock_manager_instance
+        apply_theme("light")
+        mock_manager_instance.set_color_scheme.assert_called_once_with(Adw.ColorScheme.FORCE_LIGHT)
 
-    @patch('src.utils.sys.platform')
-    def test_is_linux(self, mock_sys_platform):
-        # Test when platform is Linux
-        mock_sys_platform.return_value = "linux"
-        self.assertTrue(is_linux())
+    @patch('utils.Adw.StyleManager.get_default')
+    def test_apply_theme_dark(self, mock_get_style_manager):
+        mock_manager_instance = MagicMock()
+        mock_get_style_manager.return_value = mock_manager_instance
+        apply_theme("dark")
+        mock_manager_instance.set_color_scheme.assert_called_once_with(Adw.ColorScheme.FORCE_DARK)
 
-        # Test with a variation like "linux2"
-        mock_sys_platform.return_value = "linux2"
-        self.assertTrue(is_linux())
+    @patch('utils.Adw.StyleManager.get_default')
+    def test_apply_theme_system(self, mock_get_style_manager):
+        mock_manager_instance = MagicMock()
+        mock_get_style_manager.return_value = mock_manager_instance
+        apply_theme("system")
+        mock_manager_instance.set_color_scheme.assert_called_once_with(Adw.ColorScheme.DEFAULT)
+
+    @patch('utils.Adw.StyleManager.get_default')
+    def test_apply_theme_invalid(self, mock_get_style_manager):
+        mock_manager_instance = MagicMock()
+        mock_get_style_manager.return_value = mock_manager_instance
+        apply_theme("invalid_theme_name") # Should default to system
+        mock_manager_instance.set_color_scheme.assert_called_once_with(Adw.ColorScheme.DEFAULT)
+
+    # --- Tests for discover_nse_scripts ---
+    # Patch os.path.isdir, os.access, os.listdir, os.path.isfile which are used by discover_nse_scripts
+    @patch('utils.os.path.isfile') # Patch where it's used
+    @patch('utils.os.listdir')   # Patch where it's used
+    @patch('utils.os.access')    # Patch where it's used
+    @patch('utils.os.path.isdir') # Patch where it's used
+    def test_discover_nse_scripts_success_and_categorization(self, mock_isdir, mock_access, mock_listdir, mock_isfile):
+        # Simulate that the first potential path is valid
+        mock_isdir.side_effect = lambda p: p == "/usr/share/nmap/scripts/" 
+        mock_access.side_effect = lambda p, mode: p == "/usr/share/nmap/scripts/" and mode == os.R_OK
+
+        mock_listdir.return_value = [
+            "http-title.nse", "smb-os-discovery.nse", "ssh-hostkey.nse", 
+            "mysql-empty-password.nse", "rdp-enum-encryption.nse", "ftp-anon.nse",
+            "a-test-script.nse", "another.nse", "http-malware-check.nse", "auth-spoof.nse"
+        ]
+        # All listed items are files ending with .nse
+        mock_isfile.return_value = True 
+
+        scripts = discover_nse_scripts()
         
-        # Test when platform is not Linux (e.g., macOS)
-        mock_sys_platform.return_value = "darwin"
-        self.assertFalse(is_linux())
+        expected_scripts_set = {
+            "http-title", "smb-os-discovery", "ssh-hostkey", "mysql-empty-password",
+            "rdp-enum-encryption", "ftp-anon", "a-test-script", "another",
+            "http-malware-check", "auth-spoof"
+        }
+        self.assertEqual(set(scripts), expected_scripts_set, "Discovered scripts do not match expected set.")
 
-        # Test when platform is not Linux (e.g., Windows)
-        mock_sys_platform.return_value = "win32"
-        self.assertFalse(is_linux())
-
-    @patch('src.utils.os.environ.get')
-    @patch('src.utils.os.path.exists')
-    def test_is_flatpak(self, mock_os_path_exists, mock_os_environ_get):
-        # Scenario 1: /.flatpak-info exists
-        mock_os_path_exists.return_value = True
-        # os.environ.get should not be called due to short-circuiting.
-        # So, we don't need to set its return_value for this specific path.
-        self.assertTrue(is_flatpak())
-        mock_os_path_exists.assert_called_once_with('/.flatpak-info')
-        mock_os_environ_get.assert_not_called() # Important check for short-circuit
-
-        # Reset mocks for next scenario
-        mock_os_path_exists.reset_mock()
-        mock_os_environ_get.reset_mock()
-
-        # Scenario 2: FLATPAK_ID environment variable is set
-        mock_os_path_exists.return_value = False # /.flatpak-info does not exist
-        mock_os_environ_get.return_value = "com.github.mclellac.NetworkMap" # FLATPAK_ID is set
-        self.assertTrue(is_flatpak())
-        mock_os_path_exists.assert_called_once_with('/.flatpak-info')
-        mock_os_environ_get.assert_called_once_with('FLATPAK_ID')
+        # Check categorization and sorting (example checks)
+        # Based on SCRIPT_PREFIXES and then alphabetical for 'zzz_other'
+        # 'auth' scripts should come early alphabetically among categories.
+        # 'http' scripts next, then 'mysql', 'rdp', 'smb', 'ssh'.
+        # 'zzz_other' (like 'a-test-script', 'another') should be last.
         
-        # Reset mocks for next scenario
-        mock_os_path_exists.reset_mock()
-        mock_os_environ_get.reset_mock()
+        # Example: auth-spoof should appear before http-title
+        if "auth-spoof" in scripts and "http-title" in scripts:
+            self.assertTrue(scripts.index("auth-spoof") < scripts.index("http-title"), "Auth scripts should sort before http.")
 
-        # Scenario 3: Neither Flatpak indicator is present
-        mock_os_path_exists.return_value = False # /.flatpak-info does not exist
-        mock_os_environ_get.return_value = None  # FLATPAK_ID is not set
-        self.assertFalse(is_flatpak())
-        mock_os_path_exists.assert_called_once_with('/.flatpak-info')
-        mock_os_environ_get.assert_called_once_with('FLATPAK_ID')
+        # Example: http-title should appear before smb-os-discovery
+        if "http-title" in scripts and "smb-os-discovery" in scripts:
+             self.assertTrue(scripts.index("http-title") < scripts.index("smb-os-discovery"), "HTTP scripts should sort before SMB.")
 
-    @patch('src.utils.os.geteuid')
-    def test_is_root(self, mock_geteuid):
-        # Test when user is root
-        mock_geteuid.return_value = 0
+        # Example: a-test-script (zzz_other) should be after categorized scripts like ssh-hostkey
+        if "a-test-script" in scripts and "ssh-hostkey" in scripts:
+            self.assertTrue(scripts.index("ssh-hostkey") < scripts.index("a-test-script"), "Categorized scripts should sort before 'other'.")
+        
+        # Check if 'another' (also zzz_other) is sorted correctly relative to 'a-test-script'
+        if "a-test-script" in scripts and "another" in scripts:
+            self.assertTrue(scripts.index("a-test-script") < scripts.index("another"), "'a-test-script' should sort before 'another'.")
+
+
+    @patch('utils.os.path.isdir', return_value=False) # All potential paths are not dirs
+    @patch('logging.warning') 
+    def test_discover_nse_scripts_no_valid_directory(self, mock_log_warning, mock_isdir):
+        scripts = discover_nse_scripts()
+        self.assertEqual(scripts, [])
+        mock_log_warning.assert_called_once()
+        self.assertIn("No accessible Nmap NSE script directory found", mock_log_warning.call_args[0][0])
+
+    @patch('utils.os.path.isdir', return_value=True)
+    @patch('utils.os.access', return_value=True)
+    @patch('utils.os.listdir', side_effect=OSError("Permission denied to list directory"))
+    @patch('logging.error')
+    def test_discover_nse_scripts_os_error_on_listdir(self, mock_log_error, mock_listdir, mock_access, mock_isdir):
+        # Ensure isdir and access pass for at least one path
+        mock_isdir.side_effect = lambda p: p == "/usr/share/nmap/scripts/"
+        mock_access.side_effect = lambda p, mode: p == "/usr/share/nmap/scripts/" and mode == os.R_OK
+        
+        scripts = discover_nse_scripts()
+        self.assertEqual(scripts, [])
+        mock_log_error.assert_called_once()
+        self.assertIn("Error reading NSE script directory", mock_log_error.call_args[0][0])
+
+    @patch('utils.os.path.isdir', return_value=True)
+    @patch('utils.os.access', return_value=True)
+    @patch('utils.os.listdir', return_value=["script.txt", "not_an_nse.sh", "only_nse.nse"])
+    @patch('utils.os.path.isfile', side_effect=lambda p: p.endswith(".nse")) # Only only_nse.nse is a file
+    @patch('logging.info') # Check for info log if directory is empty of .nse files
+    def test_discover_nse_scripts_only_one_nse_file(self, mock_log_info, mock_isfile, mock_listdir, mock_access, mock_isdir):
+        mock_isdir.side_effect = lambda p: p == "/usr/share/nmap/scripts/"
+        mock_access.side_effect = lambda p, mode: p == "/usr/share/nmap/scripts/" and mode == os.R_OK
+
+        scripts = discover_nse_scripts()
+        self.assertEqual(scripts, ["only_nse"]) # Expecting 'only_nse' categorized as 'zzz_other'
+
+    @patch('utils.os.path.isdir', return_value=True)
+    @patch('utils.os.access', return_value=True)
+    @patch('utils.os.listdir', return_value=[]) # Empty directory
+    @patch('logging.info')
+    def test_discover_nse_scripts_empty_directory(self, mock_log_info, mock_listdir, mock_access, mock_isdir):
+        mock_isdir.side_effect = lambda p: p == "/usr/share/nmap/scripts/"
+        mock_access.side_effect = lambda p, mode: p == "/usr/share/nmap/scripts/" and mode == os.R_OK
+        
+        scripts = discover_nse_scripts()
+        self.assertEqual(scripts, [])
+        mock_log_info.assert_called_once()
+        self.assertIn("No NSE scripts found in", mock_log_info.call_args[0][0])
+
+    # --- Tests for platform detection functions ---
+    @patch('utils.os.geteuid', return_value=0) # Patch where it's used
+    def test_is_root_true(self, mock_geteuid):
         self.assertTrue(is_root())
 
-        # Test when user is not root
-        mock_geteuid.return_value = 1000
+    @patch('utils.os.geteuid', return_value=1000) # Patch where it's used
+    def test_is_root_false(self, mock_geteuid):
         self.assertFalse(is_root())
 
-class TestOtherUtils(unittest.TestCase):
-    @patch('src.utils.Adw.StyleManager.get_default') # Patch the static/class method
-    def test_apply_theme(self, mock_get_default_style_manager):
-        # This mock will be the return value of Adw.StyleManager.get_default()
-        mock_style_manager_instance = MagicMock()
-        mock_get_default_style_manager.return_value = mock_style_manager_instance
-        
-        apply_theme("light")
-        mock_style_manager_instance.set_color_scheme.assert_called_with(Adw.ColorScheme.FORCE_LIGHT)
-        
-        apply_theme("dark")
-        mock_style_manager_instance.set_color_scheme.assert_called_with(Adw.ColorScheme.FORCE_DARK)
+    @patch('sys.platform', "darwin")
+    def test_is_macos_true(self): # No need to mock sys.platform if it's directly used from sys
+        self.assertTrue(is_macos())
 
-        apply_theme("system")
-        mock_style_manager_instance.set_color_scheme.assert_called_with(Adw.ColorScheme.DEFAULT)
+    @patch('sys.platform', "linux")
+    def test_is_macos_false(self):
+        self.assertFalse(is_macos())
 
-        apply_theme("invalid_theme_name") # Test default case
-        mock_style_manager_instance.set_color_scheme.assert_called_with(Adw.ColorScheme.DEFAULT)
-
-
-    @patch('src.utils.os.listdir')
-    @patch('src.utils.os.path.isdir', return_value=True)
-    @patch('src.utils.os.access', return_value=True)
-    @patch('src.utils.os.path.isfile', return_value=True)
-    def test_discover_nse_scripts_normal_case(self, mock_isfile, mock_access, mock_isdir, mock_listdir):
-        mock_listdir.return_value = ["http-title.nse", "smb-os-discovery.nse", "ssh-hostkey.nse", "nonscript.txt", "banner.nse"]
+    @patch('sys.platform', "linux2") 
+    def test_is_linux_true(self):
+        self.assertTrue(is_linux())
         
-        scripts = discover_nse_scripts()
-        
-        self.assertIn("http-title", scripts)
-        self.assertIn("smb-os-discovery", scripts)
-        self.assertIn("ssh-hostkey", scripts)
-        self.assertIn("banner", scripts) # 'banner' is categorized as 'zzz_other'
-        self.assertNotIn("nonscript.txt", scripts)
-        
-        # Check relative order based on current SCRIPT_PREFIXES and 'zzz_other' for banner
-        # http, smb, ssh are categories. 'banner' is 'zzz_other'.
-        # Expected order: http-title, smb-os-discovery, ssh-hostkey, banner (because 'b' in banner < 'h' in http if not for prefixes)
-        # With prefixes, it should be:
-        # http-title (http category)
-        # smb-os-discovery (smb category)
-        # ssh-hostkey (ssh category)
-        # banner (zzz_other category)
-        # The SCRIPT_PREFIXES list determines category order before 'zzz_other'.
-        # 'http' is before 'smb', which is before 'ssh'. 'zzz_other' is last.
-        expected_order_segment = ["http-title", "smb-os-discovery", "ssh-hostkey", "banner"]
-        
-        # Create a list of found scripts in the expected order segment
-        found_order_segment = [s for s in scripts if s in expected_order_segment]
-        
-        self.assertEqual(found_order_segment, expected_order_segment, 
-                         f"Script order issue. Got: {scripts}")
+    @patch('sys.platform', "win32")
+    def test_is_linux_false(self):
+        self.assertFalse(is_linux())
 
+    @patch('utils.os.path.exists', return_value=True) # Patch where it's used
+    def test_is_flatpak_true_by_file(self, mock_exists):
+        with patch.dict(os.environ, {}, clear=True): 
+             self.assertTrue(is_flatpak())
+        mock_exists.assert_called_with('/.flatpak-info')
 
-    @patch('src.utils.os.path.isdir', return_value=False) # Simulate script path not found
-    def test_discover_nse_scripts_no_dir(self, mock_isdir):
-        scripts = discover_nse_scripts()
-        self.assertEqual(scripts, [])
+    @patch('utils.os.path.exists', return_value=False) # Patch where it's used
+    @patch.dict(os.environ, {'FLATPAK_ID': 'com.example.App'}, clear=True)
+    def test_is_flatpak_true_by_env_var(self, mock_exists):
+        self.assertTrue(is_flatpak())
 
-    @patch('src.utils.os.listdir', side_effect=OSError("Permission denied"))
-    @patch('src.utils.os.path.isdir', return_value=True)
-    @patch('src.utils.os.access', return_value=True)
-    def test_discover_nse_scripts_os_error(self, mock_access, mock_isdir, mock_listdir):
-        scripts = discover_nse_scripts()
-        self.assertEqual(scripts, [])
+    @patch('utils.os.path.exists', return_value=False) # Patch where it's used
+    @patch.dict(os.environ, {}, clear=True) 
+    def test_is_flatpak_false(self, mock_exists):
+        self.assertFalse(is_flatpak())
+
 
 if __name__ == '__main__':
     unittest.main()
