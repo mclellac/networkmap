@@ -11,8 +11,10 @@ except ImportError as e:
 
 import shlex
 import subprocess
+import sys 
+import shutil # Added for shutil.which
 from typing import Tuple, Optional, List, Dict, Any
-from .utils import is_root
+from .utils import is_root, is_macos, is_linux, is_flatpak 
 
 
 class NmapArgumentError(ValueError):
@@ -35,6 +37,73 @@ class NmapScanner:
         Initializes the NmapScanner with an nmap.PortScanner instance.
         """
         self.nm = nmap.PortScanner()
+        self.nmap_executable_path = shutil.which('nmap')
+        if not self.nmap_executable_path:
+            if is_macos():
+                self.nmap_executable_path = '/usr/local/bin/nmap'
+            else: # Linux, or other Unix-like where /usr/bin/nmap is common
+                self.nmap_executable_path = '/usr/bin/nmap'
+            # Print warning if Nmap is not found in PATH and we're resorting to defaults.
+            # This warning will also appear if the default path itself doesn't exist.
+            print(f"Warning: Nmap not found in PATH, defaulting to {self.nmap_executable_path}. "
+                  "Ensure Nmap is installed and in your system's PATH or at this default location.",
+                  file=sys.stderr)
+        
+        # If python-nmap needs a specific path, you can set it like this:
+        # if self.nmap_executable_path and os.path.exists(self.nmap_executable_path):
+        #    self.nm.nmap_search_path = [os.path.dirname(self.nmap_executable_path)]
+        # For now, assume python-nmap's default search or that nmap is in PATH for direct calls.
+
+
+    def _execute_with_privileges(
+        self, nmap_base_cmd_list: List[str], scan_args_list: List[str], target: str
+    ) -> subprocess.CompletedProcess:
+        
+        final_nmap_command_parts = nmap_base_cmd_list + scan_args_list + [target]
+        escalation_cmd: List[str] = []
+
+        if is_macos():
+            nmap_command_str = shlex.join(final_nmap_command_parts)
+            escaped_nmap_cmd_str = nmap_command_str.replace('"', '\\"')
+            applescript_cmd = f'do shell script "{escaped_nmap_cmd_str}" with administrator privileges'
+            escalation_cmd = ["osascript", "-e", applescript_cmd]
+        elif is_flatpak():
+            # For Flatpak, pkexec on the host will resolve 'nmap' from the host's PATH.
+            # So, final_nmap_command_parts (which starts with nmap_cmd_for_escalation, often just 'nmap') is correct.
+            escalation_cmd = ["flatpak-spawn", "--host", "pkexec"] + final_nmap_command_parts
+        elif is_linux():
+            # For general Linux, pkexec will resolve nmap_cmd_for_escalation (which could be a full path or 'nmap').
+            escalation_cmd = ["pkexec"] + final_nmap_command_parts
+        else:
+            return subprocess.CompletedProcess(
+                args=final_nmap_command_parts,
+                returncode=1, 
+                stdout="",
+                stderr=f"Privilege escalation not supported on this platform: {sys.platform}"
+            )
+
+        try:
+            completed_process = subprocess.run(
+                escalation_cmd,
+                capture_output=True,
+                text=True,
+                check=False 
+            )
+            return completed_process
+        except FileNotFoundError as e:
+            return subprocess.CompletedProcess(
+                args=escalation_cmd,
+                returncode=127, 
+                stdout="",
+                stderr=f"Escalation command '{escalation_cmd[0]}' not found. Is it installed and in PATH? Original error: {e}"
+            )
+        except Exception as e: 
+            return subprocess.CompletedProcess(
+                args=escalation_cmd,
+                returncode=1, 
+                stdout="",
+                stderr=f"An unexpected error occurred during privileged execution ({type(e).__name__}): {e}"
+            )
 
     def scan(
         self,
@@ -42,169 +111,121 @@ class NmapScanner:
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
-        # default_args_str: Optional[str] = None, # Removed
         stealth_scan: bool = False,
-        port_spec: Optional[str] = None,        # New
-        timing_template: Optional[str] = None,  # New
-        no_ping: bool = False                   # New
+        port_spec: Optional[str] = None,
+        timing_template: Optional[str] = None,
+        no_ping: bool = False
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
-        """
-        Performs an Nmap scan on the given target with specified options.
-
-        Args:
-            target: The target host(s) to scan (e.g., '192.168.1.1', 'scanme.nmap.org').
-            do_os_fingerprint: Whether to perform OS fingerprinting (-O).
-            additional_args_str: A string of additional Nmap arguments.
-            nse_script: Optional name of an NSE script to run.
-            # default_args_str: Optional string of default arguments to prepend. # Removed
-
-        Returns:
-            A tuple containing:
-                - A list of dictionaries, where each dictionary represents a scanned host
-                  and its information. Returns None if argument parsing fails or a critical
-                  Nmap error occurs.
-                - An error message string if an error occurred, otherwise None.
-        """
+        
         gsettings_default_args: Optional[str] = None
         try:
             settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
             gsettings_default_args = settings.get_string("default-nmap-arguments")
         except Exception as e:
-            # Log or print warning if GSettings access fails
-            import sys
-            print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=sys.stderr)
-            # gsettings_default_args remains None, build_scan_args should handle it
+            # Use a different name for the local sys import to avoid conflict with top-level sys
+            import sys as err_sys_local 
+            print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=err_sys_local.stderr)
 
         try:
             scan_args_str = self.build_scan_args(
                 do_os_fingerprint,
                 additional_args_str,
                 nse_script,
-                gsettings_default_args, # Use GSettings value
+                gsettings_default_args,
                 stealth_scan=stealth_scan,
-                port_spec=port_spec,                # New
-                timing_template=timing_template,    # New
-                no_ping=no_ping                     # New
+                port_spec=port_spec,
+                timing_template=timing_template,
+                no_ping=no_ping
             )
         except NmapArgumentError as e:
             return None, f"Argument error: {e}"
 
-        # Determine if pkexec is needed
-        current_scan_args_list = [] # Initialize with a default type
+        current_scan_args_list = []
         try:
-            # This list will be used for both pkexec check and the pkexec command itself.
             current_scan_args_list = shlex.split(scan_args_str)
         except ValueError as e:
-            # This should ideally not happen if build_scan_args and shlex.split there work correctly.
-            # However, if scan_args_str is somehow malformed at this stage.
             return None, f"Internal error splitting scan arguments: {e}"
 
-        requires_root_argument_present = False
-        if "-sS" in current_scan_args_list: # Check in the split list
-            requires_root_argument_present = True
-        # Future: elif "-some_other_root_arg" in current_scan_args_list:
-        # requires_root_argument_present = True
+        ROOT_REQUIRING_ARGS = [
+            "-sS", "-sU", "-sN", "-sF", "-sX", "-sA", "-sW", "-sM",
+            "-sI", "-sY", "-sZ", "-sO",
+            "-D", "-S", "--send-eth", "--send-ip", "--privileged"
+        ]
         
-        needs_pkexec = not is_root() and (do_os_fingerprint or requires_root_argument_present)
+        requires_root_argument_present = False
+        if "--unprivileged" in current_scan_args_list:
+            requires_root_argument_present = False
+        else:
+            for arg in ROOT_REQUIRING_ARGS:
+                if arg in current_scan_args_list:
+                    requires_root_argument_present = True
+                    break
+        
+        needs_privilege_escalation = not is_root() and (do_os_fingerprint or requires_root_argument_present)
 
-        if needs_pkexec:
-            try:
-                # current_scan_args_list is already appropriately populated from shlex.split(scan_args_str) above.
-                # No need to redefine or re-split it here.
-                
-                # Add '-oX -' for XML output to stdout if no other XML output option is present.
-                # This ensures we get XML for python-nmap to parse.
-                xml_output_options = ["-oX", "-oA"] # -oA includes XML
-                if not any(opt in current_scan_args_list for opt in xml_output_options):
-                    current_scan_args_list.extend(["-oX", "-"])
-                
-                pkexec_cmd = ["pkexec", "/usr/bin/nmap"] + current_scan_args_list + [target]
-                
-                completed_process = subprocess.run(
-                    pkexec_cmd,
-                    capture_output=True,
-                    text=True,
-                    check=False 
-                )
+        if needs_privilege_escalation:
+            xml_output_options = ["-oX", "-oA"]
+            if not any(opt in current_scan_args_list for opt in xml_output_options):
+                current_scan_args_list.extend(["-oX", "-"])
+            
+            nmap_cmd_for_escalation = 'nmap' 
+            if is_macos():
+                macos_nmap_path = shutil.which('nmap') or '/usr/local/bin/nmap'
+                nmap_cmd_for_escalation = macos_nmap_path
+            elif is_linux() and not is_flatpak(): # For non-Flatpak Linux, pkexec might need a full path if 'nmap' isn't in secure_path
+                linux_nmap_path = shutil.which('nmap') or '/usr/bin/nmap'
+                nmap_cmd_for_escalation = linux_nmap_path
+            # For Flatpak, 'nmap' is passed to 'pkexec' on the host, which should find it in the host's PATH.
+            # For general Linux with pkexec, if nmap is in a standard PATH location for root, 'nmap' might suffice.
+            # Using a resolved path (shutil.which or default) for Linux is safer for pkexec.
 
-                if completed_process.returncode == 0:
-                    # Even with exit code 0, nmap might not have produced valid XML if stdout is empty.
-                    # analyse_nmap_xml_scan populates self.nm.
-                    # If stdout is empty, it will result in no hosts in self.nm.
-                    self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout or "")
-                    
-                    # If no hosts were found by nmap (e.g. target down, or filtered, or empty XML output),
-                    # and nmap printed to stderr, this stderr might contain useful info (e.g. "Note: Host seems down").
-                    # We can't return it as *the* error if exit code was 0, but it's relevant.
-                    # _parse_scan_results will correctly return ([], "No hosts found.") if self.nm is empty.
-                    # If there was a critical error that prevented XML output but nmap still exited 0,
-                    # this is an edge case. For now, we rely on _parse_scan_results.
-                    if not self.nm.all_hosts() and completed_process.stderr:
-                        # This could augment the "No hosts found" message, but _parse_scan_results
-                        # doesn't currently support passing stderr through.
-                        # For now, we just proceed. The primary result is "No hosts found".
-                        pass
-                        
-                    return self._parse_scan_results(do_os_fingerprint)
-                else:
-                    error_message = f"pkexec/nmap error (Code {completed_process.returncode}): "
-                    if completed_process.stderr:
-                        error_message += completed_process.stderr.strip()
-                    elif completed_process.stdout: # Some errors might go to stdout
-                        error_message += completed_process.stdout.strip()
-                    else:
-                        error_message += "Unknown error."
-                    return None, error_message
-            except FileNotFoundError:
-                return None, "Error: pkexec command not found. Is PolicyKit (polkit-1) installed and pkexec in PATH?"
-            except Exception as e: 
-                return None, f"An unexpected error occurred during pkexec scan ({type(e).__name__}): {e}"
+            completed_process = self._execute_with_privileges(
+                [nmap_cmd_for_escalation], current_scan_args_list, target
+            )
+            
+            error_message_prefix = "Privileged scan execution error"
+            if completed_process.returncode == 0:
+                self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout or "")
+                if not self.nm.all_hosts() and completed_process.stderr:
+                     pass 
+                return self._parse_scan_results(do_os_fingerprint)
+            else:
+                scan_error_message = f"{error_message_prefix} (Code {completed_process.returncode}): "
+                if completed_process.stderr:
+                    scan_error_message += completed_process.stderr.strip()
+                elif completed_process.stdout and not self.nm.all_hosts(): 
+                    scan_error_message += completed_process.stdout.strip()
+                elif not completed_process.stderr and not completed_process.stdout and not self.nm.all_hosts():
+                     scan_error_message += "Unknown error during privileged scan execution (no Nmap output, no hosts found)."
+                return None, scan_error_message
         else:
             # Standard scan using python-nmap's direct scan method
+            # If self.nmap_executable_path is set and valid, python-nmap should use it if configured.
+            # No changes needed here based on the subtask for python-nmap's direct usage.
             try:
                 self.nm.scan(hosts=target, arguments=scan_args_str)
                 return self._parse_scan_results(do_os_fingerprint)
             except nmap.PortScannerError as e:
                 nmap_error_output = getattr(e, 'value', str(e)).strip()
-                if not nmap_error_output: # Ensure there's some error message
+                if not nmap_error_output:
                     nmap_error_output = str(e)
                 return None, f"Nmap execution error: {nmap_error_output}"
-            # NmapScanParseError will be caught by the caller's try-except if raised by _parse_scan_results
-            # Other exceptions during direct scan
             except Exception as e:
                 return None, f"An unexpected error occurred during direct scan ({type(e).__name__}): {e}"
+        
+        return None, "Scan failed due to an unexpected internal error." # Should not be reached
 
-        # Fallback, though all paths should return before this.
-        return None, "Scan failed due to an unexpected internal error."
-
-    def build_scan_args( # Renamed method
+    def build_scan_args(
         self,
         do_os_fingerprint: bool,
         additional_args_str: str,
         nse_script: Optional[str] = None,
         default_args_str: Optional[str] = None,
         stealth_scan: bool = False,
-        port_spec: Optional[str] = None,        # New
-        timing_template: Optional[str] = None,  # New
-        no_ping: bool = False                   # New
+        port_spec: Optional[str] = None,
+        timing_template: Optional[str] = None,
+        no_ping: bool = False
     ) -> str:
-        """
-        Constructs the Nmap command-line arguments string.
-        User-provided arguments are prioritized. Default arguments are added if not
-        already covered by user arguments.
-
-        Args:
-            do_os_fingerprint: If True, adds the '-O' flag for OS detection.
-            additional_args_str: A string of user-supplied arguments.
-            nse_script: Optional name of an NSE script to use.
-            default_args_str: Optional string of default arguments.
-
-        Returns:
-            A string of concatenated Nmap arguments.
-
-        Raises:
-            NmapArgumentError: If additional_args_str is not a string or if shlex fails to parse it.
-        """
         if not isinstance(additional_args_str, str):
             raise NmapArgumentError("Additional arguments must be a string.")
 
@@ -227,100 +248,58 @@ class NmapScanner:
         if do_os_fingerprint and "-O" not in final_args:
             final_args.append("-O")
 
-        # sV_implied = any(arg in ["-sV", "-A"] for arg in final_args) # Removed
-        # if not sV_implied: # Removed
-        #     final_args.append("-sV") # Removed
-
-        # host_timeout_present = any(arg.startswith("--host-timeout") for arg in final_args) # Removed
-        # if not host_timeout_present: # Removed
-        #     DEFAULT_HOST_TIMEOUT = "60s" # Removed
-        #     final_args.append(f"--host-timeout={DEFAULT_HOST_TIMEOUT}") # Removed
-
         if nse_script:
             final_args.append(f"--script={nse_script}")
 
         if stealth_scan:
-            # Avoid adding -sS if other scan type flags are already present from additional_args_str
-            # For simplicity now, we'll check for some common conflicting TCP scan types.
-            # A more robust solution might involve more complex parsing of additional_args_str.
             has_conflicting_scan_type = any(scan_flag in final_args for scan_flag in ["-sT", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX"])
             if not has_conflicting_scan_type and "-sS" not in final_args:
                 final_args.append("-sS")
             elif not has_conflicting_scan_type and "-sS" in final_args:
-                pass # Already there
+                pass 
             elif has_conflicting_scan_type:
-                # Optionally, log a warning or let user arguments take precedence.
-                # For now, if user specified a scan type, don't override with -sS.
-                # Using GLib for printing to stderr is not conventional here, Python's print to sys.stderr is fine.
-                # For consistency with other error messages that might be logged or displayed in UI later:
-                import sys # Ensure sys is imported if not already
-                print(f"Warning: Stealth scan (-sS) conflicts with existing scan type arguments: {' '.join(final_args)}. User arguments will take precedence.", file=sys.stderr)
+                import sys as err_sys_local 
+                print(f"Warning: Stealth scan (-sS) conflicts with existing scan type arguments: {' '.join(final_args)}. User arguments will take precedence.", file=err_sys_local.stderr)
         
         if no_ping:
-            if "-Pn" not in final_args: # Avoid duplication
+            if "-Pn" not in final_args:
                 final_args.append("-Pn")
 
         if port_spec and port_spec.strip():
-            # Basic check to avoid adding '-p' if it's already there
             if not any(arg == "-p" for arg in final_args):
                 final_args.append("-p")
                 final_args.append(port_spec.strip())
             else:
-                # Ensure sys is imported if not already, for the warning
-                import sys 
-                print(f"Warning: Port specification (-p) might conflict with existing arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=sys.stderr)
+                import sys as err_sys_local
+                print(f"Warning: Port specification (-p) might conflict with existing arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=err_sys_local.stderr)
         
         if timing_template and timing_template.strip():
-            # Basic check for existing -T<num>
             if not any(arg.startswith("-T") and len(arg) == 3 and arg[2].isdigit() for arg in final_args):
                 final_args.append(timing_template.strip())
             else:
-                # Ensure sys is imported if not already, for the warning
-                import sys
-                print(f"Warning: Timing template ({timing_template}) might conflict with existing -T arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=sys.stderr)
+                import sys as err_sys_local
+                print(f"Warning: Timing template ({timing_template}) might conflict with existing -T arguments: {' '.join(final_args)}. User-provided/additional arguments may take precedence or cause issues.", file=err_sys_local.stderr)
 
-        # Add DNS servers from GSettings
         try:
             settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
             dns_servers_str = settings.get_string("dns-servers")
             if dns_servers_str:
                 dns_servers = [server.strip() for server in dns_servers_str.split(',') if server.strip()]
                 if dns_servers:
-                    # Check if --dns-servers is already present
                     if not any(arg.startswith("--dns-servers") for arg in final_args):
                         final_args.append(f"--dns-servers={','.join(dns_servers)}")
                     else:
-                        # Optionally, print a warning if it's already set by the user
-                        import sys
-                        print("Warning: --dns-servers argument already provided by user or default args. GSettings will not override.", file=sys.stderr)
+                        import sys as err_sys_local
+                        print("Warning: --dns-servers argument already provided by user or default args. GSettings will not override.", file=err_sys_local.stderr)
         except Exception as e:
-            # Handle cases where GSettings might not be available (e.g., running in a non-desktop environment)
-            # or the schema is not found. Print a warning or log this.
-            import sys
-            print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
+            import sys as err_sys_local
+            print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=err_sys_local.stderr)
 
         return " ".join(final_args)
 
     def _parse_scan_results(
         self, do_os_fingerprint: bool
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-        """
-        Parses the Nmap scan results from the PortScanner object.
-
-        Args:
-            do_os_fingerprint: Indicates if OS fingerprinting was requested,
-                               to guide parsing of OS-related data.
-
-        Returns:
-            A tuple containing:
-                - A list of dictionaries, where each dictionary holds data for a host.
-                  Returns an empty list if no hosts were found.
-                - An error message string if no hosts were found (e.g., "No hosts found."),
-                  otherwise None.
-
-        Raises:
-            NmapScanParseError: If there's an issue parsing data for a specific host.
-        """
         hosts_data: List[Dict[str, Any]] = []
         scanned_host_ids = self.nm.all_hosts()
 
@@ -330,11 +309,10 @@ class NmapScanner:
         for host_id in scanned_host_ids:
             try:
                 host_scan_data = self.nm[host_id]
-
                 host_info: Dict[str, Any] = {
-                    "id": GLib.markup_escape_text(host_id), # Escaped
-                    "hostname": GLib.markup_escape_text(host_scan_data.hostname() or "N/A"), # Escaped
-                    "state": GLib.markup_escape_text(host_scan_data.state() or "N/A"), # Escaped
+                    "id": GLib.markup_escape_text(host_id),
+                    "hostname": GLib.markup_escape_text(host_scan_data.hostname() or "N/A"),
+                    "state": GLib.markup_escape_text(host_scan_data.state() or "N/A"),
                     "protocols": host_scan_data.all_protocols() or [],
                     "ports": [],
                     "os_fingerprint": None,
@@ -346,7 +324,7 @@ class NmapScanner:
                 ]
 
                 for proto in host_info["protocols"]:
-                    escaped_proto = GLib.markup_escape_text(proto.upper()) # Escaped
+                    escaped_proto = GLib.markup_escape_text(proto.upper())
                     raw_details_parts.append(f"\n<b>Protocol: {escaped_proto}</b>")
                     ports_data = host_scan_data.get(proto, {})
                     if not ports_data:
@@ -355,8 +333,6 @@ class NmapScanner:
 
                     for port_id in sorted(ports_data.keys()):
                         port_details = ports_data.get(port_id, {})
-                        
-                        # Escape individual service components before joining
                         service_name = GLib.markup_escape_text(port_details.get('name', 'N/A'))
                         product = GLib.markup_escape_text(port_details.get('product', ''))
                         version = GLib.markup_escape_text(port_details.get('version', ''))
@@ -367,19 +343,18 @@ class NmapScanner:
                         if version: service_parts.append(f"<b>Version:</b> {version}")
                         service_info_str = ", ".join(service_parts) if service_parts else "N/A"
                         
-                        escaped_port_id = GLib.markup_escape_text(str(port_id)) # Escaped
-                        escaped_proto_short = GLib.markup_escape_text(proto) # Escaped
-                        escaped_port_state = GLib.markup_escape_text(port_details.get("state", "N/A")) # Escaped
+                        escaped_port_id = GLib.markup_escape_text(str(port_id))
+                        escaped_proto_short = GLib.markup_escape_text(proto)
+                        escaped_port_state = GLib.markup_escape_text(port_details.get("state", "N/A"))
 
-                        port_state = port_details.get("state", "N/A")
                         port_entry = {
-                            "portid": port_id, # Store original, non-escaped for internal data
-                            "protocol": proto, # Store original
-                            "state": port_state, # Store original
+                            "portid": port_id,
+                            "protocol": proto,
+                            "state": port_details.get("state", "N/A"),
                             "service": {
-                                "name": port_details.get('name', 'N/A'), # Store original
-                                "product": port_details.get('product') or None, # Store original
-                                "version": port_details.get('version') or None, # Store original
+                                "name": port_details.get('name', 'N/A'),
+                                "product": port_details.get('product') or None,
+                                "version": port_details.get('version') or None,
                                 "extrainfo": port_details.get("extrainfo"),
                                 "conf": str(port_details.get("conf", "N/A")),
                                 "cpe": port_details.get("cpe"),
@@ -394,19 +369,18 @@ class NmapScanner:
                     os_matches = host_scan_data.get("osmatch", [])
                     if os_matches:
                         best_os_match = os_matches[0]
-                        name = GLib.markup_escape_text(best_os_match.get("name", "N/A")) # Escaped
-                        accuracy = GLib.markup_escape_text(str(best_os_match.get("accuracy", "N/A"))) # Escaped
+                        name = GLib.markup_escape_text(best_os_match.get("name", "N/A"))
+                        accuracy = GLib.markup_escape_text(str(best_os_match.get("accuracy", "N/A")))
                         
                         os_fingerprint_details = {
-                            "name": best_os_match.get("name", "N/A"), # Store original
-                            "accuracy": str(best_os_match.get("accuracy", "N/A")), # Store original
+                            "name": best_os_match.get("name", "N/A"),
+                            "accuracy": str(best_os_match.get("accuracy", "N/A")),
                             "osclass": []
                         }
                         raw_details_parts.append("\n<b>OS Fingerprint:</b>")
                         raw_details_parts.append(f"  <b>Best Match:</b> {name} (<b>Accuracy:</b> {accuracy}%)")
                         
                         for os_class_data in best_os_match.get("osclass", []):
-                            # Escape individual class info parts
                             type_val = GLib.markup_escape_text(os_class_data.get('type', 'N/A'))
                             vendor_val = GLib.markup_escape_text(os_class_data.get('vendor', 'N/A'))
                             osfamily_val = GLib.markup_escape_text(os_class_data.get('osfamily', 'N/A'))
@@ -423,11 +397,11 @@ class NmapScanner:
                             raw_details_parts.append(f"    <b>Class:</b> {', '.join(os_class_info_parts)}")
                             
                             os_fingerprint_details["osclass"].append({
-                                "type": os_class_data.get('type'), # Store original
-                                "vendor": os_class_data.get('vendor'), # Store original
-                                "osfamily": os_class_data.get('osfamily'), # Store original
-                                "osgen": os_class_data.get('osgen'), # Store original
-                                "accuracy": str(os_class_data.get('accuracy', 'N/A')) # Store original
+                                "type": os_class_data.get('type'),
+                                "vendor": os_class_data.get('vendor'),
+                                "osfamily": os_class_data.get('osfamily'),
+                                "osgen": os_class_data.get('osgen'),
+                                "accuracy": str(os_class_data.get('accuracy', 'N/A'))
                             })
                         host_info["os_fingerprint"] = os_fingerprint_details
                     elif do_os_fingerprint:
