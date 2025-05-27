@@ -10,7 +10,8 @@
 	"--socket=fallback-x11",
 	"--device=dri",
 	"--socket=wayland",
-	"--persist=.config"
+	"--persist=.config",
+	"--talk-name=org.freedesktop.PolicyKit1"
 	],
 	"cleanup" : [
 	"/include",

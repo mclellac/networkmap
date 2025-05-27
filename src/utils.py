@@ -28,11 +28,15 @@ def discover_nse_scripts() -> List[str]:
     # Standard Nmap script directory locations for Linux/macOS.
     # Order matters: check user-specific paths first, then system paths.
     # Flatpak sandboxed paths are not directly accessible; Nmap inside Flatpak would use its own paths.
-    potential_paths = [
+    potential_paths = []
+    if is_flatpak():
+        potential_paths.append("/app/share/nmap/scripts/") # Add Flatpak path first
+
+    potential_paths.extend([
         os.path.expanduser("~/.nmap/scripts/"), # User's local Nmap scripts
         "/usr/local/share/nmap/scripts/",      # Common for locally compiled Nmap on macOS/Linux
         "/usr/share/nmap/scripts/",            # Standard system path for Nmap on Linux
-    ]
+    ])
     
     # For Flatpak, Nmap scripts are bundled within the Flatpak environment.
     # Accessing host system Nmap scripts from a sandboxed Flatpak app is generally not done.

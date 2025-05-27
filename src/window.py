@@ -309,7 +309,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         defaults = {
             'os_fingerprint': False, 'stealth_scan': False, 'no_ping': False,
             'ports': "", 'additional_args': "", 'nse_script': None,
-            'timing_template': self.timing_options.get(list(self.timing_options.keys())[0]) # Default T3
+            'timing_template': self.timing_options.get("Default (T3)")
         }
 
         config = profile if profile else defaults
