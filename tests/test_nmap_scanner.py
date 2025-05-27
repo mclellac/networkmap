@@ -714,7 +714,9 @@ class TestNmapScannerPrivilegeExecution(unittest.TestCase):
         # -> "nmap --script 'http-title, \"safe space\"'" or similar.
         # Then, internal quotes are escaped: "nmap --script 'http-title, \\\"safe space\\\"'"
         expected_nmap_cmd_str = '/usr/local/bin/nmap -sS -p 80 localhost' # Simple case, no complex quoting by shlex.join
-        expected_applescript_cmd = f'do shell script "{expected_nmap_cmd_str.replace("\"", "\\\"")}" with administrator privileges'
+        # Correctly escape for AppleScript before inserting into f-string
+        processed_nmap_cmd_str = expected_nmap_cmd_str.replace('"', '\\"')
+        expected_applescript_cmd = f'do shell script "{processed_nmap_cmd_str}" with administrator privileges'
 
         self.scanner._execute_with_privileges(nmap_base, scan_args, target)
         
@@ -739,7 +741,9 @@ class TestNmapScannerPrivilegeExecution(unittest.TestCase):
         # Then replace('"', '\\"') makes it: /usr/local/bin/nmap --script-args 'http.useragent=\\\"My Nmap Agent 1.0\\\"' localhost
         # This seems correct for AppleScript's `do shell script "..."`
         joined_nmap_cmd = shlex.join(nmap_base + scan_args + [target])
-        expected_applescript_cmd = f'do shell script "{joined_nmap_cmd.replace("\"", "\\\"")}" with administrator privileges'
+        # Correctly escape for AppleScript before inserting into f-string
+        processed_nmap_cmd_str = joined_nmap_cmd.replace('"', '\\"')
+        expected_applescript_cmd = f'do shell script "{processed_nmap_cmd_str}" with administrator privileges'
 
         self.scanner._execute_with_privileges(nmap_base, scan_args, target)
         
