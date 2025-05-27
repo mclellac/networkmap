@@ -180,7 +180,7 @@ class NmapScanner:
             elif is_flatpak():
                 # For Flatpak, flatpak-spawn --host is used with pkexec.
                 # The Nmap command and its arguments are passed directly.
-                escalation_cmd = ["flatpak-spawn", "--host", "pkexec"] + final_nmap_command_parts
+                escalation_cmd = ["flatpak-spawn", "--host", "pkexec", "nmap"] + scan_args_list + [target]
             elif is_linux(): # Covers non-Flatpak Linux
                 # For general Linux, pkexec is used.
                 escalation_cmd = ["pkexec"] + final_nmap_command_parts
