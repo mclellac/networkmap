@@ -25,7 +25,7 @@ class ProfileEditorDialog(Adw.Dialog):
             self.existing_profile_names_for_validation.remove(profile_to_edit['name'])
 
         self.set_title("Edit Scan Profile" if self.is_editing else "Add New Scan Profile")
-        self.set_default_size(500, 600) # Adjusted for potentially more content
+        self.set_size_request(500, 600)
 
         # Main content box for the dialog
         content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, 
