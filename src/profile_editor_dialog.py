@@ -33,7 +33,7 @@ class ProfileEditorDialog(Adw.Dialog):
         
         # After the object is initialized by super().__init__(), then set properties.
         if parent_window:
-            self.set_transient_for(parent_window)
+            self.set_property("transient-for", parent_window)
         # If Adw.Dialog.__init__ fails, it will raise an exception and the object creation will stop,
         # which is standard behavior. No need for a broad try-except here.
 
