@@ -74,13 +74,13 @@ class ProfileEditorDialog(Adw.Dialog):
         
         self.set_default_widget(save_button) # Use the Gtk.Button instance directly
 
-        self.connect("response", self._on_response)
+        # self.connect("response", self._on_response) # Removed this line
         
         self.set_modal(True) # Make the dialog modal
         self.set_deletable(False) # Prevent closing via Esc key if validation is desired first
         self.set_size_request(400, -1) # Width, height can be auto
 
-    def _on_response(self, dialog: Adw.Dialog, response_id: str): # Changed type hint for response_id
+    def do_response(self, response_id: str): # Renamed and signature changed
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
             command = self.profile_command_row.get_text().strip()
