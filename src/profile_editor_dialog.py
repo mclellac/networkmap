@@ -47,9 +47,14 @@ class ProfileEditorDialog(Adw.Dialog):
             self.profile_command_row.set_text(self.profile_to_edit.get('command', ''))
 
         # Add response buttons
-        self.add_button("Save", Gtk.ResponseType.APPLY).set_css_classes(["suggested-action"])
-        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        self.set_default_response(Gtk.ResponseType.APPLY)
+        self.add_response("apply", "Save")
+        # To apply CSS, you might need to get the widget for the response:
+        # apply_widget = self.get_widget_for_response("apply")
+        # if apply_widget:
+        #     apply_widget.set_css_classes(["suggested-action"])
+        # For now, let's keep it simple and add styling later if requested.
+        self.add_response("cancel", "Cancel")
+        self.set_default_response("apply")
 
         self.connect("response", self._on_response)
         
@@ -57,8 +62,8 @@ class ProfileEditorDialog(Adw.Dialog):
         self.set_deletable(False) # Prevent closing via Esc key if validation is desired first
         self.set_size_request(400, -1) # Width, height can be auto
 
-    def _on_response(self, dialog: Adw.Dialog, response_id: int):
-        if response_id == Gtk.ResponseType.APPLY:
+    def _on_response(self, dialog: Adw.Dialog, response_id: str): # Changed type hint for response_id
+        if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
             command = self.profile_command_row.get_text().strip()
 
@@ -77,7 +82,7 @@ class ProfileEditorDialog(Adw.Dialog):
             
             self.emit("profile-action", "save", profile_data)
             self.close()
-        elif response_id == Gtk.ResponseType.CANCEL:
+        elif response_id == "cancel":
             self.emit("profile-action", "cancel", None)
             self.close()
         return False # Allow close for other cases or if not handled
