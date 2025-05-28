@@ -204,7 +204,13 @@ class ProfileEditorDialog(Adw.Dialog):
         return False # Allow close for other cases or if not handled
 
     def _show_toast(self, message: str):
-        # Adw.Dialog doesn't have add_toast. This needs to be handled by the parent
-        # or by creating a temporary toast overlay if complex.
-        # For now, print to stderr as a placeholder for proper toast display.
-        print(f"PROFILE EDITOR INFO: {message}", file=sys.stderr)
+        # For proper error display within the dialog context, use Adw.AlertDialog
+        # Adw.Toast is typically for non-modal, transient notifications on a parent window.
+        print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr) # Keep for console logging
+
+        alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
+        alert_dialog.add_button(label="OK") # Response is "default"
+        alert_dialog.set_default_response("default")
+        alert_dialog.set_transient_for(self) # 'self' is ProfileEditorDialog
+        alert_dialog.set_modal(True)
+        alert_dialog.present()
