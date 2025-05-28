@@ -46,15 +46,33 @@ class ProfileEditorDialog(Adw.Dialog):
             self.profile_name_row.set_text(self.profile_to_edit.get('name', ''))
             self.profile_command_row.set_text(self.profile_to_edit.get('command', ''))
 
-        # Add response buttons
-        self.add_response("apply", "Save")
-        # To apply CSS, you might need to get the widget for the response:
-        # apply_widget = self.get_widget_for_response("apply")
-        # if apply_widget:
-        #     apply_widget.set_css_classes(["suggested-action"])
-        # For now, let's keep it simple and add styling later if requested.
-        self.add_response("cancel", "Cancel")
-        self.set_default_response("apply")
+        # Action area for buttons
+        action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, margin_top=12)
+        action_box.set_halign(Gtk.Align.END) # Align buttons to the end (right)
+
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.connect("clicked", lambda widget: self.response("cancel"))
+        action_box.append(cancel_button)
+
+        save_button = Gtk.Button(label="Save")
+        save_button.set_css_classes(["suggested-action"]) # Make it look like a suggested action
+        save_button.connect("clicked", lambda widget: self.response("apply"))
+        action_box.append(save_button)
+
+        # Append the action_box to the main_box of the dialog
+        # The main_box was previously set as the child of the dialog.
+        # Assuming main_box is accessible here (it should be, it was defined in __init__).
+        # If main_box is not a Gtk.Box that can append, this might need adjustment,
+        # but the previous rewrite used Gtk.Box for main_box.
+        dialog_child = self.get_child()
+        if isinstance(dialog_child, Gtk.Box): 
+            dialog_child.append(action_box)
+        else:
+            # Fallback if main_box is not what we expect, though it should be.
+            # This might indicate a deeper structural issue if hit.
+            print("Error: Dialog child is not a Gtk.Box, cannot append action_box.", file=sys.stderr)
+        
+        self.set_default_response("apply") # This should still be called / was kept
 
         self.connect("response", self._on_response)
         
