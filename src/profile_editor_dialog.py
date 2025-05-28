@@ -8,6 +8,8 @@ from typing import Optional # Keep for signature compatibility if needed by call
 # from .nse_script_selection_dialog import NseScriptSelectionDialog # Not needed for minimal
 
 class ProfileEditorDialog(Adw.Dialog):
+    __gtype_name__ = "ProfileEditorDialog"
+
     __gsignals__ = {
         'profile-action': (GObject.SignalFlags.RUN_FIRST, None, (str, GObject.TYPE_PYOBJECT))
     }
