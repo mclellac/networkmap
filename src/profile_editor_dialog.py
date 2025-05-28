@@ -12,7 +12,7 @@ class ProfileEditorDialog(Adw.Dialog):
                  parent_window: Optional[Gtk.Window] = None, 
                  profile_to_edit: Optional[ScanProfile] = None, 
                  existing_profile_names: Optional[List[str]] = None):
-        super().__init__()
+        Adw.Dialog.__init__(self) # Changed line
             
         # NO attempts to set transient-for here
 
