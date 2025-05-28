@@ -27,7 +27,13 @@ class ProfileEditorDialog(Adw.Dialog):
         # Given the history, let's try the explicit Adw.Dialog init again,
         # as the problem might not have been the init call itself but subsequent calls.
         
-        Adw.Dialog.__init__(self, transient_for=parent_window)
+        # Ensure other GObject initializations like GObject.Object.__init__(self) are removed 
+        # if they were workarounds, as super().__init__() should handle it for widgets.
+        super().__init__() # This calls the __init__ of Adw.Dialog
+        
+        # After the object is initialized by super().__init__(), then set properties.
+        if parent_window:
+            self.set_transient_for(parent_window)
         # If Adw.Dialog.__init__ fails, it will raise an exception and the object creation will stop,
         # which is standard behavior. No need for a broad try-except here.
 
