@@ -51,12 +51,12 @@ class ProfileEditorDialog(Adw.Dialog):
         action_box.set_halign(Gtk.Align.END) # Align buttons to the end (right)
 
         cancel_button = Gtk.Button(label="Cancel")
-        cancel_button.connect("clicked", lambda widget: self.response("cancel"))
+        cancel_button.connect("clicked", lambda widget: self.do_response("cancel"))
         action_box.append(cancel_button)
 
         save_button = Gtk.Button(label="Save")
         save_button.set_css_classes(["suggested-action"]) # Make it look like a suggested action
-        save_button.connect("clicked", lambda widget: self.response("apply"))
+        save_button.connect("clicked", lambda widget: self.do_response("apply"))
         action_box.append(save_button)
 
         # Append the action_box to the main_box of the dialog
