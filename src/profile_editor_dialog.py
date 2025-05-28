@@ -11,14 +11,10 @@ class ProfileEditorDialog(Adw.Dialog):
     }
 
     def __init__(self,
-                 parent_window: Optional[Gtk.Window] = None,
                  profile_to_edit: Optional[Dict[str, Any]] = None,
                  existing_profile_names: Optional[List[str]] = None):
         
-        if parent_window:
-            super().__init__(transient_for=parent_window)
-        else:
-            super().__init__()
+        super().__init__()
 
         self.profile_to_edit = profile_to_edit
         self.existing_profile_names = existing_profile_names if existing_profile_names else []

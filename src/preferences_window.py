@@ -307,12 +307,11 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             self._show_toast(f"Could not load existing profiles to check names: {e}")
             all_profile_names = [] # Proceed with caution or disallow adding
         
-        dialog = ProfileEditorDialog(parent_window=self, existing_profile_names=all_profile_names)
+        dialog = ProfileEditorDialog(existing_profile_names=all_profile_names)
         dialog.connect("profile-action", self._handle_profile_dialog_action_add)
-        # dialog.present(self) # Adw.Dialog.present() doesn't take a parent argument like Gtk.Dialog.
-                               # For Adw.Dialog, transiency is set via set_transient_for().
-                               # Present it using its own present method without arguments.
-        dialog.present()
+        # Adw.Dialog.present() takes an optional Gtk.Window parent argument for transiency.
+        # This is the correct way to set the transient parent if not done during __init__ or via set_transient_for().
+        dialog.present(self)
 
 
     def _handle_profile_dialog_action_add(self, dialog: ProfileEditorDialog, action: str, profile_data: Optional[ScanProfile]) -> None:
@@ -337,14 +336,13 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             if profile_to_edit:
                 all_profile_names = [p['name'] for p in current_profiles]
                 dialog = ProfileEditorDialog(
-                    parent_window=self,
                     profile_to_edit=profile_to_edit,
                     existing_profile_names=all_profile_names
                 )
                 # Pass original_profile_name for context in the handler
                 dialog.connect("profile-action", self._handle_profile_dialog_action_edit, profile_name)
-                # dialog.present(self) # Adw.Dialog.present() issue as above
-                dialog.present()
+                # Adw.Dialog.present() takes an optional Gtk.Window parent argument for transiency.
+                dialog.present(self)
             else:
                 self._show_toast(f"Error: Profile '{profile_name}' not found for editing.")
         except (ProfileStorageError, Exception) as e: # Catch loading or other errors
