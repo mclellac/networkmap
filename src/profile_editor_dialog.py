@@ -101,16 +101,16 @@ class ProfileEditorDialog(Adw.Dialog):
             print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Print the data being saved
             print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)
-            print("DEBUG: apply - calling self.destroy()", file=sys.stderr)
-            self.destroy()
-            print("DEBUG: apply - after self.destroy(), returning False", file=sys.stderr)
+            print("DEBUG: apply - calling self.close()", file=sys.stderr)
+            self.close()
+            print("DEBUG: apply - after self.close(), returning False", file=sys.stderr)
             return False # Explicitly return False after closing
         elif response_id == "cancel":
             print("DEBUG: cancel - emitting profile-action 'cancel'", file=sys.stderr)
             self.emit("profile-action", "cancel", None)
-            print("DEBUG: cancel - calling self.destroy()", file=sys.stderr)
-            self.destroy()
-            print("DEBUG: cancel - after self.destroy(), returning False", file=sys.stderr)
+            print("DEBUG: cancel - calling self.close()", file=sys.stderr)
+            self.close()
+            print("DEBUG: cancel - after self.close(), returning False", file=sys.stderr)
             return False # Explicitly return False after closing
         return False # Allow close for other cases or if not handled
 
