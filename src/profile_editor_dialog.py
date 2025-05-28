@@ -1,6 +1,7 @@
 import sys
 from gi.repository import Adw, Gtk, GObject
 from typing import Optional, List, Dict, Any
+from .nmap_validator import NmapCommandValidator
 
 class ProfileEditorDialog(Adw.Dialog):
     __gtype_name__ = "NetworkMapProfileEditorDialog" # Unique GType name
@@ -173,16 +174,14 @@ class ProfileEditorDialog(Adw.Dialog):
                 self._show_toast(f"A profile with the name '{name}' already exists.")
                 return True # Prevent dialog from closing
 
-            # --- Start of new validation block ---
-            forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"] 
-            # More could be added, e.g., specific command sequences if known
-            
-            for char in forbidden_chars:
-                if char in final_command:
-                    self._show_toast(f"Error: Command arguments contain forbidden character: '{char}'.")
-                    print(f"DEBUG: Validation failed - forbidden character '{char}' in command: {final_command}", file=sys.stderr) # Debug print
-                    return True # Prevent saving and keep dialog open
-            # --- End of new validation block ---
+            # --- New Validator Integration START ---
+            validator = NmapCommandValidator()
+            is_valid, error_message = validator.validate_arguments(final_command)
+            if not is_valid:
+                self._show_toast(error_message)
+                print(f"DEBUG (ProfileEditorDialog): Validation failed - '{error_message}' in command: {final_command}", file=sys.stderr)
+                return True # Keep dialog open
+            # --- New Validator Integration END ---
 
             profile_data = {'name': name, 'command': final_command}
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
