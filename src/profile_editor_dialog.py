@@ -72,7 +72,7 @@ class ProfileEditorDialog(Adw.Dialog):
             # This might indicate a deeper structural issue if hit.
             print("Error: Dialog child is not a Gtk.Box, cannot append action_box.", file=sys.stderr)
         
-        self.set_default_response("apply") # This should still be called / was kept
+        self.set_default_widget(save_button) # Use the Gtk.Button instance directly
 
         self.connect("response", self._on_response)
         
