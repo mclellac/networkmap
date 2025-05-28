@@ -12,7 +12,8 @@ class ProfileEditorDialog(Adw.Dialog):
                  parent_window: Optional[Gtk.Window] = None, 
                  profile_to_edit: Optional[ScanProfile] = None, 
                  existing_profile_names: Optional[List[str]] = None):
-        Adw.Dialog.__init__(self) # Changed line
+        GObject.Object.__init__(self) # Added/Changed line
+        super().__init__()            # Added/Changed line
             
         # NO attempts to set transient-for here
 
