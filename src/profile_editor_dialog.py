@@ -80,6 +80,7 @@ class ProfileEditorDialog(Adw.Dialog):
         self.set_size_request(400, -1) # Width, height can be auto
 
     def do_response(self, response_id: str): # Renamed and signature changed
+        print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
             command = self.profile_command_row.get_text().strip()
@@ -97,11 +98,20 @@ class ProfileEditorDialog(Adw.Dialog):
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
             
+            print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Print the data being saved
+            print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)
+            print("DEBUG: apply - calling self.close()", file=sys.stderr)
             self.close()
+            print("DEBUG: apply - after self.close(), returning False", file=sys.stderr)
+            return False # Explicitly return False after closing
         elif response_id == "cancel":
+            print("DEBUG: cancel - emitting profile-action 'cancel'", file=sys.stderr)
             self.emit("profile-action", "cancel", None)
+            print("DEBUG: cancel - calling self.close()", file=sys.stderr)
             self.close()
+            print("DEBUG: cancel - after self.close(), returning False", file=sys.stderr)
+            return False # Explicitly return False after closing
         return False # Allow close for other cases or if not handled
 
     def _show_toast(self, message: str):
