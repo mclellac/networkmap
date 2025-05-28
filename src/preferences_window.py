@@ -1,5 +1,5 @@
 import sys
-from gi.repository import Adw, Gtk, GObject, Gio, Pango
+from gi.repository import Adw, Gtk, GObject, Gio, Pango, GLib
 from typing import Optional
 
 from .utils import apply_theme
@@ -53,8 +53,9 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self._load_and_display_profiles() # Initial population
 
     def _show_toast(self, message: str):
-        print(f"PREFERENCES TOAST: {message}", file=sys.stderr)
-        self.add_toast(Adw.Toast.new(message))
+        print(f"PREFERENCES TOAST: {message}", file=sys.stderr) # Keep original message for logging
+        escaped_message = GLib.markup_escape_text(message)
+        self.add_toast(Adw.Toast.new(escaped_message))
 
     def _init_settings_and_bindings(self) -> None:
         """Initializes GSettings and binds them to UI elements."""

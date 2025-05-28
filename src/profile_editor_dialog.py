@@ -8,10 +8,9 @@ from typing import Optional # Keep for signature compatibility if needed by call
 # from .nse_script_selection_dialog import NseScriptSelectionDialog # Not needed for minimal
 
 class ProfileEditorDialog(Adw.Dialog):
-    # Remove __gsignals__ for minimal test
-    # __gsignals__ = {
-    # 'profile-action': (GObject.SignalFlags.RUN_FIRST, None, (str, GObject.TYPE_PYOBJECT))
-    # }
+    __gsignals__ = {
+        'profile-action': (GObject.SignalFlags.RUN_FIRST, None, (str, GObject.TYPE_PYOBJECT))
+    }
 
     def __init__(self, 
                  parent_window: Optional[Gtk.Window] = None, # Keep signature for caller compatibility
@@ -28,62 +27,89 @@ class ProfileEditorDialog(Adw.Dialog):
         # Given the history, let's try the explicit Adw.Dialog init again,
         # as the problem might not have been the init call itself but subsequent calls.
         
-        try:
-            Adw.Dialog.__init__(self) # Explicitly call parent Adw.Dialog constructor
-            print("MINIMAL DIALOG: Adw.Dialog.__init__(self) called successfully.", file=sys.stderr)
-        except Exception as e:
-            print(f"MINIMAL DIALOG FATAL ERROR during Adw.Dialog.__init__(self): {e}", file=sys.stderr)
-            # If this fails, the object is likely not usable as a dialog at all.
-            # We might want to call GObject.Object.__init__(self) as a last resort for basic GObject features.
-            GObject.Object.__init__(self) # Fallback for basic GObject features if Adw.Dialog init fails
-            print(f"MINIMAL DIALOG: GObject.Object.__init__(self) called as fallback.", file=sys.stderr)
-            # Return here or raise, as it's unlikely to work as a dialog
-            # For testing, let it proceed to see if *any* methods work.
+        Adw.Dialog.__init__(self, transient_for=parent_window)
+        # If Adw.Dialog.__init__ fails, it will raise an exception and the object creation will stop,
+        # which is standard behavior. No need for a broad try-except here.
 
-
-        try:
-            self.set_title("Minimal Test Dialog")
-            print("MINIMAL DIALOG: set_title worked.", file=sys.stderr)
-        except AttributeError as e:
-            print(f"MINIMAL DIALOG AttributeError on set_title: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"MINIMAL DIALOG Other Exception on set_title: {e}", file=sys.stderr)
-
-        try:
-            # Attempt to add a response button
-            self.add_response("close", "Close") # This was the failing method
-            print("MINIMAL DIALOG: add_response worked.", file=sys.stderr)
-            self.set_default_response("close") 
-            print("MINIMAL DIALOG: set_default_response worked.", file=sys.stderr)
-            self.connect("response", lambda dialog, response_id: self.close())
-            print("MINIMAL DIALOG: connect('response') worked.", file=sys.stderr)
-        except AttributeError as e:
-            print(f"MINIMAL DIALOG AttributeError on add_response/related: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"MINIMAL DIALOG Other Exception on add_response/related: {e}", file=sys.stderr)
-
-        try:
-            # Attempt to set some content
-            label = Gtk.Label(label="This is a minimal Adw.Dialog test.")
-            self.set_child(label) 
-            print("MINIMAL DIALOG: set_child worked.", file=sys.stderr)
-        except AttributeError as e:
-            print(f"MINIMAL DIALOG AttributeError on set_child: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"MINIMAL DIALOG Other Exception on set_child: {e}", file=sys.stderr)
+        self.profile_to_edit = profile_to_edit
+        self.existing_profile_names = existing_profile_names if existing_profile_names is not None else []
         
-        try:
-            # Attempt to set a size
-            self.set_size_request(300, 200)
-            print("MINIMAL DIALOG: set_size_request worked.", file=sys.stderr)
-        except AttributeError as e:
-            print(f"MINIMAL DIALOG AttributeError on set_size_request: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"MINIMAL DIALOG Other Exception on set_size_request: {e}", file=sys.stderr)
+        if self.profile_to_edit:
+            self.set_title("Edit Profile")
+        else:
+            self.set_title("Add New Profile")
 
-        # For this diagnostic, do not include any of the original ProfileEditorDialog's 
-        # complex UI setup, validation logic, signals, other methods, or transient_for settings.
-        print("MINIMAL DIALOG: __init__ finished.", file=sys.stderr)
+        # Main content box
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        
+        preferences_group = Adw.PreferencesGroup()
+        content_box.append(preferences_group)
+
+        # Profile Name EntryRow
+        self.profile_name_row = Adw.EntryRow(title="Profile Name")
+        preferences_group.add(self.profile_name_row)
+
+        # Profile Command EntryRow
+        self.profile_command_row = Adw.EntryRow(title="Nmap Arguments")
+        preferences_group.add(self.profile_command_row)
+        
+        self.set_child(content_box) # Set the main content box as the dialog's child
+
+        if self.profile_to_edit:
+            self.profile_name_row.set_text(self.profile_to_edit.get('name', ''))
+            self.profile_command_row.set_text(self.profile_to_edit.get('command', ''))
+
+        # Remove default/previous buttons - Adw.Dialog doesn't have a remove_button like Gtk.Dialog.
+        # Instead, we just don't add the "Close" button from the minimal version.
+        # And we ensure no default response is set until we add our new buttons.
+        # self.clear_responses() # This method doesn't exist. Buttons are added to header bar.
+        # We need to manage buttons by not calling add_button for "Close" from previous version.
+        
+        # Add new buttons
+        self.add_button("Save", Gtk.ResponseType.APPLY)
+        self.set_default_response(Gtk.ResponseType.APPLY)
+        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        
+        self.connect("response", self._on_response)
+        
+        # Set a reasonable default size
+        self.set_default_size(400, 250)
+
+
+    def _on_response(self, dialog, response_id):
+        if response_id == Gtk.ResponseType.APPLY:
+            name = self.profile_name_row.get_text().strip()
+            command = self.profile_command_row.get_text().strip()
+
+            # Validation
+            if not name:
+                # For now, print to stderr. A toast would be better UX.
+                print("Validation Error: Profile name cannot be empty.", file=sys.stderr)
+                # A better way would be to use an AdwFlap or an inline Adw.Banner for validation messages.
+                # Returning True should prevent the dialog from closing on Gtk.ResponseType.APPLY
+                return True # Prevent dialog from closing
+
+            original_name = self.profile_to_edit['name'] if self.profile_to_edit else None
+            if name != original_name and name in self.existing_profile_names:
+                print(f"Validation Error: Profile name '{name}' already exists.", file=sys.stderr)
+                return True # Prevent dialog from closing
+
+            profile_data = {'name': name, 'command': command}
+            # If 'nse_scripts' was part of the original profile_to_edit, preserve it.
+            # For now, the editor only focuses on name and command.
+            # If it's a new profile, nse_scripts can be omitted or set to a default by ProfileManager.
+            if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
+                profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
+            
+            self.emit("profile-action", "save", profile_data)
+            self.close() # Close on successful save
+            return False # Allow default behavior which includes closing
+        elif response_id == Gtk.ResponseType.CANCEL:
+            self.emit("profile-action", "cancel", None) # Emit cancel so PreferencesWindow can react if needed
+            self.close() # Close on cancel
+            return False # Allow default behavior
+        
+        return False # Default for other responses (e.g. delete-event if not explicitly handled)
 
 # Ensure other parts of the file (imports needed by this minimal version) are present,
 # and parts not needed (like .ui templates or other helper classes if any) are removed or commented out.
@@ -92,3 +118,5 @@ class ProfileEditorDialog(Adw.Dialog):
 # For this test, the type hints in __init__ for profile_to_edit and existing_profile_names
 # are kept for compatibility with how preferences_window.py calls this dialog,
 # but they are not used in this minimal version.
+# The ScanProfile type hint from .profile_manager might be useful for profile_data if it's imported.
+# from .profile_manager import ScanProfile # Example if using ScanProfile type
