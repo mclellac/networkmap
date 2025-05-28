@@ -76,7 +76,6 @@ class ProfileEditorDialog(Adw.Dialog):
 
         # self.connect("response", self._on_response) # Removed this line
         
-        self.set_modal(True) # Make the dialog modal
         self.set_deletable(False) # Prevent closing via Esc key if validation is desired first
         self.set_size_request(400, -1) # Width, height can be auto
 
