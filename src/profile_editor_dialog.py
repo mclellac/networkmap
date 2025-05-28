@@ -33,8 +33,24 @@ class ProfileEditorDialog(Adw.Dialog):
         self.profile_name_row = Adw.EntryRow(title="Profile Name")
         preferences_group.add(self.profile_name_row)
 
-        self.profile_command_row = Adw.EntryRow(title="Nmap Arguments")
-        preferences_group.add(self.profile_command_row)
+        # Add SwitchRows for common flags
+        self.no_ping_switch = Adw.SwitchRow(title="No Ping (-Pn)")
+        preferences_group.add(self.no_ping_switch)
+
+        self.version_detection_switch = Adw.SwitchRow(title="Version Detection (-sV)")
+        preferences_group.add(self.version_detection_switch)
+
+        self.os_detection_switch = Adw.SwitchRow(title="OS Detection (-O)")
+        preferences_group.add(self.os_detection_switch)
+
+        # Add ComboRow for Timing Template
+        timing_options = ["T0 (Paranoid)", "T1 (Sneaky)", "T2 (Polite)", "T3 (Normal)", "T4 (Aggressive)", "T5 (Insane)"]
+        self.timing_combo = Adw.ComboRow(title="Timing Template", model=Gtk.StringList.new(timing_options))
+        self.timing_combo.set_selected(3) # Default to "T3 (Normal)" which is index 3
+        preferences_group.add(self.timing_combo)
+
+        self.additional_args_row = Adw.EntryRow(title="Additional Arguments") 
+        preferences_group.add(self.additional_args_row)
         
         # For simplicity, NSE scripts are not directly editable in this version,
         # but will be preserved if they exist.
@@ -44,7 +60,37 @@ class ProfileEditorDialog(Adw.Dialog):
         # Populate fields if editing
         if self.profile_to_edit:
             self.profile_name_row.set_text(self.profile_to_edit.get('name', ''))
-            self.profile_command_row.set_text(self.profile_to_edit.get('command', ''))
+            
+            command_str = self.profile_to_edit.get('command', '')
+            parts = command_str.split()
+            additional_parts_for_entry = list(parts) # Assume all parts are additional initially
+
+            # Timing
+            timing_map_to_index = { "-T0": 0, "-T1": 1, "-T2": 2, "-T3": 3, "-T4": 4, "-T5": 5 }
+            timing_flags = list(timing_map_to_index.keys())
+            found_timing = False
+            for flag in timing_flags:
+                if flag in parts: # Check in original parts
+                    self.timing_combo.set_selected(timing_map_to_index[flag])
+                    if flag in additional_parts_for_entry: additional_parts_for_entry.remove(flag)
+                    found_timing = True
+                    break # Only one timing flag
+            if not found_timing:
+                self.timing_combo.set_selected(3) # Default to T3 if none found in command string
+
+            # Switches Helper
+            def check_and_set_switch(switch_widget, flag, all_parts, additional_parts):
+                if flag in all_parts: # Check in original parts
+                    switch_widget.set_active(True)
+                    if flag in additional_parts: additional_parts.remove(flag)
+                else:
+                    switch_widget.set_active(False)
+
+            check_and_set_switch(self.no_ping_switch, "-Pn", parts, additional_parts_for_entry)
+            check_and_set_switch(self.version_detection_switch, "-sV", parts, additional_parts_for_entry)
+            check_and_set_switch(self.os_detection_switch, "-O", parts, additional_parts_for_entry)
+
+            self.additional_args_row.set_text(" ".join(additional_parts_for_entry))
 
         # Action area for buttons
         action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, margin_top=12)
@@ -83,7 +129,40 @@ class ProfileEditorDialog(Adw.Dialog):
         print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
-            command = self.profile_command_row.get_text().strip()
+            
+            command_parts = []
+
+            # Timing Template
+            timing_map = {
+                0: "-T0", 1: "-T1", 2: "-T2", 3: "-T3", 4: "-T4", 5: "-T5"
+            }
+            selected_timing_index = self.timing_combo.get_selected()
+            # Default to -T3 (index 3) if the selected index is somehow out of bounds,
+            # or if the default timing_combo selection (which is 3) means no specific -T option.
+            # However, Nmap uses -T3 by default if no -T option is specified.
+            # So, we only add a -T option if it's NOT -T3 to avoid redundancy,
+            # or always add it if explicit is preferred. For this, let's be explicit.
+            selected_timing_value = timing_map.get(selected_timing_index, "-T3") # Default to -T3
+            command_parts.append(selected_timing_value)
+
+            # No Ping Switch
+            if self.no_ping_switch.get_active():
+                command_parts.append("-Pn")
+
+            # Version Detection Switch
+            if self.version_detection_switch.get_active():
+                command_parts.append("-sV")
+
+            # OS Detection Switch
+            if self.os_detection_switch.get_active():
+                command_parts.append("-O")
+            
+            # Additional Arguments
+            additional_args = self.additional_args_row.get_text().strip()
+            if additional_args:
+                command_parts.append(additional_args)
+            
+            final_command = " ".join(command_parts)
 
             # Validation
             if not name:
@@ -94,7 +173,18 @@ class ProfileEditorDialog(Adw.Dialog):
                 self._show_toast(f"A profile with the name '{name}' already exists.")
                 return True # Prevent dialog from closing
 
-            profile_data = {'name': name, 'command': command}
+            # --- Start of new validation block ---
+            forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"] 
+            # More could be added, e.g., specific command sequences if known
+            
+            for char in forbidden_chars:
+                if char in final_command:
+                    self._show_toast(f"Error: Command arguments contain forbidden character: '{char}'.")
+                    print(f"DEBUG: Validation failed - forbidden character '{char}' in command: {final_command}", file=sys.stderr) # Debug print
+                    return True # Prevent saving and keep dialog open
+            # --- End of new validation block ---
+
+            profile_data = {'name': name, 'command': final_command}
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
             
