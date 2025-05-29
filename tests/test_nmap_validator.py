@@ -29,8 +29,22 @@ class TestNmapCommandValidator(unittest.TestCase):
             "-oN output.txt",
             "-iL input.list",
             "--script-args user=admin,pass=secret",
-            "plainstringtarget", # Should be valid as it's not an option and no forbidden chars
-            "-T4 extratarget -Pn" # Should be valid, extratarget is like a target
+            "plainstringtarget", 
+            "-T4 extratarget -Pn",
+            # New Host Discovery Valid Cases
+            "-sL localhost",
+            "-sn",
+            "-sP", # Alias for -sn
+            "-PE",
+            "-PS", # Valid without args
+            "-PA", # Valid without args
+            "-PU", # Valid without args
+            "-PS22",
+            "-PA80,443",
+            "-PU137-139",
+            "-PS T:25,U:53",
+            "-PS 22-25,80,T:110,U:161",
+            "-n --traceroute scanme.nmap.org"
         ]
         for cmd_args in valid_cases:
             is_valid, msg = self.validator.validate_arguments(cmd_args)
@@ -114,15 +128,32 @@ class TestNmapCommandValidator(unittest.TestCase):
             # The validator's "if not arg_value:" for -oN/-iL should catch this.
             # Note: a command like "-oN """ would be split by shell usually.
             # If self.validator.validate_arguments("-oN \"\"") is called, parts will be ["-oN", ""].
-            ("-oN \"\"", "Filename argument for -oN cannot be empty."), 
-            ("-iL \"\"", "Filename argument for -iL cannot be empty."),
-            ("-oN -sV", "Option '-oN' requires a filename argument, but found another option: '-sV'"),
-            ("-iL -Pn", "Option '-iL' requires a filename argument, but found another option: '-Pn'"),
+            ("-oN \"\"", "Filename argument for -oN cannot be empty or another option ('\"\"')."), 
+            ("-iL \"\"", "Filename argument for -iL cannot be empty or another option ('\"\"')."),
+            ("-oN -sV", "Filename argument for -oN cannot be empty or another option ('-sV')."),
+            ("-iL -Pn", "Filename argument for -iL cannot be empty or another option ('-Pn')."),
         ]
         for cmd_args, snippet in invalid_file_args:
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid for file arg: '{cmd_args}', got valid with msg: '{msg}'")
             self.assertIn(snippet, msg, f"Incorrect error message for '{cmd_args}'. Got: '{msg}'")
+
+    def test_host_discovery_args_validation(self):
+        invalid_cases = [
+            ("-PSabc", "-PS", "abc", "Invalid port specification format for -PS: 'abc'."),
+            ("-PA 22;23", "-PA", "22;23", "Invalid port specification format for -PA: '22;23'."),
+            ("-PU foo,1", "-PU", "foo,1", "Invalid port specification format for -PU: 'foo,1'."),
+            ("-PS T:U:80", "-PS", "T:U:80", "Invalid port specification format for -PS: 'T:U:80'."), # Double prefix
+            ("-PA 1-", "-PA", "1-", "Invalid port specification format for -PA: '1-'."), # Incomplete range
+            ("-PU ,137", "-PU", ",137", "Invalid port specification format for -PU: ',137'."), # Leading comma
+        ]
+        for cmd_args, flag, bad_port_arg, expected_msg_snippet in invalid_cases:
+            is_valid, msg = self.validator.validate_arguments(cmd_args)
+            self.assertFalse(is_valid, f"Expected invalid for HD arg: '{cmd_args}'")
+            # Ensure the message contains the specific snippet, not just the generic port error part from -p
+            self.assertTrue(expected_msg_snippet in msg or f"Invalid port specification format for {flag}: '{bad_port_arg}'" in msg, 
+                            f"Incorrect error for '{cmd_args}'. Got: '{msg}', Expected snippet: '{expected_msg_snippet}'")
+
 
     def test_timing_template_validation(self):
         valid_timing_args = ["-T0", "-T1", "-T2", "-T3", "-T4", "-T5"]
@@ -145,12 +176,25 @@ class TestNmapCommandValidator(unittest.TestCase):
             ("-p asdf", "asdf", "Invalid format for port specification 'asdf' with option '-p'."),
             ("-p 123,asdf,456", "123,asdf,456", "Invalid format for port specification '123,asdf,456' with option '-p'."),
             ("-p T:asdf", "T:asdf", "Invalid format for port specification 'T:asdf' with option '-p'."),
+            ("-p U:foo", "U:foo", "Invalid format for port specification 'U:foo' with option '-p'."),
             ("-p 80-עדת", "80-עדת", "Invalid format for port specification '80-עדת' with option '-p'."), # Non-ASCII
         ]
         for cmd_args, bad_port_string, expected_msg_snippet in invalid_cases:
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid for port arg gibberish: '{cmd_args}'")
             self.assertIn(expected_msg_snippet, msg, f"Incorrect error for '{cmd_args}'. Got: '{msg}'")
+            
+    def test_port_option_valid_formats(self):
+        valid_cases = [
+            "-p 22",
+            "-p 1-1024",
+            "-p T:22,U:53",
+            "-p 80,443,1000-2000",
+            "-p T:21-25,80,443,U:53,111,300-400"
+        ]
+        for cmd_args in valid_cases:
+            is_valid, msg = self.validator.validate_arguments(cmd_args)
+            self.assertTrue(is_valid, f"Expected valid for port format: '{cmd_args}', got error: {msg}")
 
     def test_script_option_argument_gibberish(self):
         invalid_cases = [
