@@ -84,7 +84,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
         self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
         self.arguments_entry_row.connect("notify::text", self._on_additional_args_entry_changed) # For validation
-        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
+        self.port_spec_entry_row.connect("notify::text", self._on_ports_entry_changed) # For validation
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
         self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
 
@@ -97,26 +98,31 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._update_ui_state("ready") # This will call _are_inputs_valid_for_scan
 
     def _are_inputs_valid_for_scan(self) -> bool:
-        """Checks if current inputs (target, args) are valid for starting a scan."""
+        """Checks if current inputs (target, ports, args) are valid for starting a scan."""
+        # Target validation (existing logic)
         target_text = self.target_entry_row.get_text().strip()
         target_is_valid = True
-        if not target_text: # Empty target is invalid for scanning
+        if not target_text: 
             target_is_valid = False
         else:
-            # Basic forbidden character check for target (simplified)
-            # TODO: Consider moving to a dedicated method in NmapCommandValidator if more complex target validation is needed.
-            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
+            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"] 
             for char in temp_forbidden_chars:
                 if char in target_text:
                     target_is_valid = False
                     break
         
+        # Additional arguments validation (existing logic)
         additional_args_text = self.arguments_entry_row.get_text().strip()
-        # additional_args_text can be empty and still valid.
-        # The validator returns (True, "") for an empty string if allow_empty is not False (default is True).
         additional_args_are_valid, _ = self.validator.validate_arguments(additional_args_text)
+
+        # Port Specification Validation
+        ports_text = self.port_spec_entry_row.get_text().strip()
+        ports_are_valid = True # Assume empty is valid (Nmap default scan)
+        if ports_text: # Only validate if non-empty
+            # Use the validator, prepending "-p "
+            ports_are_valid, _ = self.validator.validate_arguments(f"-p {ports_text}")
             
-        return target_is_valid and additional_args_are_valid
+        return target_is_valid and additional_args_are_valid and ports_are_valid
 
     def _on_additional_args_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
         """Handles text changes in the additional Nmap arguments entry row for live validation."""
@@ -165,6 +171,27 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # We can pass the current state, or determine it if _update_ui_state needs it
         # For now, assume "ready" state or let _update_ui_state manage its current state logic.
         self._update_ui_state("ready") # This will re-evaluate scan button sensitivity via _are_inputs_valid_for_scan
+
+    def _on_ports_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
+        """Handles text changes in the port specification entry row for live validation."""
+        ports_text = entry_row.get_text().strip()
+        
+        is_valid = True
+        error_message = "" # Not directly displayed in UI label for this step, but good for debug
+
+        if ports_text: # Only validate if there's actual text; empty is fine (Nmap default scan)
+            # Validate the argument in context of the -p option
+            is_valid, error_message = self.validator.validate_arguments(f"-p {ports_text}") 
+        
+        if not is_valid and ports_text: # Show error only if text is present AND invalid
+            if "error" not in self.port_spec_entry_row.get_css_classes():
+                self.port_spec_entry_row.add_css_class("error")
+            print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr) 
+        else: # Valid or empty
+            if "error" in self.port_spec_entry_row.get_css_classes():
+                self.port_spec_entry_row.remove_css_class("error")
+        
+        self._update_ui_state("ready") # Refresh scan button sensitivity etc.
 
     def _populate_profile_combo(self) -> None:
         """Populates the scan profile selection combobox."""
@@ -385,6 +412,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     self.target_entry_row.remove_css_class("error")
                 if "error" in self.arguments_entry_row.get_css_classes():
                     self.arguments_entry_row.remove_css_class("error")
+                # Also clear port spec error if inputs become valid for a scan start
+                if "error" in self.port_spec_entry_row.get_css_classes():
+                    # Check its current validity directly, as it's not part of _are_inputs_valid_for_scan
+                    current_ports_text = self.port_spec_entry_row.get_text().strip()
+                    port_is_currently_valid, _ = self.validator.validate_arguments(f"-p {current_ports_text}") if current_ports_text else (True, "")
+                    if port_is_currently_valid:
+                        self.port_spec_entry_row.remove_css_class("error")
         elif state == "error":
             self.status_page.set_property("description", f"Scan Failed: {message or 'Unknown error'}")
         elif state == "success":
