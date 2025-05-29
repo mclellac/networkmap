@@ -22,9 +22,17 @@ class NmapCommandValidator:
             "--max-retries", "--host-timeout", "--scan-delay", "--max-scan-delay",
             "--min-rate", "--max-rate",
             "--script-args", "--script-help", "--script-updatedb",
-            # Add other frequently used options as needed
+            # Host Discovery Options
+            "-sL",             # List Scan
+            "-sn", "-sP",      # Ping Scan (sP is old alias for sn)
+            "-PS",             # TCP SYN Ping
+            "-PA",             # TCP ACK Ping
+            "-PU",             # UDP Ping
+            "-PE",             # ICMP Echo Ping
+            # -PP (Timestamp), -PM (Netmask) are other ICMP types
+            "--traceroute",    # Traceroute
         }
-        # Options that are known to take an argument
+        # Options that are known to take an argument (and argument is space-separated)
         self.options_with_args = {
             "-p": "port_spec", 
             "--script": "script_spec", 
@@ -80,68 +88,79 @@ class NmapCommandValidator:
                                 return False, f"Invalid timing template format: '{part}'. Must be -T0 to -T5."
                         # If valid prefix option, mark as handled and continue
                         is_prefix_option_handled = True
-                        break 
+                        break
                 
-                if not is_prefix_option_handled and part not in self.known_options:
-                    # Allow single letter options to be combined, e.g. -sV should not make -V unknown
-                    # This is a simplified check; nmap's parsing is more complex.
-                    # If part is like -abc, and -a, -b, -c are known, it's complex.
-                    # For now, if it's not directly in known_options and not a prefix_option, check if it starts with known option.
-                    # This is tricky. A simpler rule: if it's not in known_options and doesn't start with a prefix_option,
-                    # and not a multi-flag like -abc where -a is known...
-                    # For now, we'll be strict: if not in known_options or a valid prefix_option, it's unknown.
-                    # Exception: allow things like -sV where -s is not in options_with_args
-                    if len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args):
-                        pass # e.g. -sV is okay if -s is known and doesn't take args itself. -s is not in options_with_args.
-                    else:
+                # --- Start: Handling for -PS<ports>, -PA<ports>, -PU<ports> (attached args) ---
+                # This comes before the generic "unknown option" check.
+                if not is_prefix_option_handled and not (part in self.known_options):
+                    is_attached_host_discovery_port_arg = False
+                    for hd_opt_prefix in ["-PS", "-PA", "-PU"]:
+                        if part.startswith(hd_opt_prefix) and len(part) > len(hd_opt_prefix):
+                            port_arg = part[len(hd_opt_prefix):]
+                            # Use a more specific port regex. Allow empty for -PS (meaning default ports)
+                            # but if not empty, it must be valid.
+                            # Nmap allows -PS (no ports), -PS21, -PS21,22, -PS21-25
+                            # Regex should match common port list forms (single, comma-sep, range, T: U: prefixes)
+                            # Allow empty string for port_arg for -PS, -PA, -PU if directly attached (e.g. if part was just "-PS")
+                            # But len(part) > len(hd_opt_prefix) means port_arg is not empty here.
+                            port_regex = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
+                            if not port_regex.fullmatch(port_arg):
+                                return False, f"Invalid port specification format for {hd_opt_prefix}: '{port_arg}'."
+                            is_prefix_option_handled = True # It's a known form, handled.
+                            is_attached_host_discovery_port_arg = True
+                            break
+                    if is_attached_host_discovery_port_arg:
+                        pass # Already handled and validated
+                    # --- End: Handling for attached host discovery port args ---
+                    elif not (len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args)): # existing -sV type check
                         return False, f"Unknown Nmap option: '{part}'"
+                
+                # If code reaches here, 'part' is a known option or was handled as a prefix option (like -T4 or -PS22)
 
-                if not is_prefix_option_handled and part in self.options_with_args:
-                    if i + 1 >= len(parts):
-                        return False, f"Option '{part}' requires an argument, but none was provided."
-                    
-                    arg_value = parts[i+1]
-                    # Defensive check: argument itself should not look like an option unless it's a valid value for this option
-                    if arg_value.startswith("-") and arg_value in self.known_options and not (part == "--script-args"): # --script-args can take -v, etc.
-                         # Further check if arg_value is a number if part expects a number (e.g. -p -6 would be invalid)
-                        if part in ["-p"] and not re.match(r"^\d", arg_value): # -p -6 is invalid, -p 6 is valid
-                           return False, f"Option '{part}' expects a value, but found another option '{arg_value}' that is not a valid value for '{part}'."
+                if not is_prefix_option_handled: # Process options that were not prefix based (e.g. -T4) or attached (e.g. -PS22)
+                    if part in self.options_with_args: # Options that MUST have a space-separated argument
+                        if i + 1 >= len(parts):
+                            return False, f"Option '{part}' requires an argument, but none was provided."
+                        
+                        arg_value = parts[i+1]
+                        if arg_value.startswith("-") and arg_value in self.known_options and not (part == "--script-args"):
+                            if part in ["-p"] and not re.match(r"^\d", arg_value):
+                               return False, f"Option '{part}' expects a value, but found another option '{arg_value}' that is not a valid value for '{part}'."
 
-                    # Argument-specific validation
-                    if part == "-p":
-                        # Regex for basic port validation (numbers, ranges, commas)
-                        # Does not validate all nmap complexities (e.g. T: U: prefix)
-                        if not re.match(r"^[0-9,\-,U:T:]+$", arg_value): # Basic check
-                             return False, f"Invalid format for port specification '{arg_value}' with option '{part}'."
-                        if not arg_value or arg_value.startswith("-"): # Ensure it's not empty or another option
-                            if not (arg_value.startswith("-") and re.match(r"^\d", arg_value[1:])): # allow negative if it's part of a range like -1024
-                                return False, f"Port specification for '{part}' is missing, empty, or looks like another option: '{arg_value}'."
+                        # Argument-specific validation for options_with_args
+                        if part == "-p":
+                            port_regex_strict = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
+                            if not arg_value or (arg_value.startswith("-") and not re.match(r"^\d", arg_value[1:])) or not port_regex_strict.fullmatch(arg_value):
+                                return False, f"Invalid format for port specification '{arg_value}' with option '{part}'."
                     
-                    elif part == "--script":
-                        # Scripts can be names, categories, or expressions.
-                        # For simplicity, check for obviously bad characters. No empty names.
-                        if not arg_value or arg_value.startswith("-"):
-                             return False, f"Script name for '{part}' is missing, empty, or looks like another option: '{arg_value}'."
-                        # Basic check, allows for comma-separated list, and simple expressions (e.g. "default or safe")
-                        # Avoids most special characters.
-                        if not re.match(r"^[a-zA-Z0-9_\-]+([,][a-zA-Z0-9_\-]+)*(\s+(and|or|not)\s+[a-zA-Z0-9_\-]+([,][a-zA-Z0-9_\-]+)*)*$", arg_value):
-                            if not re.match(r"^[a-zA-Z0-9_\*,\(\)\s\"\'\.]+([,][a-zA-Z0-9_\*,\(\)\s\"\'\.]+)*$", arg_value): # More permissive for quoted/complex
+                        elif part == "--script":
+                            if not arg_value or (arg_value.startswith("-") and arg_value not in ["default", "all"]): # allow --script default
+                                 return False, f"Script name for '{part}' is missing, empty, or looks like another option: '{arg_value}'."
+                            # Regex for script names/categories/expressions (simplified)
+                            script_regex = re.compile(r"^[a-zA-Z0-9_\-]+(?:(?:[,](?!$)|(\s+(?:and|or|not)\s+)(?![,\s])))[a-zA-Z0-9_\-]+)*$") # Basic: word,word / word op word
+                            complex_script_regex = re.compile(r"^[a-zA-Z0-9_\*,\(\)\s\"\'\.\/\\]+([,][a-zA-Z0-9_\*,\(\)\s\"\'\.\/\\]+)*$") # More permissive for paths, quotes, etc.
+                            if not script_regex.fullmatch(arg_value) and not complex_script_regex.fullmatch(arg_value):
                                 return False, f"Script argument for '{part}' ('{arg_value}') contains invalid characters or format."
+                        
+                        elif part == "-oN" or part == "-iL": # Or -oX, -oG, -oA
+                            if not arg_value or (arg_value.startswith("-") and arg_value in self.known_options) :
+                                return False, f"Filename argument for {part} cannot be empty or another option ('{arg_value}')."
+                            filename_forbidden_chars = ["\n", "\r", "$", "`", ";", "|", "&", "<", ">", "(", ")"] 
+                            for char_fn in filename_forbidden_chars:
+                                if char_fn in arg_value:
+                                    return False, f"Filename argument for {part} ('{arg_value}') contains forbidden character: '{char_fn}'."
+                        i += 1 # Consume the argument for options_with_args
                     
-                    elif part == "-oN" or part == "-iL":
-                        if not arg_value: # Should be caught by missing arg check
-                            return False, f"Filename argument for {part} cannot be empty."
-                        
-                        filename_forbidden_chars = ["\n", "\r", "$", "`", ";", "|", "&", "<", ">", "(", ")"] 
-                        for char_fn in filename_forbidden_chars: # Use different var name
-                            if char_fn in arg_value:
-                                return False, f"Filename argument for {part} ('{arg_value}') contains forbidden character: '{char_fn}'."
-                        
-                        if arg_value.startswith("-") and arg_value in self.known_options:
-                           return False, f"Option '{part}' requires a filename argument, but found another option: '{arg_value}'."
-
-                    i += 1 # Consume the argument
-            i += 1 # Consume the option or non-option part
+                    elif part in ["-PS", "-PA", "-PU"]: # Optional space-separated argument
+                        if (i + 1) < len(parts) and not parts[i+1].startswith("-"):
+                            port_arg = parts[i+1]
+                            if port_arg: # If there is an argument, it must be valid. Empty is not allowed here by regex.
+                                port_regex = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
+                                if not port_regex.fullmatch(port_arg):
+                                    return False, f"Invalid port specification format for {part}: '{port_arg}'."
+                            i += 1 # Consume validated argument
+                        # If no argument or next is an option, it's fine (-PS alone is valid)
+            i += 1 # Consume the option part itself or a non-option part
         return True, ""
 
 

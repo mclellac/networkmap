@@ -31,27 +31,82 @@ class ProfileEditorDialog(Adw.Dialog):
         preferences_group = Adw.PreferencesGroup()
         main_box.append(preferences_group)
 
+        # Profile Name Row (remains directly in preferences_group)
         self.profile_name_row = Adw.EntryRow(title="Profile Name")
         preferences_group.add(self.profile_name_row)
 
-        # Add SwitchRows for common flags
-        self.no_ping_switch = Adw.SwitchRow(title="No Ping (-Pn)")
-        preferences_group.add(self.no_ping_switch)
+        # Expander for General Scan Options
+        general_scan_options_expander = Adw.ExpanderRow(title="General Scan Options")
+        general_scan_options_expander.set_expanded(True) # Keep it open by default
+        preferences_group.add(general_scan_options_expander)
+
+        self.timing_combo = Adw.ComboRow(
+            title="Timing Template", 
+            model=Gtk.StringList.new(["T0 (Paranoid)", "T1 (Sneaky)", "T2 (Polite)", "T3 (Normal)", "T4 (Aggressive)", "T5 (Insane)"])
+        )
+        self.timing_combo.set_selected(3) # Default to "T3 (Normal)"
+        general_scan_options_expander.add_row(self.timing_combo)
+        
+        # self.no_ping_switch will be moved to Host Discovery
 
         self.version_detection_switch = Adw.SwitchRow(title="Version Detection (-sV)")
-        preferences_group.add(self.version_detection_switch)
+        general_scan_options_expander.add_row(self.version_detection_switch)
 
         self.os_detection_switch = Adw.SwitchRow(title="OS Detection (-O)")
-        preferences_group.add(self.os_detection_switch)
+        general_scan_options_expander.add_row(self.os_detection_switch)
 
-        # Add ComboRow for Timing Template
-        timing_options = ["T0 (Paranoid)", "T1 (Sneaky)", "T2 (Polite)", "T3 (Normal)", "T4 (Aggressive)", "T5 (Insane)"]
-        self.timing_combo = Adw.ComboRow(title="Timing Template", model=Gtk.StringList.new(timing_options))
-        self.timing_combo.set_selected(3) # Default to "T3 (Normal)" which is index 3
-        preferences_group.add(self.timing_combo)
+        # Expander for Host Discovery
+        host_discovery_expander = Adw.ExpanderRow(title="Host Discovery")
+        host_discovery_expander.set_expanded(False) # Start collapsed
+        preferences_group.add(host_discovery_expander)
 
-        self.additional_args_row = Adw.EntryRow(title="Additional Arguments") 
-        preferences_group.add(self.additional_args_row)
+        # Populate Host Discovery Expander
+        self.list_scan_switch = Adw.SwitchRow(title="List Scan (-sL)")
+        host_discovery_expander.add_row(self.list_scan_switch)
+
+        self.ping_scan_switch = Adw.SwitchRow(title="Ping Scan (-sn / -sP)", subtitle="Disable port scan")
+        host_discovery_expander.add_row(self.ping_scan_switch)
+
+        self.no_ping_switch = Adw.SwitchRow(title="No Ping (-Pn)") # Moved here
+        host_discovery_expander.add_row(self.no_ping_switch)
+        
+        self.tcp_syn_ping_switch = Adw.SwitchRow(title="TCP SYN Ping (-PS)")
+        host_discovery_expander.add_row(self.tcp_syn_ping_switch)
+        self.tcp_syn_ping_ports_entry = Adw.EntryRow(title="Ports (optional, e.g., 80,443)")
+        self.tcp_syn_ping_ports_entry.set_visible(False) # Initially hidden
+        self.tcp_syn_ping_switch.connect("notify::active", self._on_host_discovery_ping_switch_toggled, self.tcp_syn_ping_ports_entry)
+        host_discovery_expander.add_row(self.tcp_syn_ping_ports_entry)
+
+        self.tcp_ack_ping_switch = Adw.SwitchRow(title="TCP ACK Ping (-PA)")
+        host_discovery_expander.add_row(self.tcp_ack_ping_switch)
+        self.tcp_ack_ping_ports_entry = Adw.EntryRow(title="Ports (optional)")
+        self.tcp_ack_ping_ports_entry.set_visible(False)
+        self.tcp_ack_ping_switch.connect("notify::active", self._on_host_discovery_ping_switch_toggled, self.tcp_ack_ping_ports_entry)
+        host_discovery_expander.add_row(self.tcp_ack_ping_ports_entry)
+
+        self.udp_ping_switch = Adw.SwitchRow(title="UDP Ping (-PU)")
+        host_discovery_expander.add_row(self.udp_ping_switch)
+        self.udp_ping_ports_entry = Adw.EntryRow(title="Ports (optional)")
+        self.udp_ping_ports_entry.set_visible(False)
+        self.udp_ping_switch.connect("notify::active", self._on_host_discovery_ping_switch_toggled, self.udp_ping_ports_entry)
+        host_discovery_expander.add_row(self.udp_ping_ports_entry)
+
+        self.icmp_echo_ping_switch = Adw.SwitchRow(title="ICMP Echo Ping (-PE)")
+        host_discovery_expander.add_row(self.icmp_echo_ping_switch)
+        
+        self.no_dns_switch = Adw.SwitchRow(title="No DNS Resolution (-n)")
+        host_discovery_expander.add_row(self.no_dns_switch)
+        
+        self.traceroute_switch = Adw.SwitchRow(title="Traceroute (--traceroute)")
+        host_discovery_expander.add_row(self.traceroute_switch)
+
+        # Expander for Additional Arguments
+        additional_args_expander = Adw.ExpanderRow(title="Additional Manual Arguments")
+        additional_args_expander.set_expanded(True) # Keep open
+        preferences_group.add(additional_args_expander)
+
+        self.additional_args_row = Adw.EntryRow(title="Arguments") # Title can be simpler now
+        additional_args_expander.add_row(self.additional_args_row)
         
         # For simplicity, NSE scripts are not directly editable in this version,
         # but will be preserved if they exist.
@@ -91,6 +146,57 @@ class ProfileEditorDialog(Adw.Dialog):
             check_and_set_switch(self.version_detection_switch, "-sV", parts, additional_parts_for_entry)
             check_and_set_switch(self.os_detection_switch, "-O", parts, additional_parts_for_entry)
 
+            # Host Discovery Simple Switches
+            check_and_set_switch(self.list_scan_switch, "-sL", parts, additional_parts_for_entry)
+            
+            # For -sn / -sP, since they are aliases and we have one switch:
+            if "-sn" in parts:
+                self.ping_scan_switch.set_active(True)
+                if "-sn" in additional_parts_for_entry: additional_parts_for_entry.remove("-sn")
+            elif "-sP" in parts: # Check for -sP if -sn not found
+                self.ping_scan_switch.set_active(True)
+                if "-sP" in additional_parts_for_entry: additional_parts_for_entry.remove("-sP")
+            else:
+                self.ping_scan_switch.set_active(False)
+
+            check_and_set_switch(self.icmp_echo_ping_switch, "-PE", parts, additional_parts_for_entry)
+            check_and_set_switch(self.no_dns_switch, "-n", parts, additional_parts_for_entry)
+            check_and_set_switch(self.traceroute_switch, "--traceroute", parts, additional_parts_for_entry)
+
+            # Process flags with optional arguments (-PS, -PA, -PU) from remaining parts
+            current_additional_parts = list(additional_parts_for_entry) # Current state of parts to be processed
+            final_additional_parts_after_parsing_pings = [] # Parts that are not any of -PS/PA/PU and their args
+            
+            i = 0
+            while i < len(current_additional_parts):
+                part = current_additional_parts[i]
+                processed_this_part = False
+
+                for switch_obj, port_entry_obj, flag_prefix in [
+                    (self.tcp_syn_ping_switch, self.tcp_syn_ping_ports_entry, "-PS"),
+                    (self.tcp_ack_ping_switch, self.tcp_ack_ping_ports_entry, "-PA"),
+                    (self.udp_ping_switch, self.udp_ping_ports_entry, "-PU")
+                ]:
+                    if part == flag_prefix:
+                        switch_obj.set_active(True)
+                        # Check if next part is its argument (not another option and exists)
+                        if (i + 1) < len(current_additional_parts) and not current_additional_parts[i+1].startswith("-"):
+                            port_entry_obj.set_text(current_additional_parts[i+1])
+                            i += 1 # Consume argument part
+                        processed_this_part = True
+                        break 
+                    elif part.startswith(flag_prefix) and len(part) > len(flag_prefix): # e.g., -PS22 or -PS22,80
+                        switch_obj.set_active(True)
+                        port_entry_obj.set_text(part[len(flag_prefix):])
+                        processed_this_part = True
+                        break 
+                
+                if not processed_this_part:
+                    final_additional_parts_after_parsing_pings.append(part)
+                
+                i += 1
+            
+            additional_parts_for_entry = final_additional_parts_after_parsing_pings
             self.additional_args_row.set_text(" ".join(additional_parts_for_entry))
 
         # Action area for buttons
@@ -146,10 +252,6 @@ class ProfileEditorDialog(Adw.Dialog):
             selected_timing_value = timing_map.get(selected_timing_index, "-T3") # Default to -T3
             command_parts.append(selected_timing_value)
 
-            # No Ping Switch
-            if self.no_ping_switch.get_active():
-                command_parts.append("-Pn")
-
             # Version Detection Switch
             if self.version_detection_switch.get_active():
                 command_parts.append("-sV")
@@ -157,13 +259,48 @@ class ProfileEditorDialog(Adw.Dialog):
             # OS Detection Switch
             if self.os_detection_switch.get_active():
                 command_parts.append("-O")
+
+            # --- Host Discovery Options START ---
+            if self.list_scan_switch.get_active():
+                command_parts.append("-sL")
+            
+            if self.ping_scan_switch.get_active():
+                command_parts.append("-sn")
+
+            if self.no_ping_switch.get_active():
+                 command_parts.append("-Pn") # -Pn is now handled here
+
+            # TCP SYN Ping (-PS)
+            if self.tcp_syn_ping_switch.get_active():
+                ps_ports = self.tcp_syn_ping_ports_entry.get_text().strip()
+                command_parts.append(f"-PS{ps_ports if ps_ports else ''}")
+
+            # TCP ACK Ping (-PA)
+            if self.tcp_ack_ping_switch.get_active():
+                pa_ports = self.tcp_ack_ping_ports_entry.get_text().strip()
+                command_parts.append(f"-PA{pa_ports if pa_ports else ''}")
+
+            # UDP Ping (-PU)
+            if self.udp_ping_switch.get_active():
+                pu_ports = self.udp_ping_ports_entry.get_text().strip()
+                command_parts.append(f"-PU{pu_ports if pu_ports else ''}")
+
+            if self.icmp_echo_ping_switch.get_active():
+                command_parts.append("-PE")
+
+            if self.no_dns_switch.get_active():
+                command_parts.append("-n")
+            
+            if self.traceroute_switch.get_active():
+                command_parts.append("--traceroute")
+            # --- Host Discovery Options END ---
             
             # Additional Arguments
             additional_args = self.additional_args_row.get_text().strip()
             if additional_args:
                 command_parts.append(additional_args)
             
-            final_command = " ".join(command_parts)
+            final_command = " ".join(filter(None, command_parts)) # filter(None, ...) to remove empty strings if any
 
             # Validation
             if not name:
@@ -184,6 +321,7 @@ class ProfileEditorDialog(Adw.Dialog):
             # --- New Validator Integration END ---
 
             profile_data = {'name': name, 'command': final_command}
+            # Placeholder for NSE scripts, not handled by these UI elements directly yet
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
             
@@ -191,17 +329,21 @@ class ProfileEditorDialog(Adw.Dialog):
             print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)
             print("DEBUG: apply - calling self.force_close()", file=sys.stderr)
-            self.force_close()
-            print("DEBUG: apply - after self.force_close(), returning False", file=sys.stderr)
-            return False # Explicitly return False after closing
+            self.force_close() # Use force_close as response handling is manual
+            print("DEBUG: apply - after self.force_close(), returning False", file=sys.stderr) # Should not be reached if closed
+            # No return needed here as force_close should have destroyed it
         elif response_id == "cancel":
             print("DEBUG: cancel - emitting profile-action 'cancel'", file=sys.stderr)
             self.emit("profile-action", "cancel", None)
             print("DEBUG: cancel - calling self.force_close()", file=sys.stderr)
-            self.force_close()
-            print("DEBUG: cancel - after self.force_close(), returning False", file=sys.stderr)
-            return False # Explicitly return False after closing
-        return False # Allow close for other cases or if not handled
+            self.force_close() # Use force_close
+            print("DEBUG: cancel - after self.force_close(), returning False", file=sys.stderr) # Should not be reached
+        # No return needed here as force_close should handle destruction
+
+    def _on_host_discovery_ping_switch_toggled(self, switch_row: Adw.SwitchRow, pspec: Optional[GObject.ParamSpec], entry_row: Adw.EntryRow) -> None:
+        entry_row.set_visible(switch_row.get_active())
+        if not switch_row.get_active():
+            entry_row.set_text("") # Clear text when hiding
 
     def _show_toast(self, message: str):
         # For proper error display within the dialog context, use Adw.AlertDialog
