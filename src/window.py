@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
+from .nmap_validator import NmapCommandValidator # Added
 from .utils import discover_nse_scripts
 from .profile_manager import ScanProfile, ProfileManager, PROFILES_SCHEMA_KEY
 
@@ -47,6 +48,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_history_list: List[str] = list(self.settings.get_strv(self.TARGET_HISTORY_SCHEMA_KEY))
         self.font_css_provider = Gtk.CssProvider()
         self.profile_manager = ProfileManager()
+        self.validator = NmapCommandValidator() # Added validator instance
 
         self._connect_settings_signals()
         self._connect_ui_element_signals()
@@ -71,12 +73,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
         self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
         self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
+        
+        # Live validation for target entry
+        self.target_entry_row.connect("notify::text", self._on_target_entry_changed)
+
         # Signals for updating Nmap command preview
-        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
         self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
         self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview)
         self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
+        self.arguments_entry_row.connect("notify::text", self._on_additional_args_entry_changed) # For validation
         self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
         self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
@@ -87,7 +94,77 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._populate_profile_combo() # Then profiles, which might apply a default profile
         self._populate_nse_script_combo()
         self._update_nmap_command_preview()
-        self._update_ui_state("ready")
+        self._update_ui_state("ready") # This will call _are_inputs_valid_for_scan
+
+    def _are_inputs_valid_for_scan(self) -> bool:
+        """Checks if current inputs (target, args) are valid for starting a scan."""
+        target_text = self.target_entry_row.get_text().strip()
+        target_is_valid = True
+        if not target_text: # Empty target is invalid for scanning
+            target_is_valid = False
+        else:
+            # Basic forbidden character check for target (simplified)
+            # TODO: Consider moving to a dedicated method in NmapCommandValidator if more complex target validation is needed.
+            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
+            for char in temp_forbidden_chars:
+                if char in target_text:
+                    target_is_valid = False
+                    break
+        
+        additional_args_text = self.arguments_entry_row.get_text().strip()
+        # additional_args_text can be empty and still valid.
+        # The validator returns (True, "") for an empty string if allow_empty is not False (default is True).
+        additional_args_are_valid, _ = self.validator.validate_arguments(additional_args_text)
+            
+        return target_is_valid and additional_args_are_valid
+
+    def _on_additional_args_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
+        """Handles text changes in the additional Nmap arguments entry row for live validation."""
+        args_text = entry_row.get_text().strip()
+        
+        # Use the NmapCommandValidator for "Additional Arguments"
+        is_valid, error_message = self.validator.validate_arguments(args_text)
+        
+        if not is_valid and args_text: # Show error only if text is present but invalid
+            if "error" not in self.arguments_entry_row.get_css_classes():
+                self.arguments_entry_row.add_css_class("error")
+            # print(f"DEBUG Additional Args Error: {error_message}", file=sys.stderr) # For debugging
+        else: # Valid or empty
+            if "error" in self.arguments_entry_row.get_css_classes():
+                self.arguments_entry_row.remove_css_class("error")
+        
+        self._update_ui_state("ready") # Refresh scan button sensitivity etc.
+
+    def _on_target_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
+        """Handles text changes in the target entry row for live validation."""
+        target_text = entry_row.get_text().strip()
+        is_valid = True
+        error_message = "" # Not used for display yet, but for logic
+
+        if not target_text: # Considered invalid for initiating a scan, but not necessarily an "error" for CSS
+            # For CSS error state, only apply if non-empty and contains forbidden chars.
+            # Or, if we want to show error for empty on blur, that's different.
+            # For now, empty does not get 'error' class, but scan button will be disabled.
+            pass
+        else:
+            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
+            for char in temp_forbidden_chars:
+                if char in target_text:
+                    is_valid = False
+                    # error_message = f"Target contains forbidden character: '{char}'" # For future label
+                    break
+        
+        if not is_valid and target_text : # Only show error CSS if text is present and invalid
+            if "error" not in self.target_entry_row.get_css_classes():
+                self.target_entry_row.add_css_class("error")
+        else:
+            if "error" in self.target_entry_row.get_css_classes():
+                self.target_entry_row.remove_css_class("error")
+        
+        # Update scan button sensitivity based on current validity
+        # We can pass the current state, or determine it if _update_ui_state needs it
+        # For now, assume "ready" state or let _update_ui_state manage its current state logic.
+        self._update_ui_state("ready") # This will re-evaluate scan button sensitivity via _are_inputs_valid_for_scan
 
     def _populate_profile_combo(self) -> None:
         """Populates the scan profile selection combobox."""
@@ -282,20 +359,32 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         is_scanning = (state == "scanning")
         self.spinner.set_visible(is_scanning)
         
-        sensitive = not is_scanning
-        self.target_entry_row.set_sensitive(sensitive)
-        self.os_fingerprint_switch.set_sensitive(sensitive)
-        self.arguments_entry_row.set_sensitive(sensitive)
-        self.stealth_scan_switch.set_sensitive(sensitive)
-        self.port_spec_entry_row.set_sensitive(sensitive)
-        self.timing_template_combo_row.set_sensitive(sensitive)
-        self.no_ping_switch.set_sensitive(sensitive)
-        self.nse_script_combo_row.set_sensitive(sensitive)
-        self.profile_combo_row.set_sensitive(sensitive)
-        self.start_scan_button.set_sensitive(sensitive)
+        base_sensitive = not is_scanning
+        
+        # Determine button sensitivity based on input validity AND scan progress
+        all_inputs_valid = self._are_inputs_valid_for_scan()
+        self.start_scan_button.set_sensitive(base_sensitive and all_inputs_valid)
+
+        # Other UI elements' sensitivity (generally disabled during scan)
+        self.target_entry_row.set_sensitive(base_sensitive)
+        self.os_fingerprint_switch.set_sensitive(base_sensitive)
+        self.arguments_entry_row.set_sensitive(base_sensitive)
+        self.stealth_scan_switch.set_sensitive(base_sensitive)
+        self.port_spec_entry_row.set_sensitive(base_sensitive)
+        self.timing_template_combo_row.set_sensitive(base_sensitive)
+        self.no_ping_switch.set_sensitive(base_sensitive)
+        self.nse_script_combo_row.set_sensitive(base_sensitive)
+        self.profile_combo_row.set_sensitive(base_sensitive)
+        # self.start_scan_button sensitivity is handled above
 
         if is_scanning:
             self.status_page.set_property("description", "Scanning...")
+            # Ensure error class is removed from target and args entries if a scan starts with valid input
+            if all_inputs_valid:
+                if "error" in self.target_entry_row.get_css_classes():
+                    self.target_entry_row.remove_css_class("error")
+                if "error" in self.arguments_entry_row.get_css_classes():
+                    self.arguments_entry_row.remove_css_class("error")
         elif state == "error":
             self.status_page.set_property("description", f"Scan Failed: {message or 'Unknown error'}")
         elif state == "success":
@@ -410,12 +499,15 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
         if not target:
             self._show_toast("Error: Target cannot be empty")
-            self._update_ui_state("ready", "Empty target")
+            # Toast is already shown by _initiate_scan_procedure if target is empty
+            # self._show_toast("Error: Target cannot be empty") 
+            # _update_ui_state is called by _on_target_entry_changed, ensuring button is disabled
             return
 
         self._add_target_to_history(target) 
         self._clear_results_ui()
-        self._update_ui_state("scanning")
+        # _update_ui_state("scanning") will be called, which also handles button sensitivity
+        self._update_ui_state("scanning") 
         self._show_toast(f"Scan started for {target}")
         
         # Prepare kwargs for _run_scan_worker, matching its signature
@@ -451,10 +543,18 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             "hosts_data": None,
             "error_type": None,
             "error_message": None,
-            "scan_message": None # For messages like "No hosts found"
+            "scan_message": None
         }
 
+        # Ensure that the validator is available for the NmapScanner.scan method
+        # This assumes NmapScanner.scan might use self.validator if passed or accessible
+        # For now, NmapScanner.scan does its own validation if validator is passed.
+        # The main validation for starting scan is now _are_inputs_valid_for_scan
+        
         try:
+            # Pass the validator instance if NmapScanner.scan is designed to use it
+            # For now, assume NmapScanner.scan already instantiates or uses a passed one
+            # The current nmap_scanner.py does its own validation.
             hosts_data, scan_message = self.nmap_scanner.scan(
                 target=target,
                 do_os_fingerprint=do_os_fingerprint,
@@ -464,19 +564,19 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 port_spec=port_spec_str,
                 timing_template=timing_template_val,
                 no_ping=do_no_ping_val
+                # validator=self.validator # If NmapScanner.scan was refactored to take it
             )
             scan_result["hosts_data"] = hosts_data
-            scan_result["scan_message"] = scan_message # Store message even if hosts_data is present
+            scan_result["scan_message"] = scan_message
 
-        except (NmapArgumentError, NmapScanParseError) as e:
+        except (NmapArgumentError, NmapScanParseError) as e: # NmapCommandValidationError is caught by NmapScanner
             scan_result["error_type"] = type(e).__name__
             scan_result["error_message"] = str(e)
         except Exception as e:
-            scan_result["error_type"] = "UnexpectedError" # More generic type
-            scan_result["error_message"] = f"An unexpected error occurred in the scan worker: {str(e)}"
-            # Optionally log traceback here for debugging unexpected errors
-            # import traceback
-            # print(traceback.format_exc(), file=sys.stderr)
+            scan_result["error_type"] = "UnexpectedError"
+            scan_result["error_message"] = f"An unexpected error occurred: {str(e)}"
+            import traceback
+            print(traceback.format_exc(), file=sys.stderr)
 
         GLib.idle_add(self._process_scan_completion, scan_result)
 
@@ -485,41 +585,45 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         hosts_data = scan_result["hosts_data"]
         error_type = scan_result["error_type"]
         error_message = scan_result["error_message"]
-        scan_message = scan_result["scan_message"] # Message from nmap_scanner.scan
+        scan_message = scan_result["scan_message"]
 
         self.current_scan_results = hosts_data if hosts_data is not None else []
+        
+        current_ui_state = "ready" # Default state after scan attempt
+        status_message_override = None
 
         if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
-            self._update_ui_state("error", error_message)
             self._show_toast(f"Scan failed: {error_message or 'Unknown error'}")
+            current_ui_state = "error"
+            status_message_override = error_message
         elif hosts_data:
             self._populate_results_listbox(hosts_data)
-            # If there's a scan_message (e.g. warnings from nmap), it could be shown, but typically success means hosts found.
             status_desc = "Scan Complete. Select a host to view details."
-            if scan_message and scan_message != "Scan completed successfully.": # Avoid redundant messages
-                status_desc = f"Scan Complete: {scan_message}" # e.g. if nmap had specific warnings but still found hosts
-            self.status_page.set_property("description", status_desc)
-            self._update_ui_state("success")
+            if scan_message and scan_message != "Scan completed successfully.":
+                status_desc = f"Scan Complete: {scan_message}"
+            self.status_page.set_property("description", status_desc) # Set directly, not via _update_ui_state
             self._show_toast("Scan complete.")
-        elif scan_message == "No hosts found.": # Explicitly check for "No hosts found"
-            self._clear_results_ui() # Ensure UI is clean
+            current_ui_state = "success"
+        elif scan_message == "No hosts found.":
+            self._clear_results_ui()
             self.status_page.set_property("description", "Scan Complete: No hosts found.")
-            self._update_ui_state("no_results")
             self._show_toast("Scan complete: No hosts found.")
-        # Case: No hosts_data, no error, but scan_message might indicate other issues or empty results
-        elif scan_message: 
+            current_ui_state = "no_results"
+        elif scan_message:
             self._clear_results_ui()
             self.status_page.set_property("description", f"Scan Complete: {scan_message}")
-            self._update_ui_state("no_data") # Or a more specific state based on message
             self._show_toast(f"Scan finished: {scan_message}")
-        else: # Fallback for truly empty/unexpected results without error or message
+            current_ui_state = "no_data"
+        else:
             self._clear_results_ui()
-            self.status_page.set_property("description", "Scan Complete: No data received and no specific messages.")
-            self._update_ui_state("no_data")
+            self.status_page.set_property("description", "Scan Complete: No data received.")
             self._show_toast("Scan complete: No data.")
-        
-        # No 'pass' needed here explicitly.
+            current_ui_state = "no_data"
+
+        # Update overall UI state (spinner, field sensitivity)
+        self._update_ui_state(current_ui_state, status_message_override)
+
 
     def _clear_results_ui(self) -> None:
         """Clears the results listbox."""
