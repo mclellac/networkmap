@@ -31,6 +31,11 @@ class NmapScanner:
     """
     A wrapper class for python-nmap to perform network scans.
     """
+    # Define colors for port states for Pango markup
+    COLOR_OPEN = "green"
+    COLOR_CLOSED = "red"
+    COLOR_FILTERED = "orange"
+    COLOR_DEFAULT_STATE = "black" # Fallback
 
     def __init__(self) -> None:
         """
@@ -534,7 +539,19 @@ class NmapScanner:
                         
                         escaped_port_id = GLib.markup_escape_text(str(port_id))
                         escaped_proto_short = GLib.markup_escape_text(proto)
-                        escaped_port_state = GLib.markup_escape_text(port_details.get("state", "N/A"))
+
+                        port_state_str = port_details.get("state", "N/A")
+                        escaped_port_state = GLib.markup_escape_text(port_state_str)
+
+                        state_color = self.COLOR_DEFAULT_STATE
+                        if port_state_str == "open":
+                            state_color = self.COLOR_OPEN
+                        elif port_state_str == "closed":
+                            state_color = self.COLOR_CLOSED
+                        elif port_state_str == "filtered":
+                            state_color = self.COLOR_FILTERED
+
+                        port_display = f"<b><span foreground='{state_color}'>{escaped_port_id}/{escaped_proto_short}</span></b>"
 
                         port_entry = {
                             "portid": port_id,
@@ -564,16 +581,16 @@ class NmapScanner:
                         host_info["ports"].append(port_entry)
 
                         main_port_line_parts = [
-                            f"  <b>Port:</b> {escaped_port_id}/{escaped_proto_short:<3}",
-                            f"<b>State:</b> {escaped_port_state:<10}"
+                            f"  <b>Port:</b> {port_display}", # Use the new colored/bolded port display
+                            f"<b>State:</b> <span foreground='{state_color}'>{escaped_port_state}</span>"
                         ]
-                        if port_entry.get("reason"): # Check if reason exists
+                        if port_entry.get("reason"):
                             escaped_reason = GLib.markup_escape_text(str(port_entry["reason"]))
                             main_port_line_parts.append(f"<b>Reason:</b> {escaped_reason}")
 
-                        main_port_line_parts.append(f"<b>Service:</b> {service_info_str}")
+                        main_port_line_parts.append(f"<b>Service:</b> {service_info_str if service_info_str else 'N/A'}")
 
-                        raw_details_parts.append("  ".join(main_port_line_parts)) # Join with a couple of spaces for separation
+                        raw_details_parts.append("  ".join(main_port_line_parts))
 
                         # Display NSE script output if available for this port
                         if port_entry.get("script_output"): # Check if script_output exists and is not None

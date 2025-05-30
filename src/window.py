@@ -1,6 +1,6 @@
 import sys
 import threading
-import shlex # Added for shlex.split and shlex.join
+import shlex
 from typing import Optional, List, Dict, Any, Tuple
 
 from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
@@ -50,20 +50,19 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_history_list: List[str] = list(self.settings.get_strv(self.TARGET_HISTORY_SCHEMA_KEY))
         self.font_css_provider = Gtk.CssProvider()
         self.profile_manager = ProfileManager()
-        self.validator = NmapCommandValidator() # Added validator instance
+        self.validator = NmapCommandValidator()
 
         self._connect_settings_signals()
         self._connect_ui_element_signals()
         
         self._initialize_ui_elements()
-        GLib.idle_add(self._apply_font_preference) # Apply initial font once UI is ready
+        GLib.idle_add(self._apply_font_preference)
 
     def _show_toast(self, message: str):
         print(f"MAIN WINDOW TOAST: {message}", file=sys.stderr)
         self.toast_overlay.add_toast(Adw.Toast.new(message))
 
     def _connect_settings_signals(self) -> None:
-        """Connects signals from GSettings to their handlers."""
         self.settings.connect("changed::results-font", lambda s, k: self._apply_font_preference())
         self.settings.connect("changed::default-nmap-arguments", self._update_nmap_command_preview)
         self.settings.connect("changed::dns-servers", self._update_nmap_command_preview)
@@ -71,164 +70,102 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.connect(f"changed::{self.TARGET_HISTORY_SCHEMA_KEY}", self._on_target_history_changed)
 
     def _connect_ui_element_signals(self) -> None:
-        """Connects signals from UI elements to their handlers."""
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
         self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
         self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
-
-        # Live validation for target entry
         self.target_entry_row.connect("notify::text", self._on_target_entry_changed)
-
-        # Signals for updating Nmap command preview
-        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
+        self.target_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.os_fingerprint_switch.connect("notify::active", self._on_simple_scan_param_changed)
         self.stealth_scan_switch.connect("notify::active", self._on_simple_scan_param_changed)
         self.no_ping_switch.connect("notify::active", self._on_simple_scan_param_changed)
-        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
-        self.arguments_entry_row.connect("notify::text", self._on_additional_args_entry_changed) # For validation
-        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
-        self.port_spec_entry_row.connect("notify::text", self._on_ports_entry_changed) # For validation
+        self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.arguments_entry_row.connect("notify::text", self._on_additional_args_entry_changed)
+        self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
+        self.port_spec_entry_row.connect("notify::text", self._on_ports_entry_changed)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
         self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
 
     def _on_simple_scan_param_changed(self, widget: Gtk.Widget, pspec: Optional[GObject.ParamSpec] = None) -> None:
-        """Handles changes for simple scan parameters (e.g., switches) that affect the command."""
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
 
     def _initialize_ui_elements(self) -> None:
-        """Initializes UI elements like combo boxes and sets the initial UI state."""
-        self._populate_timing_template_combo() # Ensure timing options are populated first
-        self._populate_profile_combo() # Then profiles, which might apply a default profile
+        self._populate_timing_template_combo()
+        self._populate_profile_combo()
         self._populate_nse_script_combo()
         self._update_nmap_command_preview()
-        self._update_ui_state("ready") # This will call _are_inputs_valid_for_scan
+        self._update_ui_state("ready")
 
     def _are_inputs_valid_for_scan(self) -> bool:
-        """Checks if current inputs (target, ports, args) are valid for starting a scan."""
-        # Target validation (existing logic)
         target_text = self.target_entry_row.get_text().strip()
-        target_is_valid = True
-        if not target_text:
-            target_is_valid = False
-        else:
-            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
-            for char in temp_forbidden_chars:
-                if char in target_text:
-                    target_is_valid = False
-                    break
-
-        # Additional arguments validation (existing logic)
+        if not target_text or any(char in target_text for char in [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]):
+            return False
         additional_args_text = self.arguments_entry_row.get_text().strip()
         additional_args_are_valid, _ = self.validator.validate_arguments(additional_args_text)
-
-        # Port Specification Validation
         ports_text = self.port_spec_entry_row.get_text().strip()
-        ports_are_valid = True # Assume empty is valid (Nmap default scan)
-        if ports_text: # Only validate if non-empty
-            # Use the validator, prepending "-p "
+        ports_are_valid = True
+        if ports_text:
             ports_are_valid, _ = self.validator.validate_arguments(f"-p {ports_text}")
-
-        return target_is_valid and additional_args_are_valid and ports_are_valid
+        return additional_args_are_valid and ports_are_valid
 
     def _on_additional_args_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
-        """Handles text changes in the additional Nmap arguments entry row for live validation."""
         args_text = entry_row.get_text().strip()
-
-        # Use the NmapCommandValidator for "Additional Arguments"
-        is_valid, error_message = self.validator.validate_arguments(args_text)
-
-        if not is_valid and args_text: # Show error only if text is present but invalid
+        is_valid, _ = self.validator.validate_arguments(args_text)
+        if not is_valid and args_text:
             if "error" not in self.arguments_entry_row.get_css_classes():
                 self.arguments_entry_row.add_css_class("error")
-            # print(f"DEBUG Additional Args Error: {error_message}", file=sys.stderr) # For debugging
-        else: # Valid or empty
+        else:
             if "error" in self.arguments_entry_row.get_css_classes():
                 self.arguments_entry_row.remove_css_class("error")
-
-        self._update_ui_state("ready") # Refresh scan button sensitivity etc.
+        self._update_ui_state("ready")
 
     def _on_target_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
-        """Handles text changes in the target entry row for live validation."""
         target_text = entry_row.get_text().strip()
         is_valid = True
-        error_message = "" # Not used for display yet, but for logic
-
-        if not target_text: # Considered invalid for initiating a scan, but not necessarily an "error" for CSS
-            # For CSS error state, only apply if non-empty and contains forbidden chars.
-            # Or, if we want to show error for empty on blur, that's different.
-            # For now, empty does not get 'error' class, but scan button will be disabled.
-            pass
-        else:
-            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
-            for char in temp_forbidden_chars:
-                if char in target_text:
-                    is_valid = False
-                    # error_message = f"Target contains forbidden character: '{char}'" # For future label
-                    break
-
-        if not is_valid and target_text : # Only show error CSS if text is present and invalid
+        if target_text and any(char in target_text for char in [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]):
+            is_valid = False
+        if not is_valid and target_text:
             if "error" not in self.target_entry_row.get_css_classes():
                 self.target_entry_row.add_css_class("error")
         else:
             if "error" in self.target_entry_row.get_css_classes():
                 self.target_entry_row.remove_css_class("error")
-
-        # Update scan button sensitivity based on current validity
-        # We can pass the current state, or determine it if _update_ui_state needs it
-        # For now, assume "ready" state or let _update_ui_state manage its current state logic.
-        self._update_ui_state("ready") # This will re-evaluate scan button sensitivity via _are_inputs_valid_for_scan
+        self._update_ui_state("ready")
 
     def _on_ports_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
-        """Handles text changes in the port specification entry row for live validation."""
         ports_text = entry_row.get_text().strip()
-
         is_valid = True
-        error_message = "" # Not directly displayed in UI label for this step, but good for debug
-
-        if ports_text: # Only validate if there's actual text; empty is fine (Nmap default scan)
-            # Validate the argument in context of the -p option
+        if ports_text:
             is_valid, error_message = self.validator.validate_arguments(f"-p {ports_text}")
-
-        if not is_valid and ports_text: # Show error only if text is present AND invalid
+            if not is_valid:
+                 print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr)
+        if not is_valid and ports_text:
             if "error" not in self.port_spec_entry_row.get_css_classes():
                 self.port_spec_entry_row.add_css_class("error")
-            print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr)
-        else: # Valid or empty
+        else:
             if "error" in self.port_spec_entry_row.get_css_classes():
                 self.port_spec_entry_row.remove_css_class("error")
-
-        self._update_ui_state("ready") # Refresh scan button sensitivity etc.
+        self._update_ui_state("ready")
 
     def _populate_profile_combo(self) -> None:
-        """Populates the scan profile selection combobox."""
         profiles = self.profile_manager.load_profiles()
         profile_names: List[str] = ["Manual Configuration"] + [p['name'] for p in profiles]
-        
         string_list_model = Gtk.StringList.new(profile_names)
         self.profile_combo_row.set_model(string_list_model)
-        # Ensure selection is valid, especially if profiles list is empty.
         if string_list_model.get_n_items() > 0:
             self.profile_combo_row.set_selected(0)
         else:
-            # Handle case with no profiles (should at least have "Manual Configuration")
-            # This might indicate an issue if "Manual Configuration" isn't even there.
             print("Warning: Profile combo box is empty after population.", file=sys.stderr)
 
-
     def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-        """Handles changes in the selected scan profile."""
-        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.") # Log entry
-
+        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.")
         selected_idx = combo_row.get_selected()
         model = combo_row.get_model()
-
         # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - selected_idx: {selected_idx}, model type: {type(model)}")
-
         effective_model = None
         if isinstance(model, Gtk.StringList):
             effective_model = model
-        elif isinstance(model, Gtk.FilterListModel): # Should not be the case for profile_combo_row
+        elif isinstance(model, Gtk.FilterListModel):
             underlying_model = model.get_model()
             # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is FilterListModel, underlying model type: {type(underlying_model)}")
             if isinstance(underlying_model, Gtk.StringList):
@@ -241,21 +178,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             # if model is None:
                  # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is None.")
             return
-
         if selected_idx < 0 :
             # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: selected_idx is {selected_idx} (invalid list position or no selection).")
              return
-
         selected_name = effective_model.get_string(selected_idx)
         # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Selected name from model: '{selected_name}'")
-
         if selected_idx == 0 and selected_name == "Manual Configuration":
             # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Applying 'Manual Configuration'.")
             self._apply_scan_profile(None) 
         else:
             profile_name_to_find = selected_name
             # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Searching for profile: '{profile_name_to_find}'")
-
             profiles = []
             try:
                 profiles = self.profile_manager.load_profiles()
@@ -268,15 +201,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 else:
                     self._apply_scan_profile(None)
                 return
-
             found_profile = next((p for p in profiles if p.get('name') == profile_name_to_find), None)
-            
             if found_profile:
                 # profile_name_found = found_profile.get('name', 'UnknownName')
                 # profile_command_found = found_profile.get('command', 'NoCommand')
                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
                 self._apply_scan_profile(found_profile)
-                # Detailed UI state logs after applying the profile
                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_nse_script: '{self.selected_nse_script}'")
                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_timing_template: '{self.selected_timing_template}'")
@@ -293,7 +223,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler EXITED.")
 
     def _populate_timing_template_combo(self) -> None:
-        """Populates the timing template combo box."""
         self.timing_options = {
             "Default (T3)": None, "Paranoid (T0)": "-T0", "Sneaky (T1)": "-T1",
             "Polite (T2)": "-T2", "Aggressive (T4)": "-T4", "Insane (T5)": "-T5",
@@ -302,33 +231,27 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.timing_template_combo_row.set_selected(0) 
 
     def _get_current_scan_parameters(self) -> Dict[str, Any]:
-        """Collects current scan parameters from UI elements."""
         return {
             "target": self.target_entry_row.get_text().strip(),
             "do_os_fingerprint": self.os_fingerprint_switch.get_active(),
             "additional_args_str": self.arguments_entry_row.get_text(),
             "nse_script": self.selected_nse_script,
             "stealth_scan": self.stealth_scan_switch.get_active(),
-            "port_spec": self.port_spec_entry_row.get_text().strip(), # Key changed to match build_scan_args
-            "timing_template": self.selected_timing_template, # Key changed to match build_scan_args
-            "no_ping": self.no_ping_switch.get_active() # Key changed to match build_scan_args
+            "port_spec": self.port_spec_entry_row.get_text().strip(),
+            "timing_template": self.selected_timing_template,
+            "no_ping": self.no_ping_switch.get_active()
         }
 
     def _update_nmap_command_preview(self, *args) -> None:
-        """Updates the Nmap command preview row based on current UI settings."""
         scan_params = self._get_current_scan_parameters()
         target_text = scan_params["target"]
-        
-        # Note: self.nmap_scanner.build_scan_args expects 'default_args_str'
-        # which is not part of _get_current_scan_parameters as it's from GSettings.
         default_args_from_settings = self.settings.get_string("default-nmap-arguments")
-
         try:
             args_string = self.nmap_scanner.build_scan_args(
                 do_os_fingerprint=scan_params["do_os_fingerprint"],
                 additional_args_str=scan_params["additional_args_str"],
                 nse_script=scan_params["nse_script"],
-                default_args_str=default_args_from_settings, # Pass GSettings value
+                default_args_str=default_args_from_settings,
                 stealth_scan=scan_params["stealth_scan"],
                 port_spec=scan_params["port_spec"],
                 timing_template=scan_params["timing_template"],
@@ -340,99 +263,70 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         except Exception as e: 
             self.nmap_command_preview_row.set_text(f"Error building command: {e}")
             return
-
         full_command = f"nmap {args_string} {target_text if target_text else '<target_host>'}"
         self.nmap_command_preview_row.set_text(full_command)
 
     def _apply_font_preference(self) -> None:
-        """Applies the font preference from GSettings to dynamic Gtk.TextViews."""
         font_str = self.settings.get_string("results-font")
-        css_data = b""  # Start with empty bytes for CSS data
-
+        css_data = b""
         if font_str:
             try:
                 font_desc = Pango.FontDescription.from_string(font_str)
                 family = font_desc.get_family()
-                # Attempt to get size, check if it's set, and convert from Pango units
                 size_points = 0
-                if font_desc.get_size() != 0 : # Checks if size is set (0 means not set for Pango.FontDescription)
+                if font_desc.get_size() != 0:
                     size_points = font_desc.get_size() / Pango.SCALE
-                
                 css_rules = []
                 if family:
                     css_rules.append(f"font-family: \"{family}\";")
                 if size_points > 0:
                     css_rules.append(f"font-size: {size_points}pt;")
-                
                 if css_rules:
                     css_data = f"* {{ {' '.join(css_rules)} }}".encode()
-
-            except GLib.Error as e: # More specific error handling for Pango
+            except GLib.Error as e:
                 print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will not be applied.", file=sys.stderr)
-            except Exception as e: # Catch any other unexpected errors
+            except Exception as e:
                 print(f"An unexpected error occurred while parsing font string '{font_str}': {e}. CSS will not be applied.", file=sys.stderr)
-        
-        self.font_css_provider.load_from_data(css_data) # load_from_data expects bytes
-        
-        # Apply to existing and future HostInfoExpanderRow TextViews
-        # This ensures dynamically added rows also get the style.
-        # Iterate over ListBox children safely
+        self.font_css_provider.load_from_data(css_data)
         child = self.results_listbox.get_first_child()
         while child:
             if isinstance(child, HostInfoExpanderRow):
                 text_view = child.get_text_view()
-                if text_view: # Ensure text_view is not None
+                if text_view:
                     style_context = text_view.get_style_context()
-                    # Remove provider first to prevent multiple additions if this is called multiple times
                     style_context.remove_provider(self.font_css_provider)
                     style_context.add_provider(self.font_css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
             child = child.get_next_sibling()
 
     def _populate_nse_script_combo(self) -> None:
-        """Populates the NSE script combo box with discovered scripts."""
         discovered_scripts = discover_nse_scripts()
         combo_items: List[str] = ["None"] + discovered_scripts
         string_list_model = Gtk.StringList.new(combo_items)
-
         expression = Gtk.PropertyExpression.new(Gtk.StringObject, None, "string")
         self.nse_script_filter = Gtk.StringFilter.new(expression)
         self.nse_script_filter.set_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.nse_script_filter.set_ignore_case(True)
-
         filter_model = Gtk.FilterListModel.new(string_list_model, self.nse_script_filter)
         self.nse_script_combo_row.set_model(filter_model)
-        if filter_model.get_n_items() > 0: # Ensure there's something to select
+        if filter_model.get_n_items() > 0:
             self.nse_script_combo_row.set_selected(0)
         else:
             print("Warning: NSE script combo box is empty after population.", file=sys.stderr)
 
-
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-        """Handles selection change in the NSE script combo box."""
         selected_item = combo_row.get_selected_item()
-        
-        # The item in a FilterListModel wrapping a StringList is a StringObject
         if isinstance(selected_item, Gtk.StringObject):
             selected_value = selected_item.get_string()
-            # "None" is the placeholder for no script
             self.selected_nse_script = None if selected_value == "None" else selected_value
         elif selected_item is None and combo_row.get_selected() == Gtk.INVALID_LIST_POSITION:
-            # This case handles when the filter might result in no selectable items or an explicit deselection
             self.selected_nse_script = None
-            # Optionally, reset combo to a default if current filter text doesn't match "None"
-            # and "None" is a valid item (which it should be, at index 0 of the base model).
-            # This logic might be complex depending on desired UX with filtering.
-            # For now, simply setting to None if nothing valid is selected.
         else:
-            # Fallback or if the model structure changes unexpectedly
             self.selected_nse_script = None
             print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
-
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
 
     def _on_timing_template_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-        """Handles selection changes in the timing template combo box."""
         selected_idx = combo_row.get_selected()
         model = combo_row.get_model()
         if isinstance(model, Gtk.StringList) and selected_idx >= 0:
@@ -444,17 +338,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._update_ui_state("ready")
 
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
-        """Updates UI elements based on application state (e.g., scanning, error, success)."""
         is_scanning = (state == "scanning")
         self.spinner.set_visible(is_scanning)
-        
         base_sensitive = not is_scanning
-
-        # Determine button sensitivity based on input validity AND scan progress
         all_inputs_valid = self._are_inputs_valid_for_scan()
         self.start_scan_button.set_sensitive(base_sensitive and all_inputs_valid)
-
-        # Other UI elements' sensitivity (generally disabled during scan)
         self.target_entry_row.set_sensitive(base_sensitive)
         self.os_fingerprint_switch.set_sensitive(base_sensitive)
         self.arguments_entry_row.set_sensitive(base_sensitive)
@@ -464,19 +352,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.no_ping_switch.set_sensitive(base_sensitive)
         self.nse_script_combo_row.set_sensitive(base_sensitive)
         self.profile_combo_row.set_sensitive(base_sensitive)
-        # self.start_scan_button sensitivity is handled above
-
         if is_scanning:
             self.status_page.set_property("description", "Scanning...")
-            # Ensure error class is removed from target and args entries if a scan starts with valid input
             if all_inputs_valid:
                 if "error" in self.target_entry_row.get_css_classes():
                     self.target_entry_row.remove_css_class("error")
                 if "error" in self.arguments_entry_row.get_css_classes():
                     self.arguments_entry_row.remove_css_class("error")
-                # Also clear port spec error if inputs become valid for a scan start
                 if "error" in self.port_spec_entry_row.get_css_classes():
-                    # Check its current validity directly, as it's not part of _are_inputs_valid_for_scan
                     current_ports_text = self.port_spec_entry_row.get_text().strip()
                     port_is_currently_valid, _ = self.validator.validate_arguments(f"-p {current_ports_text}") if current_ports_text else (True, "")
                     if port_is_currently_valid:
@@ -645,28 +528,22 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
         if not target:
             self._show_toast("Error: Target cannot be empty")
-            # Toast is already shown by _initiate_scan_procedure if target is empty
-            # self._show_toast("Error: Target cannot be empty")
-            # _update_ui_state is called by _on_target_entry_changed, ensuring button is disabled
             return
 
         self._add_target_to_history(target) 
         self._clear_results_ui()
-        # _update_ui_state("scanning") will be called, which also handles button sensitivity
         self._update_ui_state("scanning")
         self._show_toast(f"Scan started for {target}")
         
-        # Prepare kwargs for _run_scan_worker, matching its signature
-        # _get_current_scan_parameters uses NmapScanner.scan keys, so map them
         worker_kwargs = {
             "target": scan_params["target"],
             "do_os_fingerprint": scan_params["do_os_fingerprint"],
             "additional_args_str": scan_params["additional_args_str"],
             "nse_script": scan_params["nse_script"],
             "stealth_scan": scan_params["stealth_scan"],
-            "port_spec_str": scan_params["port_spec"], # Map key
-            "timing_template_val": scan_params["timing_template"], # Map key
-            "do_no_ping_val": scan_params["no_ping"] # Map key
+            "port_spec_str": scan_params["port_spec"],
+            "timing_template_val": scan_params["timing_template"],
+            "do_no_ping_val": scan_params["no_ping"]
         }
 
         scan_thread = threading.Thread(target=self._run_scan_worker, kwargs=worker_kwargs)
@@ -674,34 +551,19 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         scan_thread.start()
 
     def _on_scan_button_clicked(self, entry: Adw.EntryRow) -> None:
-        """Handles scan initiation from the target entry row."""
         self._initiate_scan_procedure()
 
     def _on_start_scan_button_clicked(self, button: Gtk.Button) -> None:
-        """Handles scan initiation from the 'Start Scan' button."""
         self._initiate_scan_procedure()
 
     def _run_scan_worker(self, target: str, do_os_fingerprint: bool, additional_args_str: str, 
                          nse_script: Optional[str], stealth_scan: bool, port_spec_str: Optional[str], 
                          timing_template_val: Optional[str], do_no_ping_val: bool) -> None:
-        """Worker function to perform Nmap scan (runs in a separate thread)."""
         # print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
         scan_result: Dict[str, Any] = {
-            "hosts_data": None,
-            "error_type": None,
-            "error_message": None,
-            "scan_message": None
+            "hosts_data": None, "error_type": None, "error_message": None, "scan_message": None
         }
-
-        # Ensure that the validator is available for the NmapScanner.scan method
-        # This assumes NmapScanner.scan might use self.validator if passed or accessible
-        # For now, NmapScanner.scan does its own validation if validator is passed.
-        # The main validation for starting scan is now _are_inputs_valid_for_scan
-
         try:
-            # Pass the validator instance if NmapScanner.scan is designed to use it
-            # For now, assume NmapScanner.scan already instantiates or uses a passed one
-            # The current nmap_scanner.py does its own validation.
             hosts_data, scan_message = self.nmap_scanner.scan(
                 target=target,
                 do_os_fingerprint=do_os_fingerprint,
@@ -711,12 +573,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 port_spec=port_spec_str,
                 timing_template=timing_template_val,
                 no_ping=do_no_ping_val
-                # validator=self.validator # If NmapScanner.scan was refactored to take it
             )
             scan_result["hosts_data"] = hosts_data
             scan_result["scan_message"] = scan_message
-
-        except (NmapArgumentError, NmapScanParseError) as e: # NmapCommandValidationError is caught by NmapScanner
+        except (NmapArgumentError, NmapScanParseError) as e:
             scan_result["error_type"] = type(e).__name__
             scan_result["error_message"] = str(e)
         except Exception as e:
@@ -724,21 +584,16 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             scan_result["error_message"] = f"An unexpected error occurred: {str(e)}"
             import traceback
             print(traceback.format_exc(), file=sys.stderr)
-
         GLib.idle_add(self._process_scan_completion, scan_result)
 
     def _process_scan_completion(self, scan_result: Dict[str, Any]) -> None:
-        """Handles UI updates after the Nmap scan worker finishes."""
         hosts_data = scan_result["hosts_data"]
         error_type = scan_result["error_type"]
         error_message = scan_result["error_message"]
         scan_message = scan_result["scan_message"]
-
         self.current_scan_results = hosts_data if hosts_data is not None else []
-
-        current_ui_state = "ready" # Default state after scan attempt
+        current_ui_state = "ready"
         status_message_override = None
-
         if error_type:
             self._display_scan_error(error_type, error_message or "Unknown error.")
             self._show_toast(f"Scan failed: {error_message or 'Unknown error'}")
@@ -749,7 +604,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             status_desc = "Scan Complete. Select a host to view details."
             if scan_message and scan_message != "Scan completed successfully.":
                 status_desc = f"Scan Complete: {scan_message}"
-            self.status_page.set_property("description", status_desc) # Set directly, not via _update_ui_state
+            self.status_page.set_property("description", status_desc)
             self._show_toast("Scan complete.")
             current_ui_state = "success"
         elif scan_message == "No hosts found.":
@@ -767,18 +622,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.status_page.set_property("description", "Scan Complete: No data received.")
             self._show_toast("Scan complete: No data.")
             current_ui_state = "no_data"
-
-        # Update overall UI state (spinner, field sensitivity)
         self._update_ui_state(current_ui_state, status_message_override)
 
-
     def _clear_results_ui(self) -> None:
-        """Clears the results listbox."""
         child = self.results_listbox.get_first_child()
         while child:
             self.results_listbox.remove(child)
             child = self.results_listbox.get_first_child()
-
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
         """Populates the results_listbox with discovered hosts."""
@@ -790,9 +640,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     text_view.get_style_context().add_provider(
                         self.font_css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
             self.results_listbox.append(row)
+        if len(hosts_data) == 1:
+            first_row = self.results_listbox.get_row_at_index(0)
+            if isinstance(first_row, HostInfoExpanderRow):
+                first_row.set_expanded(True)
 
     def _display_scan_error(self, error_type: str, error_message: str) -> None:
-        """Displays scan-related errors on the status page."""
         self._clear_results_ui()
         friendly_message = f"Scan Error ({error_type}): {error_message}" if error_type != "ScanMessage" else error_message
         self.status_page.set_property("description", friendly_message)
@@ -803,12 +656,10 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
 
     def __init__(self, host_data: Dict[str, Any], raw_details_text: str, **kwargs) -> None:
         super().__init__(**kwargs)
-
         self.raw_details_text = raw_details_text
         self.set_title(host_data.get("hostname") or host_data.get("id", "Unknown Host"))
         self.set_subtitle(f"State: {host_data.get('state', 'N/A')}")
         self.set_icon_name("computer-symbolic") 
-
         self._text_view = Gtk.TextView(
             editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR,
             vexpand=True, hexpand=True )
@@ -816,12 +667,10 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
         self._text_view.set_margin_bottom(6)
         self._text_view.set_margin_start(6)
         self._text_view.set_margin_end(6)
-        
         app_window = self.get_ancestor(NetworkMapWindow)
         if app_window and hasattr(app_window, 'font_css_provider'):
             self._text_view.get_style_context().add_provider(
                 app_window.font_css_provider, Gtk.STYLE_PROVIDER_PRIORITY_USER)
-
         frame = Gtk.Frame() 
         frame.set_child(self._text_view)
         self.add_row(frame)
