@@ -32,9 +32,10 @@ networkmap_sources = [
   '__init__.py',
   'main.py',
   'nmap_scanner.py',
-  'nmap_validator.py', # Added here
+  'nmap_validator.py',
   'nse_script_selection_dialog.py',
   'preferences_window.py',
+  'profile_command_utils.py',
   'profile_editor_dialog.py',
   'profile_manager.py',
   'utils.py',

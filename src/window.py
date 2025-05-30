@@ -5,9 +5,10 @@ from typing import Optional, List, Dict, Any, Tuple
 from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
 
 from .nmap_scanner import NmapScanner, NmapArgumentError, NmapScanParseError
-from .nmap_validator import NmapCommandValidator # Added
+from .nmap_validator import NmapCommandValidator
 from .utils import discover_nse_scripts
 from .profile_manager import ScanProfile, ProfileManager, PROFILES_SCHEMA_KEY
+from .profile_command_utils import parse_command_to_options, ProfileOptions
 
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/window.ui")
@@ -79,15 +80,20 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
         # Signals for updating Nmap command preview
         self.target_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
-        self.os_fingerprint_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.stealth_scan_switch.connect("notify::active", self._update_nmap_command_preview)
-        self.no_ping_switch.connect("notify::active", self._update_nmap_command_preview)
+        self.os_fingerprint_switch.connect("notify::active", self._on_simple_scan_param_changed)
+        self.stealth_scan_switch.connect("notify::active", self._on_simple_scan_param_changed)
+        self.no_ping_switch.connect("notify::active", self._on_simple_scan_param_changed)
         self.arguments_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
         self.arguments_entry_row.connect("notify::text", self._on_additional_args_entry_changed) # For validation
         self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview) # Keep for preview
         self.port_spec_entry_row.connect("notify::text", self._on_ports_entry_changed) # For validation
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
         self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
+
+    def _on_simple_scan_param_changed(self, widget: Gtk.Widget, pspec: Optional[GObject.ParamSpec] = None) -> None:
+        """Handles changes for simple scan parameters (e.g., switches) that affect the command."""
+        self._update_nmap_command_preview()
+        self._update_ui_state("ready")
 
     def _initialize_ui_elements(self) -> None:
         """Initializes UI elements like combo boxes and sets the initial UI state."""
@@ -369,6 +375,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
 
         self._update_nmap_command_preview()
+        self._update_ui_state("ready")
 
     def _on_timing_template_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """Handles selection changes in the timing template combo box."""
@@ -380,6 +387,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         else: 
             self.selected_timing_template = None
         self._update_nmap_command_preview()
+        self._update_ui_state("ready")
 
     def _update_ui_state(self, state: str, message: Optional[str] = None) -> None:
         """Updates UI elements based on application state (e.g., scanning, error, success)."""
@@ -431,152 +439,109 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.status_page.set_property("description", "Scan Complete: No data received.")
 
     def _apply_scan_profile(self, profile: Optional[ScanProfile]) -> None:
-        """Applies settings from a scan profile to the UI, parsing the command string."""
-
-        # For now, skip complex signal blocking and rely on one update at the end.
+        """Applies settings from a scan profile to the UI using parsed command options."""
 
         if profile:
-            # Ensure target_entry_row is cleared if it's not part of the profile's command focus
-            # Typically, profiles don't store targets, but the command string is the main thing.
-            # self.target_entry_row.set_text("") # User might want to keep current target
-
             command_str = profile.get('command', '')
-            parts = command_str.split()
-            additional_parts_for_entry = list(parts)
+            options: ProfileOptions = parse_command_to_options(command_str)
 
-            # 1. Reset UI elements to a baseline
-            self.os_fingerprint_switch.set_active(False)
-            self.stealth_scan_switch.set_active(False)
-            self.no_ping_switch.set_active(False)
-            self.port_spec_entry_row.set_text("")
-            self.nse_script_combo_row.set_selected(0)
-            self.selected_nse_script = None
+            # Apply parsed options to UI elements that exist in NetworkMapWindow
+            self.os_fingerprint_switch.set_active(options.get('os_fingerprint', False))
+            # The 'stealth_scan' key in ProfileOptions is set if -sS is found by parser.
+            self.stealth_scan_switch.set_active(options.get('stealth_scan', False))
+            self.no_ping_switch.set_active(options.get('no_ping', False))
 
-            default_timing_display_name = list(self.timing_options.keys())[0] if self.timing_options else "Default (T3)"
-            self.timing_template_combo_row.set_selected(0)
-            self.selected_timing_template = self.timing_options.get(default_timing_display_name)
-            self.arguments_entry_row.set_text("")
+            # The following options are parsed by profile_command_utils's current version
+            # but NetworkMapWindow (window.ui) does not have dedicated switches for them.
+            # They will be part of 'additional_args' if not recognized by parse_command_to_options,
+            # or if recognized, they are stored in 'options' but not set on specific UI elements here
+            # if those elements don't exist on NetworkMapWindow.
+            # Example: options.get('list_scan', False) -> no self.list_scan_switch
+            # options.get('version_detection', False) -> no self.version_detection_switch on main window
+            # This is okay; the command preview and scan will use these values from 'options'
+            # when build_command_from_options is called (indirectly via NmapScanner).
 
-            # 2. Parse and Set Timing
-            timing_arg_to_display_map = {val: key for key, val in self.timing_options.items() if val}
-            found_timing = False
-            temp_additional_parts = list(additional_parts_for_entry) # Iterate and modify a copy
-            for part_val in list(temp_additional_parts): # Iterate copy for safe removal if needed from original parts
-                if part_val in timing_arg_to_display_map:
-                    display_name = timing_arg_to_display_map[part_val]
-                    model = self.timing_template_combo_row.get_model()
-                    if isinstance(model, Gtk.StringList):
-                        for i in range(model.get_n_items()):
-                            if model.get_string(i) == display_name:
-                                self.timing_template_combo_row.set_selected(i)
-                                self.selected_timing_template = part_val # Store the Nmap arg
-                                if part_val in additional_parts_for_entry: additional_parts_for_entry.remove(part_val)
-                                found_timing = True
-                                break
-                    if found_timing: break
-            if not found_timing:
-                self.timing_template_combo_row.set_selected(0)
-                self.selected_timing_template = self.timing_options.get(default_timing_display_name)
+            self.port_spec_entry_row.set_text(options.get('ports', ''))
+            self.arguments_entry_row.set_text(options.get('additional_args', ''))
 
-            # 3. Parse and Set Simple Switches
-            def _check_and_set_switch_local(switch_widget, flag, current_additional_parts):
-                # This helper will modify current_additional_parts by filtering
-                original_len = len(current_additional_parts)
-                current_additional_parts[:] = [p for p in current_additional_parts if p != flag]
-                if len(current_additional_parts) < original_len: # Flag was found and removed
-                    switch_widget.set_active(True)
+            # Timing Template
+            selected_timing_value = options.get('timing_template')
+            self.selected_timing_template = selected_timing_value
+            timing_model = self.timing_template_combo_row.get_model()
+            if isinstance(timing_model, Gtk.StringList):
+                found_timing_in_combo = False
+                if selected_timing_value is None: # Should select "Default (T3)"
+                    self.timing_template_combo_row.set_selected(0)
+                    found_timing_in_combo = True # Technically found, it's the default
                 else:
-                    switch_widget.set_active(False)
+                    for i in range(timing_model.get_n_items()):
+                        display_name = timing_model.get_string(i)
+                        if self.timing_options.get(display_name) == selected_timing_value:
+                            self.timing_template_combo_row.set_selected(i)
+                            found_timing_in_combo = True
+                            break
+                if not found_timing_in_combo:
+                    self.timing_template_combo_row.set_selected(0) # Default to "Default (T3)" in UI
+                    # self.selected_timing_template already holds the specific value from command
+            else: # Fallback
+                 self.timing_template_combo_row.set_selected(0)
+                 self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
 
-            _check_and_set_switch_local(self.no_ping_switch, "-Pn", additional_parts_for_entry)
-            _check_and_set_switch_local(self.os_fingerprint_switch, "-O", additional_parts_for_entry)
-            _check_and_set_switch_local(self.stealth_scan_switch, "-sS", additional_parts_for_entry)
 
-            # 4. Parse and Set Port Specification (-p)
-            temp_ports_text = ""
-            new_additional_parts = []
-            idx = 0
-            p_flag_found_and_processed = False
-            while idx < len(additional_parts_for_entry):
-                part_val = additional_parts_for_entry[idx]
-                if not p_flag_found_and_processed and part_val == "-p":
-                    if (idx + 1) < len(additional_parts_for_entry) and not additional_parts_for_entry[idx+1].startswith("-"):
-                        temp_ports_text = additional_parts_for_entry[idx+1]
-                        idx += 1 # Skip the argument part as well, it's consumed
-                    # else: -p without arg or followed by another option, -p itself is consumed
-                    p_flag_found_and_processed = True # Process only the first -p encountered
-                else:
-                    new_additional_parts.append(part_val)
-                idx += 1
-            additional_parts_for_entry = new_additional_parts
-            self.port_spec_entry_row.set_text(temp_ports_text)
+            # NSE Script
+            self.selected_nse_script = options.get('nse_script')
+            nse_model = self.nse_script_combo_row.get_model()
+            if isinstance(nse_model, Gtk.FilterListModel):
+                target_nse_script_name = self.selected_nse_script if self.selected_nse_script else "None"
+                self.nse_script_combo_row.set_selected(0) # Default to "None" in UI
 
-            # 5. Parse and Set NSE Script (--script or -sC)
-            temp_selected_nse_script = None
-            new_additional_parts = [] # Rebuild list again
-            idx = 0
-            script_flag_found_and_processed = False
-            while idx < len(additional_parts_for_entry):
-                part_val = additional_parts_for_entry[idx]
-                if not script_flag_found_and_processed:
-                    if part_val == "--script":
-                        if (idx + 1) < len(additional_parts_for_entry) and not additional_parts_for_entry[idx+1].startswith("-"):
-                            temp_selected_nse_script = additional_parts_for_entry[idx+1]
-                            idx += 1
-                        script_flag_found_and_processed = True
-                    elif part_val.startswith("--script="):
-                        temp_selected_nse_script = part_val.split("=", 1)[1]
-                        script_flag_found_and_processed = True
-                    elif part_val == "-sC":
-                        temp_selected_nse_script = "default"
-                        script_flag_found_and_processed = True
-                    else:
-                        new_additional_parts.append(part_val)
-                else:
-                    new_additional_parts.append(part_val)
-                idx += 1
-            additional_parts_for_entry = new_additional_parts
-
-            self.selected_nse_script = temp_selected_nse_script
-            # Update NSE ComboBox selection
-            if self.selected_nse_script:
-                target_combo_string_to_find = self.selected_nse_script
-                current_filter_model = self.nse_script_combo_row.get_model()
-                self.nse_script_combo_row.set_selected(0) # Default to "None"
-                self.selected_nse_script = None # Reset if not found in filtered list
-                if isinstance(current_filter_model, Gtk.FilterListModel):
-                    for j in range(current_filter_model.get_n_items()):
-                        item = current_filter_model.get_item(j)
-                        if isinstance(item, Gtk.StringObject) and item.get_string() == target_combo_string_to_find:
-                            self.nse_script_combo_row.set_selected(j)
-                            self.selected_nse_script = target_combo_string_to_find # Set it back
-                            break 
-            else: # No script flag found or parsed
-                self.nse_script_combo_row.set_selected(0) # "None"
+                # Iterate through the *visible* items in the FilterListModel
+                for i in range(nse_model.get_n_items()):
+                    item_obj = nse_model.get_item(i)
+                    if isinstance(item_obj, Gtk.StringObject):
+                        if item_obj.get_string() == target_nse_script_name:
+                            self.nse_script_combo_row.set_selected(i)
+                            break
+            else:
+                self.nse_script_combo_row.set_selected(0)
                 self.selected_nse_script = None
 
-            # 6. Set remaining parts to Additional Arguments
-            self.arguments_entry_row.set_text(" ".join(additional_parts_for_entry))
-
-        else: # Manual Configuration or no profile
+        else: # Manual Configuration selected or no profile
+            # Reset UI elements to default/manual state
             self.os_fingerprint_switch.set_active(False)
             self.stealth_scan_switch.set_active(False)
             self.no_ping_switch.set_active(False)
+
+            # Reset other switches that might have been part of a profile but aren't default
+            # (These switches don't exist on the main window UI as per current window.ui,
+            #  but if they did, they'd be reset here)
+            # self.list_scan_switch.set_active(False)
+            # self.ping_scan_switch.set_active(False)
+            # self.icmp_echo_ping_switch.set_active(False)
+            # self.no_dns_switch.set_active(False)
+            # self.traceroute_switch.set_active(False)
+            # self.tcp_null_scan_switch.set_active(False)
+            # self.tcp_fin_scan_switch.set_active(False)
+            # self.tcp_xmas_scan_switch.set_active(False)
+            # self.version_detection_switch.set_active(False)
+
+
             self.port_spec_entry_row.set_text("")
             self.arguments_entry_row.set_text(self.settings.get_string("default-nmap-arguments"))
-            self.nse_script_combo_row.set_selected(0)
+
+            self.nse_script_combo_row.set_selected(0) # "None"
             self.selected_nse_script = None
-            default_timing_display_name = list(self.timing_options.keys())[0] if self.timing_options else "Default (T3)"
-            self.timing_template_combo_row.set_selected(0)
-            self.selected_timing_template = self.timing_options.get(default_timing_display_name)
             
-            # Clear error styling when resetting to manual
-            self.target_entry_row.remove_css_class("error")
-            self.port_spec_entry_row.remove_css_class("error")
-            self.arguments_entry_row.remove_css_class("error")
+            default_timing_display_name = list(self.timing_options.keys())[0]
+            self.timing_template_combo_row.set_selected(0) # "Default (T3)"
+            self.selected_timing_template = self.timing_options.get(default_timing_display_name)
+
+            if "error" in self.target_entry_row.get_css_classes(): self.target_entry_row.remove_css_class("error")
+            if "error" in self.port_spec_entry_row.get_css_classes(): self.port_spec_entry_row.remove_css_class("error")
+            if "error" in self.arguments_entry_row.get_css_classes(): self.arguments_entry_row.remove_css_class("error")
 
         self._update_nmap_command_preview()
-        self._update_ui_state("ready") # This calls _are_inputs_valid_for_scan
+        self._update_ui_state("ready")
 
     def _add_target_to_history(self, target: str) -> None:
         """Adds a target to the scan history and updates GSettings."""

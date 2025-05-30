@@ -1,7 +1,9 @@
 import sys
 from gi.repository import Adw, Gtk, GObject
 from typing import Optional, List, Dict, Any
+
 from .nmap_validator import NmapCommandValidator
+from .profile_command_utils import parse_command_to_options, build_command_from_options, ProfileOptions
 
 class ProfileEditorDialog(Adw.Dialog):
     __gtype_name__ = "NetworkMapProfileEditorDialog" # Unique GType name
@@ -140,124 +142,65 @@ class ProfileEditorDialog(Adw.Dialog):
         self.additional_args_row = Adw.EntryRow(title="Arguments") # Title can be simpler now
         additional_args_expander.add_row(self.additional_args_row)
 
-        # For simplicity, NSE scripts are not directly editable in this version,
-        # but will be preserved if they exist.
-
         self.set_child(main_box) # Set the main content of the dialog
 
         # Populate fields if editing
         if self.profile_to_edit:
             self.profile_name_row.set_text(self.profile_to_edit.get('name', ''))
-
             command_str = self.profile_to_edit.get('command', '')
-            parts = command_str.split()
-            additional_parts_for_entry = list(parts) # Assume all parts are additional initially
+            options: ProfileOptions = parse_command_to_options(command_str)
 
-            # Timing
-            timing_map_to_index = { "-T0": 0, "-T1": 1, "-T2": 2, "-T3": 3, "-T4": 4, "-T5": 5 }
-            timing_flags = list(timing_map_to_index.keys())
-            found_timing = False
-            for flag in timing_flags:
-                if flag in parts: # Check in original parts
-                    self.timing_combo.set_selected(timing_map_to_index[flag])
-                    if flag in additional_parts_for_entry: additional_parts_for_entry.remove(flag)
-                    found_timing = True
-                    break # Only one timing flag
-            if not found_timing:
-                self.timing_combo.set_selected(3) # Default to T3 if none found in command string
-
-            # Switches Helper
-            def check_and_set_switch(switch_widget, flag, all_parts, additional_parts):
-                if flag in all_parts: # Check in original parts
-                    switch_widget.set_active(True)
-                    if flag in additional_parts: additional_parts.remove(flag)
-                else:
-                    switch_widget.set_active(False)
-
-            check_and_set_switch(self.no_ping_switch, "-Pn", parts, additional_parts_for_entry)
-            check_and_set_switch(self.version_detection_switch, "-sV", parts, additional_parts_for_entry)
-            check_and_set_switch(self.os_detection_switch, "-O", parts, additional_parts_for_entry)
-
-            # Host Discovery Simple Switches
-            check_and_set_switch(self.list_scan_switch, "-sL", parts, additional_parts_for_entry)
-
-            # For -sn / -sP, since they are aliases and we have one switch:
-            if "-sn" in parts:
-                self.ping_scan_switch.set_active(True)
-                if "-sn" in additional_parts_for_entry: additional_parts_for_entry.remove("-sn")
-            elif "-sP" in parts: # Check for -sP if -sn not found
-                self.ping_scan_switch.set_active(True)
-                if "-sP" in additional_parts_for_entry: additional_parts_for_entry.remove("-sP")
+            # Timing Template
+            timing_map_to_index = {"-T0": 0, "-T1": 1, "-T2": 2, "-T3": 3, "-T4": 4, "-T5": 5}
+            selected_timing_template = options.get('timing_template')
+            if selected_timing_template and selected_timing_template in timing_map_to_index:
+                self.timing_combo.set_selected(timing_map_to_index[selected_timing_template])
             else:
-                self.ping_scan_switch.set_active(False)
+                self.timing_combo.set_selected(3) # Default to T3 (Normal)
 
-            check_and_set_switch(self.icmp_echo_ping_switch, "-PE", parts, additional_parts_for_entry)
-            check_and_set_switch(self.no_dns_switch, "-n", parts, additional_parts_for_entry)
-            check_and_set_switch(self.traceroute_switch, "--traceroute", parts, additional_parts_for_entry)
+            # Switches
+            self.version_detection_switch.set_active(options.get('version_detection', False))
+            self.os_detection_switch.set_active(options.get('os_fingerprint', False))
+            self.list_scan_switch.set_active(options.get('list_scan', False))
+            self.ping_scan_switch.set_active(options.get('ping_scan', False))
+            self.no_ping_switch.set_active(options.get('no_ping', False))
 
-            # Process flags with optional arguments (-PS, -PA, -PU) from remaining parts
-            current_additional_parts = list(additional_parts_for_entry) # Current state of parts to be processed
-            final_additional_parts_after_parsing_pings = [] # Parts that are not any of -PS/PA/PU and their args
+            self.tcp_syn_ping_switch.set_active(options.get('tcp_syn_ping', False))
+            self.tcp_syn_ping_ports_entry.set_text(options.get('tcp_syn_ping_ports', ''))
 
-            i = 0
-            while i < len(current_additional_parts):
-                part = current_additional_parts[i]
-                processed_this_part = False
+            self.tcp_ack_ping_switch.set_active(options.get('tcp_ack_ping', False))
+            self.tcp_ack_ping_ports_entry.set_text(options.get('tcp_ack_ping_ports', ''))
 
-                for switch_obj, port_entry_obj, flag_prefix in [
-                    (self.tcp_syn_ping_switch, self.tcp_syn_ping_ports_entry, "-PS"),
-                    (self.tcp_ack_ping_switch, self.tcp_ack_ping_ports_entry, "-PA"),
-                    (self.udp_ping_switch, self.udp_ping_ports_entry, "-PU")
-                ]:
-                    if part == flag_prefix:
-                        switch_obj.set_active(True)
-                        # Check if next part is its argument (not another option and exists)
-                        if (i + 1) < len(current_additional_parts) and not current_additional_parts[i+1].startswith("-"):
-                            port_entry_obj.set_text(current_additional_parts[i+1])
-                            i += 1 # Consume argument part
-                        processed_this_part = True
+            self.udp_ping_switch.set_active(options.get('udp_ping', False))
+            self.udp_ping_ports_entry.set_text(options.get('udp_ping_ports', ''))
+
+            self.icmp_echo_ping_switch.set_active(options.get('icmp_echo_ping', False))
+            self.no_dns_switch.set_active(options.get('no_dns', False))
+            self.traceroute_switch.set_active(options.get('traceroute', False))
+
+            # Primary Scan Type ComboBox
+            primary_scan_type_val = options.get('primary_scan_type')
+            selected_scan_type_idx = 0 # Default to "Default (No Specific Type)"
+            if primary_scan_type_val:
+                for i, (display_name, flag_val) in enumerate(self.primary_scan_type_options_map.items()):
+                    if flag_val == primary_scan_type_val:
+                        selected_scan_type_idx = i
                         break
-                    elif part.startswith(flag_prefix) and len(part) > len(flag_prefix): # e.g., -PS22 or -PS22,80
-                        switch_obj.set_active(True)
-                        port_entry_obj.set_text(part[len(flag_prefix):])
-                        processed_this_part = True
-                        break
-
-                if not processed_this_part:
-                    final_additional_parts_after_parsing_pings.append(part)
-
-                i += 1
-
-            additional_parts_for_entry = final_additional_parts_after_parsing_pings
-
-            # --- Scan Technique Options START ---
-            self.scan_type_combo.set_selected(0) # Default to "Default (No Specific Type)"
-
-            # Determine the order of scan type display names as used in the ComboRow model
-            primary_scan_type_display_names_ordered = list(self.primary_scan_type_options_map.keys())
-
-            found_primary_scan_type_for_ui = False
-            for display_name in primary_scan_type_display_names_ordered:
-                flag = self.primary_scan_type_options_map.get(display_name)
-                if flag and flag in parts: # Check in original 'parts'
-                    if not found_primary_scan_type_for_ui:
-                        # Set the combo box to the first one found
-                        idx = primary_scan_type_display_names_ordered.index(display_name)
-                        self.scan_type_combo.set_selected(idx)
-                        found_primary_scan_type_for_ui = True
-
-                    # Remove all occurrences of this flag from additional_parts_for_entry
-                    # This ensures if multiple conflicting primary scan types are in the command,
-                    # they are all removed from additional_args, and one is chosen for UI.
-                    additional_parts_for_entry = [p for p in additional_parts_for_entry if p != flag]
+            self.scan_type_combo.set_selected(selected_scan_type_idx)
 
             # Special TCP Scan Switches
-            check_and_set_switch(self.tcp_null_scan_switch, "-sN", parts, additional_parts_for_entry)
-            check_and_set_switch(self.tcp_fin_scan_switch, "-sF", parts, additional_parts_for_entry)
-            check_and_set_switch(self.tcp_xmas_scan_switch, "-sX", parts, additional_parts_for_entry)
-            # --- Scan Technique Options END ---
+            self.tcp_null_scan_switch.set_active(options.get('tcp_null_scan', False))
+            self.tcp_fin_scan_switch.set_active(options.get('tcp_fin_scan', False))
+            self.tcp_xmas_scan_switch.set_active(options.get('tcp_xmas_scan', False))
 
-            self.additional_args_row.set_text(" ".join(additional_parts_for_entry))
+            # Additional Arguments
+            self.additional_args_row.set_text(options.get('additional_args', ''))
+
+            # Note: The 'stealth_scan' option from ProfileOptions is not directly set on a switch here
+            # because its meaning is tied to the primary_scan_type (-sS).
+            # parse_command_to_options sets 'stealth_scan': True if -sS is found.
+            # build_command_from_options will use 'primary_scan_type' or add -sS if 'stealth_scan' is true
+            # and no other conflicting primary scan type is chosen.
 
         # Action area for buttons
         action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12, margin_top=12)
@@ -273,10 +216,6 @@ class ProfileEditorDialog(Adw.Dialog):
         action_box.append(save_button)
 
         # Append the action_box to the main_box of the dialog
-        # The main_box was previously set as the child of the dialog.
-        # Assuming main_box is accessible here (it should be, it was defined in __init__).
-        # If main_box is not a Gtk.Box that can append, this might need adjustment,
-        # but the previous rewrite used Gtk.Box for main_box.
         dialog_child = self.get_child()
         if isinstance(dialog_child, Gtk.Box):
             dialog_child.append(action_box)
@@ -297,106 +236,88 @@ class ProfileEditorDialog(Adw.Dialog):
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
 
-            command_parts = []
+            # Create ProfileOptions from UI elements
+            options_from_ui: ProfileOptions = {
+                'os_fingerprint': self.os_detection_switch.get_active(),
+                'version_detection': self.version_detection_switch.get_active(),
+                'no_ping': self.no_ping_switch.get_active(),
+                'list_scan': self.list_scan_switch.get_active(),
+                'ping_scan': self.ping_scan_switch.get_active(),
+                'tcp_syn_ping': self.tcp_syn_ping_switch.get_active(),
+                'tcp_syn_ping_ports': self.tcp_syn_ping_ports_entry.get_text().strip() or None,
+                'tcp_ack_ping': self.tcp_ack_ping_switch.get_active(),
+                'tcp_ack_ping_ports': self.tcp_ack_ping_ports_entry.get_text().strip() or None,
+                'udp_ping': self.udp_ping_switch.get_active(),
+                'udp_ping_ports': self.udp_ping_ports_entry.get_text().strip() or None,
+                'icmp_echo_ping': self.icmp_echo_ping_switch.get_active(),
+                'no_dns': self.no_dns_switch.get_active(),
+                'traceroute': self.traceroute_switch.get_active(),
+                'tcp_null_scan': self.tcp_null_scan_switch.get_active(),
+                'tcp_fin_scan': self.tcp_fin_scan_switch.get_active(),
+                'tcp_xmas_scan': self.tcp_xmas_scan_switch.get_active(),
+                'additional_args': self.additional_args_row.get_text().strip() or None
+                # 'ports' and 'nse_script' are not directly on ProfileEditorDialog UI,
+                # they are part of additional_args or implicitly handled by Nmap if not specified.
+                # However, `ProfileOptions` expects them, so we should provide them if they
+                # are meant to be distinct. For now, they will be part of additional_args.
+                # Let's assume `parse_command_to_options` extracts them if present,
+                # and `build_command_from_options` can reconstruct.
+                # The current UI design means these are not explicitly set.
+                # For a more robust ProfileOptions, these should be None if not explicitly set.
+                 'ports': None, # Not a direct field in ProfileEditorDialog, parsed from additional_args
+                 'nse_script': None, # Not a direct field, parsed from additional_args
+            }
 
             # Timing Template
-            timing_map = {
-                0: "-T0", 1: "-T1", 2: "-T2", 3: "-T3", 4: "-T4", 5: "-T5"
-            }
-            selected_timing_index = self.timing_combo.get_selected()
-            # Default to -T3 (index 3) if the selected index is somehow out of bounds,
-            # or if the default timing_combo selection (which is 3) means no specific -T option.
-            # However, Nmap uses -T3 by default if no -T option is specified.
-            # So, we only add a -T option if it's NOT -T3 to avoid redundancy,
-            # or always add it if explicit is preferred. For this, let's be explicit.
-            selected_timing_value = timing_map.get(selected_timing_index, "-T3") # Default to -T3
-            command_parts.append(selected_timing_value)
+            timing_map_from_index = {0: "-T0", 1: "-T1", 2: "-T2", 3: "-T3", 4: "-T4", 5: "-T5"}
+            selected_timing_idx = self.timing_combo.get_selected()
+            # Nmap's default is T3. We only add a -T option if it's not T3.
+            # build_command_from_options should handle if timing_template is None or specifically T3.
+            # For ProfileOptions, store the actual flag, or None if it's default T3.
+            nmap_timing_flag = timing_map_from_index.get(selected_timing_idx)
+            if nmap_timing_flag == "-T3": # If T3 is selected, treat as default (None in ProfileOptions)
+                options_from_ui['timing_template'] = None
+            else:
+                options_from_ui['timing_template'] = nmap_timing_flag
 
-            # Version Detection Switch
-            if self.version_detection_switch.get_active():
-                command_parts.append("-sV")
 
-            # OS Detection Switch
-            if self.os_detection_switch.get_active():
-                command_parts.append("-O")
-
-            # --- Host Discovery Options START ---
-            if self.list_scan_switch.get_active():
-                command_parts.append("-sL")
-
-            if self.ping_scan_switch.get_active():
-                command_parts.append("-sn")
-
-            if self.no_ping_switch.get_active():
-                 command_parts.append("-Pn") # -Pn is now handled here
-
-            # TCP SYN Ping (-PS)
-            if self.tcp_syn_ping_switch.get_active():
-                ps_ports = self.tcp_syn_ping_ports_entry.get_text().strip()
-                command_parts.append(f"-PS{ps_ports if ps_ports else ''}")
-
-            # TCP ACK Ping (-PA)
-            if self.tcp_ack_ping_switch.get_active():
-                pa_ports = self.tcp_ack_ping_ports_entry.get_text().strip()
-                command_parts.append(f"-PA{pa_ports if pa_ports else ''}")
-
-            # UDP Ping (-PU)
-            if self.udp_ping_switch.get_active():
-                pu_ports = self.udp_ping_ports_entry.get_text().strip()
-                command_parts.append(f"-PU{pu_ports if pu_ports else ''}")
-
-            if self.icmp_echo_ping_switch.get_active():
-                command_parts.append("-PE")
-
-            if self.no_dns_switch.get_active():
-                command_parts.append("-n")
-
-            if self.traceroute_switch.get_active():
-                command_parts.append("--traceroute")
-            # --- Host Discovery Options END ---
-
-            # --- Scan Technique Options START ---
+            # Primary Scan Type
             selected_scan_type_idx = self.scan_type_combo.get_selected()
-            if selected_scan_type_idx > 0: # Index 0 is "Default (No Specific Type)"
+            primary_scan_type_flag = None
+            if selected_scan_type_idx >= 0: # Ensure a valid selection
                 scan_type_model = self.scan_type_combo.get_model()
-                # Model should be Gtk.StringList as set in __init__
-                if isinstance(scan_type_model, Gtk.StringList): # Check instance for safety
+                if isinstance(scan_type_model, Gtk.StringList):
                     display_name = scan_type_model.get_string(selected_scan_type_idx)
-                    nmap_flag = self.primary_scan_type_options_map.get(display_name)
-                    if nmap_flag:
-                        command_parts.append(nmap_flag)
+                    primary_scan_type_flag = self.primary_scan_type_options_map.get(display_name) # This can be None for "Default"
+            options_from_ui['primary_scan_type'] = primary_scan_type_flag
 
-            if self.tcp_null_scan_switch.get_active():
-                command_parts.append("-sN")
+            # If primary_scan_type is -sS, then stealth_scan should be true.
+            # build_command_from_options should handle this.
+            # For ProfileOptions, if primary_scan_type is -sS, also set stealth_scan to True.
+            if primary_scan_type_flag == "-sS":
+                options_from_ui['stealth_scan'] = True
+            else:
+                # If a different primary scan type is chosen, ensure stealth_scan (as a separate concept) is false,
+                # unless the UI has a separate switch for -sS that is also active (which it doesn't).
+                 options_from_ui['stealth_scan'] = False
 
-            if self.tcp_fin_scan_switch.get_active():
-                command_parts.append("-sF")
 
-            if self.tcp_xmas_scan_switch.get_active():
-                command_parts.append("-sX")
-            # --- Scan Technique Options END ---
-
-            # Additional Arguments
-            additional_args = self.additional_args_row.get_text().strip()
-            if additional_args:
-                command_parts.append(additional_args)
-
-            final_command = " ".join(filter(None, command_parts)) # filter(None, ...) to remove empty strings if any
+            final_command = build_command_from_options(options_from_ui)
 
             # Validation
             if not name:
-                self._show_toast("Profile name cannot be empty.")
+                self._show_alert_dialog("Profile name cannot be empty.")
                 return True # Prevent dialog from closing
 
             if name != self.original_profile_name and name in self.existing_profile_names:
-                self._show_toast(f"A profile with the name '{name}' already exists.")
+                self._show_alert_dialog(f"A profile with the name '{name}' already exists.")
                 return True # Prevent dialog from closing
 
             # --- New Validator Integration START ---
             validator = NmapCommandValidator()
             is_valid, error_message = validator.validate_arguments(final_command)
             if not is_valid:
-                self._show_toast(error_message)
+                self._show_alert_dialog(error_message)
                 print(f"DEBUG (ProfileEditorDialog): Validation failed - '{error_message}' in command: {final_command}", file=sys.stderr)
                 return True # Keep dialog open
             # --- New Validator Integration END ---
@@ -426,7 +347,7 @@ class ProfileEditorDialog(Adw.Dialog):
         if not switch_row.get_active():
             entry_row.set_text("") # Clear text when hiding
 
-    def _show_toast(self, message: str):
+    def _show_alert_dialog(self, message: str):
         # For proper error display within the dialog context, use Adw.AlertDialog
         # Adw.Toast is typically for non-modal, transient notifications on a parent window.
         print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr) # Keep for console logging

@@ -83,6 +83,36 @@
                 <!-- Profiles will be added here programmatically as Adw.ActionRows -->
               </object>
             </child>
+            <child>
+              <object class="AdwActionRow" id="export_profiles_action_row">
+                <property name="title" translatable="yes">Export All Scan Profiles</property>
+                <child>
+                  <object class="GtkButton" id="export_profiles_button">
+                    <property name="label" translatable="yes">Export All...</property>
+                    <property name="halign">end</property>
+                    <property name="tooltip-text" translatable="yes">Export all scan profiles to a JSON file</property>
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwActionRow" id="import_profiles_action_row">
+                <property name="title" translatable="yes">Import Scan Profiles from File</property>
+                <child>
+                  <object class="GtkButton" id="import_profiles_button">
+                    <property name="label" translatable="yes">Import...</property>
+                    <property name="halign">end</property>
+                    <property name="tooltip-text" translatable="yes">Import scan profiles from a JSON file</property>
+                    <style>
+                      <class name="flat"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
             <child type="footer"> <!-- Adding button as a footer to the group -->
               <object class="GtkButton" id="add_profile_button">
                 <property name="label" translatable="yes">Add New Profile...</property>
