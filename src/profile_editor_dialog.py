@@ -255,7 +255,7 @@ class ProfileEditorDialog(Adw.Dialog):
                 'tcp_null_scan': self.tcp_null_scan_switch.get_active(),
                 'tcp_fin_scan': self.tcp_fin_scan_switch.get_active(),
                 'tcp_xmas_scan': self.tcp_xmas_scan_switch.get_active(),
-                'additional_args': self.additional_args_row.get_text().strip() or None
+                'additional_args': self.additional_args_row.get_text().strip() or None,
                 # 'ports' and 'nse_script' are not directly on ProfileEditorDialog UI,
                 # they are part of additional_args or implicitly handled by Nmap if not specified.
                 # However, `ProfileOptions` expects them, so we should provide them if they
