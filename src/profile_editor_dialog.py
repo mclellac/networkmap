@@ -14,7 +14,7 @@ class ProfileEditorDialog(Adw.Dialog):
     def __init__(self,
                  profile_to_edit: Optional[Dict[str, Any]] = None,
                  existing_profile_names: Optional[List[str]] = None):
-        
+
         super().__init__()
 
         self.profile_to_edit = profile_to_edit
@@ -41,12 +41,12 @@ class ProfileEditorDialog(Adw.Dialog):
         preferences_group.add(general_scan_options_expander)
 
         self.timing_combo = Adw.ComboRow(
-            title="Timing Template", 
+            title="Timing Template",
             model=Gtk.StringList.new(["T0 (Paranoid)", "T1 (Sneaky)", "T2 (Polite)", "T3 (Normal)", "T4 (Aggressive)", "T5 (Insane)"])
         )
         self.timing_combo.set_selected(3) # Default to "T3 (Normal)"
         general_scan_options_expander.add_row(self.timing_combo)
-        
+
         # self.no_ping_switch will be moved to Host Discovery
 
         self.version_detection_switch = Adw.SwitchRow(title="Version Detection (-sV)")
@@ -93,10 +93,10 @@ class ProfileEditorDialog(Adw.Dialog):
 
         self.icmp_echo_ping_switch = Adw.SwitchRow(title="ICMP Echo Ping (-PE)")
         host_discovery_expander.add_row(self.icmp_echo_ping_switch)
-        
+
         self.no_dns_switch = Adw.SwitchRow(title="No DNS Resolution (-n)")
         host_discovery_expander.add_row(self.no_dns_switch)
-        
+
         self.traceroute_switch = Adw.SwitchRow(title="Traceroute (--traceroute)")
         host_discovery_expander.add_row(self.traceroute_switch)
 
@@ -116,7 +116,7 @@ class ProfileEditorDialog(Adw.Dialog):
             "TCP Maimon (-sM)": "-sM"
         }
         primary_scan_type_display_names = list(self.primary_scan_type_options_map.keys())
-        
+
         self.scan_type_combo = Adw.ComboRow(title="Primary Scan Type")
         self.scan_type_combo.set_model(Gtk.StringList.new(primary_scan_type_display_names))
         self.scan_type_combo.set_selected(0) # Default to "Default (No Specific Type)"
@@ -139,7 +139,7 @@ class ProfileEditorDialog(Adw.Dialog):
 
         self.additional_args_row = Adw.EntryRow(title="Arguments") # Title can be simpler now
         additional_args_expander.add_row(self.additional_args_row)
-        
+
         # For simplicity, NSE scripts are not directly editable in this version,
         # but will be preserved if they exist.
 
@@ -148,7 +148,7 @@ class ProfileEditorDialog(Adw.Dialog):
         # Populate fields if editing
         if self.profile_to_edit:
             self.profile_name_row.set_text(self.profile_to_edit.get('name', ''))
-            
+
             command_str = self.profile_to_edit.get('command', '')
             parts = command_str.split()
             additional_parts_for_entry = list(parts) # Assume all parts are additional initially
@@ -180,7 +180,7 @@ class ProfileEditorDialog(Adw.Dialog):
 
             # Host Discovery Simple Switches
             check_and_set_switch(self.list_scan_switch, "-sL", parts, additional_parts_for_entry)
-            
+
             # For -sn / -sP, since they are aliases and we have one switch:
             if "-sn" in parts:
                 self.ping_scan_switch.set_active(True)
@@ -198,7 +198,7 @@ class ProfileEditorDialog(Adw.Dialog):
             # Process flags with optional arguments (-PS, -PA, -PU) from remaining parts
             current_additional_parts = list(additional_parts_for_entry) # Current state of parts to be processed
             final_additional_parts_after_parsing_pings = [] # Parts that are not any of -PS/PA/PU and their args
-            
+
             i = 0
             while i < len(current_additional_parts):
                 part = current_additional_parts[i]
@@ -216,26 +216,26 @@ class ProfileEditorDialog(Adw.Dialog):
                             port_entry_obj.set_text(current_additional_parts[i+1])
                             i += 1 # Consume argument part
                         processed_this_part = True
-                        break 
+                        break
                     elif part.startswith(flag_prefix) and len(part) > len(flag_prefix): # e.g., -PS22 or -PS22,80
                         switch_obj.set_active(True)
                         port_entry_obj.set_text(part[len(flag_prefix):])
                         processed_this_part = True
-                        break 
-                
+                        break
+
                 if not processed_this_part:
                     final_additional_parts_after_parsing_pings.append(part)
-                
+
                 i += 1
-            
+
             additional_parts_for_entry = final_additional_parts_after_parsing_pings
 
             # --- Scan Technique Options START ---
             self.scan_type_combo.set_selected(0) # Default to "Default (No Specific Type)"
-            
+
             # Determine the order of scan type display names as used in the ComboRow model
             primary_scan_type_display_names_ordered = list(self.primary_scan_type_options_map.keys())
-            
+
             found_primary_scan_type_for_ui = False
             for display_name in primary_scan_type_display_names_ordered:
                 flag = self.primary_scan_type_options_map.get(display_name)
@@ -244,8 +244,8 @@ class ProfileEditorDialog(Adw.Dialog):
                         # Set the combo box to the first one found
                         idx = primary_scan_type_display_names_ordered.index(display_name)
                         self.scan_type_combo.set_selected(idx)
-                        found_primary_scan_type_for_ui = True 
-                    
+                        found_primary_scan_type_for_ui = True
+
                     # Remove all occurrences of this flag from additional_parts_for_entry
                     # This ensures if multiple conflicting primary scan types are in the command,
                     # they are all removed from additional_args, and one is chosen for UI.
@@ -278,7 +278,7 @@ class ProfileEditorDialog(Adw.Dialog):
         # If main_box is not a Gtk.Box that can append, this might need adjustment,
         # but the previous rewrite used Gtk.Box for main_box.
         dialog_child = self.get_child()
-        if isinstance(dialog_child, Gtk.Box): 
+        if isinstance(dialog_child, Gtk.Box):
             dialog_child.append(action_box)
         else:
             # Fallback if main_box is not what we expect, though it should be.
@@ -296,7 +296,7 @@ class ProfileEditorDialog(Adw.Dialog):
         print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
-            
+
             command_parts = []
 
             # Timing Template
@@ -323,7 +323,7 @@ class ProfileEditorDialog(Adw.Dialog):
             # --- Host Discovery Options START ---
             if self.list_scan_switch.get_active():
                 command_parts.append("-sL")
-            
+
             if self.ping_scan_switch.get_active():
                 command_parts.append("-sn")
 
@@ -350,7 +350,7 @@ class ProfileEditorDialog(Adw.Dialog):
 
             if self.no_dns_switch.get_active():
                 command_parts.append("-n")
-            
+
             if self.traceroute_switch.get_active():
                 command_parts.append("--traceroute")
             # --- Host Discovery Options END ---
@@ -363,24 +363,24 @@ class ProfileEditorDialog(Adw.Dialog):
                 if isinstance(scan_type_model, Gtk.StringList): # Check instance for safety
                     display_name = scan_type_model.get_string(selected_scan_type_idx)
                     nmap_flag = self.primary_scan_type_options_map.get(display_name)
-                    if nmap_flag: 
+                    if nmap_flag:
                         command_parts.append(nmap_flag)
 
             if self.tcp_null_scan_switch.get_active():
                 command_parts.append("-sN")
-            
+
             if self.tcp_fin_scan_switch.get_active():
                 command_parts.append("-sF")
-                
+
             if self.tcp_xmas_scan_switch.get_active():
                 command_parts.append("-sX")
             # --- Scan Technique Options END ---
-            
+
             # Additional Arguments
             additional_args = self.additional_args_row.get_text().strip()
             if additional_args:
                 command_parts.append(additional_args)
-            
+
             final_command = " ".join(filter(None, command_parts)) # filter(None, ...) to remove empty strings if any
 
             # Validation
@@ -405,7 +405,7 @@ class ProfileEditorDialog(Adw.Dialog):
             # Placeholder for NSE scripts, not handled by these UI elements directly yet
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
-            
+
             print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Print the data being saved
             print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)

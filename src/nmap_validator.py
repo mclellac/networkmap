@@ -4,7 +4,7 @@ import sys # For potential debug prints within the validator itself, if needed l
 class NmapCommandValidator:
     def __init__(self):
         self.forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
-        
+
         # Common Nmap options
         self.known_options = {
             "-sS", "-sT", "-sU", "-sA", "-sW", "-sM", # TCP Scan Types
@@ -34,11 +34,11 @@ class NmapCommandValidator:
         }
         # Options that are known to take an argument (and argument is space-separated)
         self.options_with_args = {
-            "-p": "port_spec", 
-            "--script": "script_spec", 
-            "-oN": "filename", 
-            "-oX": "filename", 
-            "-oG": "filename", 
+            "-p": "port_spec",
+            "--script": "script_spec",
+            "-oN": "filename",
+            "-oX": "filename",
+            "-oG": "filename",
             "-oA": "basename",
             "-iL": "filename",
             "--max-retries": "number",
@@ -89,7 +89,7 @@ class NmapCommandValidator:
                         # If valid prefix option, mark as handled and continue
                         is_prefix_option_handled = True
                         break
-                
+
                 # --- Start: Handling for -PS<ports>, -PA<ports>, -PU<ports> (attached args) ---
                 # This comes before the generic "unknown option" check.
                 if not is_prefix_option_handled and not (part in self.known_options):
@@ -114,14 +114,14 @@ class NmapCommandValidator:
                     # --- End: Handling for attached host discovery port args ---
                     elif not (len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args)): # existing -sV type check
                         return False, f"Unknown Nmap option: '{part}'"
-                
+
                 # If code reaches here, 'part' is a known option or was handled as a prefix option (like -T4 or -PS22)
 
                 if not is_prefix_option_handled: # Process options that were not prefix based (e.g. -T4) or attached (e.g. -PS22)
                     if part in self.options_with_args: # Options that MUST have a space-separated argument
                         if i + 1 >= len(parts):
                             return False, f"Option '{part}' requires an argument, but none was provided."
-                        
+
                         arg_value = parts[i+1]
                         if arg_value.startswith("-") and arg_value in self.known_options and not (part == "--script-args"):
                             if part in ["-p"] and not re.match(r"^\d", arg_value):
@@ -132,7 +132,7 @@ class NmapCommandValidator:
                             port_regex_strict = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
                             if not arg_value or (arg_value.startswith("-") and not re.match(r"^\d", arg_value[1:])) or not port_regex_strict.fullmatch(arg_value):
                                 return False, f"Invalid format for port specification '{arg_value}' with option '{part}'."
-                    
+
                         elif part == "--script":
                             if not arg_value or (arg_value.startswith("-") and arg_value not in ["default", "all"]): # allow --script default
                                  return False, f"Script name for '{part}' is missing, empty, or looks like another option: '{arg_value}'."
@@ -141,16 +141,16 @@ class NmapCommandValidator:
                             complex_script_regex = re.compile(r"^[a-zA-Z0-9_\*,\(\)\s\"\'\.\/\\]+([,][a-zA-Z0-9_\*,\(\)\s\"\'\.\/\\]+)*$") # More permissive for paths, quotes, etc.
                             if not script_regex.fullmatch(arg_value) and not complex_script_regex.fullmatch(arg_value):
                                 return False, f"Script argument for '{part}' ('{arg_value}') contains invalid characters or format."
-                        
+
                         elif part == "-oN" or part == "-iL": # Or -oX, -oG, -oA
                             if not arg_value or (arg_value.startswith("-") and arg_value in self.known_options) :
                                 return False, f"Filename argument for {part} cannot be empty or another option ('{arg_value}')."
-                            filename_forbidden_chars = ["\n", "\r", "$", "`", ";", "|", "&", "<", ">", "(", ")"] 
+                            filename_forbidden_chars = ["\n", "\r", "$", "`", ";", "|", "&", "<", ">", "(", ")"]
                             for char_fn in filename_forbidden_chars:
                                 if char_fn in arg_value:
                                     return False, f"Filename argument for {part} ('{arg_value}') contains forbidden character: '{char_fn}'."
                         i += 1 # Consume the argument for options_with_args
-                    
+
                     elif part in ["-PS", "-PA", "-PU"]: # Optional space-separated argument
                         if (i + 1) < len(parts) and not parts[i+1].startswith("-"):
                             port_arg = parts[i+1]
@@ -167,7 +167,7 @@ class NmapCommandValidator:
 if __name__ == '__main__':
     # Basic test cases for the validator
     validator = NmapCommandValidator()
-    
+
     test_cases = [
         ("valid_simple", "-sV localhost", True),
         ("valid_with_hyphen_arg", "-p 1-1024 -T4", True),
