@@ -461,8 +461,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             # This is okay; the command preview and scan will use these values from 'options'
             # when build_command_from_options is called (indirectly via NmapScanner).
 
-            self.port_spec_entry_row.set_text(options.get('ports', ''))
-            self.arguments_entry_row.set_text(options.get('additional_args', ''))
+            self.port_spec_entry_row.set_text(options.get('ports') or '')
+            self.arguments_entry_row.set_text(options.get('additional_args') or '')
 
             # Timing Template
             selected_timing_value = options.get('timing_template')
