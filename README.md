@@ -12,16 +12,17 @@ Network Map is a simple GTK application that uses `nmap` to scan your network an
 *   **Scan Profiles:** Save and manage frequently used scan configurations.
     *   Create, edit, and delete scan profiles.
     *   Import and export profiles in JSON format, allowing you to share configurations.
+*   **Enhanced Results Display:** Color-coded port states (open, closed, filtered) in the detailed host view for better readability. Single host scan results are automatically expanded.
 *   **Customizable Appearance:** Choose between light, dark, or system theme, and select a custom font for scan results.
 *   **Configurable DNS Servers:** Specify custom DNS servers for Nmap scans.
 *   **Default Nmap Arguments:** Set default arguments that apply to all scans.
 
 ## Usage
 
-1.  **Enter Target:** In the "Target/CIDR" field, type the hostname, IP address, or network range (e.g., `localhost`, `192.168.1.1`, `10.0.0.0/24`) you want to scan.
+1.  **Enter Target:** In the "Target/CIDR" field, type the hostname, IP address, or network range (e.g., scanme.nmap.org, 192.168.1.1, 10.0.0.0/24, or multiple targets like target1.example.com,target2.example.com 192.168.2.0/24) you want to scan. You can specify multiple targets by separating them with commas or spaces.
 2.  **Set Options (Optional):**
     *   Toggle the "OS Fingerprinting" switch if you want to attempt OS detection (often requires root/administrator privileges).
-    *   Enter any additional valid `nmap` arguments (e.g., `-p 1-1000`, `-sU`) in the "additional arguments" field.
+    *   Enter any additional valid `nmap` arguments (e.g., `-p 1-1000`, `-sU`) in the "additional arguments" field. The UI also provides direct controls for Stealth Scan (-sS), No Ping (-Pn), Port Specification (-p), Timing Templates (-T0 to -T5), and selecting common NSE Scripts.
     *   Select or create a **Scan Profile** to quickly apply a set of pre-configured options.
 3.  **Start Scan:** Click the "Start Scan" button (or press Enter in the Target field).
 4.  **View Results:**
@@ -37,11 +38,12 @@ This project uses the Meson build system.
 ### Dependencies
 
 *   Python 3 (usually `python3`)
+*   Python `python-nmap` module (e.g., `pip install python-nmap` or `python3-nmap` from system packages if available). This is handled by the Flatpak build if using Flatpak.
+*   Python GObject Introspection libraries: (Typically `python3-gi`, `python3-gi-cairo`. Covered by GTK4 dependencies below).
 *   GTK4 and LibAdwaita libraries and their development files.
     *   On Debian/Ubuntu: `sudo apt install libgtk-4-dev libadwaita-1-dev gir1.2-gtk-4.0 gir1.2-adw-1 python3-gi python3-gi-cairo gir1.2-pango-1.0`
     *   On Fedora: `sudo dnf install gtk4-devel libadwaita-devel gobject-introspection-devel python3-gobject cairo-gobject-devel pango-devel`
 *   `nmap` executable (must be in your system's PATH or at a standard location like `/usr/bin/nmap` or `/usr/local/bin/nmap`). The application will try to find it.
-*   Python `python-nmap` module: `pip install python-nmap` (This is also handled by the Flatpak build if using Flatpak).
 *   Meson (`meson`) and Ninja (`ninja` or `ninja-build`).
     *   `pip install meson ninja` or use your system's package manager.
 
