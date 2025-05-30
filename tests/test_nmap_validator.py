@@ -29,7 +29,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             "-oN output.txt",
             "-iL input.list",
             "--script-args user=admin,pass=secret",
-            "plainstringtarget", 
+            "plainstringtarget",
             "-T4 extratarget -Pn",
             # New Host Discovery Valid Cases
             "-sL localhost",
@@ -74,7 +74,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid due to '{char}' for command: '{cmd_args}'")
             self.assertIn(f"forbidden character: '{char}'", msg, f"Incorrect error for '{char}': {msg}")
-    
+
     def test_unknown_options(self):
         invalid_cases = [
             "--nonexistent-option",
@@ -136,7 +136,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             # The validator's "if not arg_value:" for -oN/-iL should catch this.
             # Note: a command like "-oN """ would be split by shell usually.
             # If self.validator.validate_arguments("-oN \"\"") is called, parts will be ["-oN", ""].
-            ("-oN \"\"", "Filename argument for -oN cannot be empty or another option ('\"\"')."), 
+            ("-oN \"\"", "Filename argument for -oN cannot be empty or another option ('\"\"')."),
             ("-iL \"\"", "Filename argument for -iL cannot be empty or another option ('\"\"')."),
             ("-oN -sV", "Filename argument for -oN cannot be empty or another option ('-sV')."),
             ("-iL -Pn", "Filename argument for -iL cannot be empty or another option ('-Pn')."),
@@ -159,7 +159,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid for HD arg: '{cmd_args}'")
             # Ensure the message contains the specific snippet, not just the generic port error part from -p
-            self.assertTrue(expected_msg_snippet in msg or f"Invalid port specification format for {flag}: '{bad_port_arg}'" in msg, 
+            self.assertTrue(expected_msg_snippet in msg or f"Invalid port specification format for {flag}: '{bad_port_arg}'" in msg,
                             f"Incorrect error for '{cmd_args}'. Got: '{msg}', Expected snippet: '{expected_msg_snippet}'")
 
 
@@ -191,7 +191,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid for port arg gibberish: '{cmd_args}'")
             self.assertIn(expected_msg_snippet, msg, f"Incorrect error for '{cmd_args}'. Got: '{msg}'")
-            
+
     def test_port_option_valid_formats(self):
         valid_cases = [
             "-p 22",
@@ -225,7 +225,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             is_valid, msg = self.validator.validate_arguments(cmd_args)
             self.assertFalse(is_valid, f"Expected invalid for script arg gibberish: '{cmd_args}'")
             self.assertIn(expected_msg_snippet, msg, f"Incorrect error for '{cmd_args}'. Got: '{msg}'")
-            
+
     def test_general_gibberish_arguments_pass(self):
         """Tests that general 'gibberish' not formatted as options or violating forbidden chars passes."""
         # These are presumed to be targets by Nmap if they don't match option patterns.

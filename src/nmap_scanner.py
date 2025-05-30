@@ -500,11 +500,37 @@ class NmapScanner:
                                 "conf": str(port_details.get("conf", "N/A")),
                                 "cpe": port_details.get("cpe"),
                             },
+                            # <--- SCRIPT OUTPUT WILL BE ADDED HERE
                         }
+
+                        # Extract NSE script output if available
+                        if 'script' in port_details and isinstance(port_details['script'], dict):
+                            port_entry["script_output"] = port_details['script']
+                            # port_details['script'] is expected to be a dict like {'script_id': 'output_string', ...}
+                        else:
+                            port_entry["script_output"] = None # Ensure the key exists
+
                         host_info["ports"].append(port_entry)
                         raw_details_parts.append(
                             f"  <b>Port:</b> {escaped_port_id}/{escaped_proto_short:<3}  <b>State:</b> {escaped_port_state:<10} <b>Service:</b> {service_info_str}"
                         )
+
+                        # Display NSE script output if available for this port
+                        if port_entry.get("script_output"): # Check if script_output exists and is not None
+                            for script_id, output_string in port_entry["script_output"].items():
+                                escaped_script_id = GLib.markup_escape_text(script_id)
+                                # Escape the output_string carefully. It can be multi-line.
+                                # Replace leading/trailing newlines, then escape, then replace internal newlines with <br/> for HTML.
+                                # Indent the output for readability.
+                                if output_string: # Ensure output_string is not None or empty
+                                    formatted_output = GLib.markup_escape_text(output_string.strip())
+                                    # Indent subsequent lines of the script output
+                                    formatted_output = formatted_output.replace("\n", "\n        ")
+                                    raw_details_parts.append(f"    <b>Script:</b> {escaped_script_id}")
+                                    # Using <tt> or equivalent for monospace in Pango markup
+                                    raw_details_parts.append(f"      <b>Output:</b> <tt>\n        {formatted_output}</tt>")
+                                else:
+                                    raw_details_parts.append(f"    <b>Script:</b> {escaped_script_id} (no output)")
                 
                 if do_os_fingerprint and "osmatch" in host_scan_data: 
                     os_matches = host_scan_data.get("osmatch", [])
