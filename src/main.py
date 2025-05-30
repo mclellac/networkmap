@@ -6,8 +6,8 @@ subclassing `Adw.Application` and handles the application lifecycle,
 actions, and window management. It also contains the `main` function
 which serves as the entry point for the application.
 """
-
 import sys
+import argparse # Added for --debug flag
 from typing import Callable, List, Optional
 
 import gi
@@ -20,6 +20,7 @@ from gi.repository import Gtk, Gio, Adw, GLib
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
 from .utils import apply_theme
+from . import config # Added for --debug flag
 
 APP_ID: str = "com.github.mclellac.NetworkMap"
 APP_NAME: str = "Network Map"
@@ -162,9 +163,30 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         The exit status of the application.
     """
-    processed_argv = argv if argv is not None else sys.argv
+    # Use current sys.argv if argv is None
+    current_argv = argv if argv is not None else sys.argv
+
+    parser = argparse.ArgumentParser(description="Network Map application")
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug console logging'
+    )
+    # Parse only known args, leave the rest for GTK/Adwaita
+    args, remaining_argv = parser.parse_known_args(current_argv[1:])
+
+    if args.debug:
+        config.DEBUG_ENABLED = True
+
+    if config.DEBUG_ENABLED:
+        print("DEBUG: Debug mode enabled.") # Initial confirmation if debug is on
+
+    # Pass remaining arguments (plus program name) to app.run()
+    # GTK application typically expects sys.argv format
+    processed_argv_for_app = [current_argv[0]] + remaining_argv
+
     app = NetworkMapApplication()
-    return app.run(processed_argv)
+    return app.run(processed_argv_for_app)
 
 
 if __name__ == "__main__":
