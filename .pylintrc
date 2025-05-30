@@ -1,0 +1,51 @@
+[MESSAGES CONTROL]
+
+# Disable the following specific messages
+# (add or remove as needed based on project style and priorities)
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    invalid-name,           # Allows short variable names like 'nm', 'db', 'fd', etc.
+    fixme,                  # Disable warnings for TODO/FIXME comments if they are used intentionally
+    too-many-instance-attributes, # Common in UI classes
+    too-many-arguments,         # Methods in UI/GTK can sometimes have many args from callbacks
+    too-many-locals,
+    too-many-statements,
+    too-many-public-methods,    # Common for classes representing windows/dialogs
+    too-few-public-methods
+
+[FORMAT]
+
+# Maximum number of characters on a single line.
+max-line-length=120
+
+# Good variable names which should always be accepted, separated by a comma
+good-names=i,j,k,ex,e,_,nm,fd,fp,id,ip,ui,up,vm
+
+[BASIC]
+# Regular expression which should only match function or class names that do not
+# require a docstring.
+no-docstring-rgx=^_
+
+[IMPORTS]
+# Allow wildcard imports for gi.repository, which is a common pattern.
+# This specific option might not exist or work as expected for pylint directly,
+# often this is handled by telling pylint about the C extensions.
+# For now, this is a placeholder; actual GI GObject introspection issues
+# are often handled by `pylint-gi` or by generating stubs.
+# If `import-error` or `no-name-in-module` become an issue for Gtk/Adw,
+# those would be disabled here or in a `pyproject.toml` for pylint.
+
+[TYPECHECK]
+# List of members which are set dynamically and ignored by pylint checking for
+# attributes defined in __init__. Usually for Gtk.Template.Child or similar.
+# Example: generated-members=Gtk.*,Gio.*,GLib.*,GObject.*,Adw.*
+# This is often better handled by pylint plugins like pylint-gi.
+# For a basic .pylintrc, we might not need this if not running pylint in a way that checks this heavily.
+
+# Tell pylint known C extensions. This helps with `import-error` for Gtk/Adw.
+extension-pkg-whitelist=gi
+
+# Ignore specific modules for import errors if they are known to be problematic
+# ignored-modules=gi.repository
