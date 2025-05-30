@@ -510,10 +510,23 @@ class NmapScanner:
                         else:
                             port_entry["script_output"] = None # Ensure the key exists
 
+                        # Extract port state reason
+                        port_entry["reason"] = port_details.get("reason")
+                        port_entry["reason_ttl"] = port_details.get("reason_ttl")
+
                         host_info["ports"].append(port_entry)
-                        raw_details_parts.append(
-                            f"  <b>Port:</b> {escaped_port_id}/{escaped_proto_short:<3}  <b>State:</b> {escaped_port_state:<10} <b>Service:</b> {service_info_str}"
-                        )
+
+                        main_port_line_parts = [
+                            f"  <b>Port:</b> {escaped_port_id}/{escaped_proto_short:<3}",
+                            f"<b>State:</b> {escaped_port_state:<10}"
+                        ]
+                        if port_entry.get("reason"): # Check if reason exists
+                            escaped_reason = GLib.markup_escape_text(str(port_entry["reason"]))
+                            main_port_line_parts.append(f"<b>Reason:</b> {escaped_reason}")
+
+                        main_port_line_parts.append(f"<b>Service:</b> {service_info_str}")
+
+                        raw_details_parts.append("  ".join(main_port_line_parts)) # Join with a couple of spaces for separation
 
                         # Display NSE script output if available for this port
                         if port_entry.get("script_output"): # Check if script_output exists and is not None
@@ -585,6 +598,16 @@ class NmapScanner:
                 )
 
         if not hosts_data and scanned_host_ids: 
-            return [], "No information parsed for scanned hosts. They might be down or heavily filtered."
+            current_message = "No information parsed for scanned hosts. They might be down or heavily filtered."
+        elif not scanned_host_ids: # This case was handled by the initial check, but good for clarity if structure changes
+            current_message = "No hosts found."
+        else:
+            current_message = None # Success with data
+
+        # Extract and print scan statistics for debugging/info
+        scan_stats = self.nm.scanstats()
+        if scan_stats:
+            stats_str = f"Scan stats: {scan_stats.get('uphosts', 'N/A')} up, {scan_stats.get('downhosts', 'N/A')} down, {scan_stats.get('totalhosts', 'N/A')} total. Elapsed: {scan_stats.get('elapsed', 'N/A')}s."
+            print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
-        return hosts_data, None
+        return hosts_data, current_message
