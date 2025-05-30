@@ -29,11 +29,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
 
     profiles_list_box: Gtk.ListBox = Gtk.Template.Child("profiles_list_box")
     add_profile_button: Gtk.Button = Gtk.Template.Child("add_profile_button")
-    
-    # Programmatically added UI elements (not from .ui template initially)
-    # These will be initialized in __init__
-    export_profiles_button: Optional[Gtk.Button] = None
-    import_profiles_button: Optional[Gtk.Button] = None
+    export_profiles_button: Gtk.Button = Gtk.Template.Child("export_profiles_button")
+    import_profiles_button: Gtk.Button = Gtk.Template.Child("import_profiles_button")
 
 
     def __init__(self, parent_window: Optional[Gtk.Window] = None): # Allow None for parent_window
@@ -83,34 +80,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
 
     def _init_ui_components(self) -> None:
         """Initializes UI components not directly handled by Gtk.Template or simple bindings."""
-        # Profile management UI: Add, Export, Import buttons
-        # Create and add Export Profiles button and its ActionRow
-        self.export_profiles_button = Gtk.Button(label="Export All...", halign=Gtk.Align.END,
-                                                 tooltip_text="Export all scan profiles to a JSON file")
-        export_action_row = Adw.ActionRow(title="Export All Scan Profiles")
-        export_action_row.add_suffix(self.export_profiles_button)
-        export_action_row.set_activatable_widget(self.export_profiles_button)
-
-        # Create and add Import Profiles button and its ActionRow
-        self.import_profiles_button = Gtk.Button(label="Import...", halign=Gtk.Align.END,
-                                                 tooltip_text="Import scan profiles from a JSON file")
-        import_action_row = Adw.ActionRow(title="Import Scan Profiles from File")
-        import_action_row.add_suffix(self.import_profiles_button)
-        import_action_row.set_activatable_widget(self.import_profiles_button)
-        
-        # Find the parent Adw.PreferencesGroup to add these rows.
-        # This relies on the structure of the UI defined in the .ui file.
-        # If 'profiles_list_box' is defined and its parent is a PreferencesGroup, this works.
-        parent_group = self._find_parent_preferences_group(self.profiles_list_box)
-        
-        if parent_group:
-            parent_group.add(export_action_row)
-            parent_group.add(import_action_row)
-        else:
-            # Fallback or error logging if the expected UI structure isn't found.
-            # This might happen if the .ui file changes significantly.
-            print("Warning: Could not find a suitable Adw.PreferencesGroup to add 'Export/Import Profiles' buttons. "
-                  "Please check the UI definition.", file=sys.stderr)
+        # This method is now empty as the import/export buttons and rows are defined in the UI file.
+        pass
 
     def _connect_signals(self) -> None:
         """Connects signals for UI elements to their handlers."""
@@ -118,11 +89,9 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self.pref_theme_combo_row.connect("notify::selected", self._on_theme_changed)
         self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
         
-        # Ensure export/import buttons were created before connecting signals
-        if self.export_profiles_button:
-            self.export_profiles_button.connect("clicked", self._on_export_profiles_clicked)
-        if self.import_profiles_button:
-            self.import_profiles_button.connect("clicked", self._on_import_profiles_clicked)
+        # Connect signals for the declaratively defined buttons
+        self.export_profiles_button.connect("clicked", self._on_export_profiles_clicked)
+        self.import_profiles_button.connect("clicked", self._on_import_profiles_clicked)
 
 
     def _init_font_settings(self) -> None:
@@ -155,20 +124,10 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
     def _init_profile_management_ui(self) -> None:
         """Initializes profile management UI elements, including add, import, and export buttons."""
         # This method is now part of _init_ui_components and signal connections in _connect_signals
+        # Actually, with declarative UI, this method is no longer needed.
         pass
 
-
-    def _find_parent_preferences_group(self, widget: Optional[Gtk.Widget]) -> Optional[Adw.PreferencesGroup]:
-        """Helper to find the parent Adw.PreferencesGroup of a widget."""
-        current_widget = widget
-        for _ in range(5): # Limit search depth to avoid infinite loops
-            if not current_widget: break
-            parent = current_widget.get_parent()
-            if isinstance(parent, Adw.PreferencesGroup):
-                return parent
-            current_widget = parent
-        return None
-
+    # _find_parent_preferences_group method is removed.
 
     def _create_file_chooser(self, title: str, action: Gtk.FileChooserAction, accept_label: str) -> Gtk.FileChooserNative:
         """Helper to create and configure a Gtk.FileChooserNative dialog."""

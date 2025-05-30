@@ -147,7 +147,6 @@ class NmapScanner:
         Determines the Nmap command/path to use for privilege escalation.
         Uses the path found during initialization.
         """
-        # self.nmap_executable_path is determined in __init__
         return self.nmap_executable_path
 
 
@@ -159,9 +158,7 @@ class NmapScanner:
         `scan_args_list` should already include -oX - if XML output is desired.
         `nmap_base_cmd` is the path to the nmap executable.
         """
-        # Ensure nmap_base_cmd is a single command/path, not a list.
         if not isinstance(nmap_base_cmd, str):
-            # This case should ideally not be reached if _get_nmap_escalation_command_path is used correctly.
             raise ValueError("nmap_base_cmd must be a string path to the Nmap executable.")
 
         final_nmap_command_parts = [nmap_base_cmd] + scan_args_list + [target]
@@ -363,19 +360,32 @@ class NmapScanner:
             except ValueError as e:
                 raise NmapArgumentError(f"Error parsing additional arguments from UI: {e}")
         
-        # 3. Add UI-selected options if not already specified by the above
-        #    These are conditional additions based on UI toggles/selections.
+        # 3. Apply UI-selected options using helper methods
+        self._apply_os_fingerprint_arg(final_args_list, do_os_fingerprint)
+        self._apply_nse_script_arg(final_args_list, nse_script)
+        self._apply_stealth_scan_arg(final_args_list, stealth_scan)
+        self._apply_no_ping_arg(final_args_list, no_ping)
+        self._apply_port_spec_arg(final_args_list, port_spec)
+        self._apply_timing_template_arg(final_args_list, timing_template)
 
-        # OS Fingerprint (-O)
+        # 4. Apply GSettings-based DNS arguments
+        self._apply_gsettings_dns_arg(final_args_list)
+
+        # Use shlex.join for proper quoting of arguments
+        return shlex.join(final_args_list)
+
+    def _apply_os_fingerprint_arg(self, final_args_list: List[str], do_os_fingerprint: bool) -> None:
+        """Applies OS fingerprint argument (-O) if specified and not present."""
         if do_os_fingerprint and not self._is_arg_present(final_args_list, ["-O"]):
             final_args_list.append("-O")
 
-        # NSE Script (--script)
+    def _apply_nse_script_arg(self, final_args_list: List[str], nse_script: Optional[str]) -> None:
+        """Applies NSE script argument (--script) if specified and not present."""
         if nse_script and not self._is_arg_present(final_args_list, ["--script"], True):
             final_args_list.extend(["--script", nse_script])
 
-        # Stealth Scan (-sS)
-        # Add -sS only if no other scan type (e.g., -sT, -sU, -sA) is already specified.
+    def _apply_stealth_scan_arg(self, final_args_list: List[str], stealth_scan: bool) -> None:
+        """Applies stealth scan argument (-sS) if specified and no conflicting scan types are present."""
         SCAN_TYPE_ARGS = ["-sS", "-sT", "-sU", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX", "-sY", "-sZ", "-sO", "-PR"]
         if stealth_scan and not self._is_arg_present(final_args_list, SCAN_TYPE_ARGS):
             final_args_list.append("-sS")
@@ -383,23 +393,27 @@ class NmapScanner:
              print(f"Warning: Stealth scan (-sS) selected, but conflicting scan type arguments are already present: "
                    f"{' '.join(final_args_list)}. User/default arguments will take precedence.", file=sys.stderr)
 
-        # No Ping (-Pn)
+    def _apply_no_ping_arg(self, final_args_list: List[str], no_ping: bool) -> None:
+        """Applies no ping argument (-Pn) if specified and not present."""
         if no_ping and not self._is_arg_present(final_args_list, ["-Pn"]):
             final_args_list.append("-Pn")
 
-        # Port Specification (-p)
+    def _apply_port_spec_arg(self, final_args_list: List[str], port_spec: Optional[str]) -> None:
+        """Applies port specification argument (-p) if specified and not present."""
         if port_spec and port_spec.strip() and not self._is_arg_present(final_args_list, ["-p"], True):
             final_args_list.extend(["-p", port_spec.strip()])
-        
-        # Timing Template (-T<0-5>)
-        if timing_template and timing_template.strip() and not self._is_arg_present(final_args_list, ["-T0","-T1","-T2","-T3","-T4","-T5"], False):
-             # Ensure it's a valid -T option format before adding
+
+    def _apply_timing_template_arg(self, final_args_list: List[str], timing_template: Optional[str]) -> None:
+        """Applies timing template argument (-T<0-5>) if specified and not present."""
+        if timing_template and timing_template.strip() and \
+           not self._is_arg_present(final_args_list, ["-T0","-T1","-T2","-T3","-T4","-T5"], False):
             if timing_template in {"-T0", "-T1", "-T2", "-T3", "-T4", "-T5"}:
                 final_args_list.append(timing_template.strip())
             else:
                 print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
-            
-        # DNS Servers (--dns-servers) from GSettings (applied last as a global setting)
+
+    def _apply_gsettings_dns_arg(self, final_args_list: List[str]) -> None:
+        """Applies DNS server arguments from GSettings if not already present."""
         try:
             gsettings_dns = Gio.Settings.new("com.github.mclellac.NetworkMap") 
             dns_servers_str = gsettings_dns.get_string("dns-servers")
@@ -408,16 +422,12 @@ class NmapScanner:
                 if dns_servers and not self._is_arg_present(final_args_list, ["--dns-servers"], True):
                     final_args_list.extend(["--dns-servers", ','.join(dns_servers)])
                 elif dns_servers and self._is_arg_present(final_args_list, ["--dns-servers"], True):
-                     # This means user/default_args_str already provided it.
                      print("Info: --dns-servers argument already provided by user or default arguments. "
                            "GSettings value for DNS will not override.", file=sys.stderr)
-        except GLib.Error as e: # Catch GSettings specific errors
+        except GLib.Error as e:
             print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
-        except Exception as e: # Catch other unexpected errors
+        except Exception as e:
             print(f"Warning: An unexpected error occurred while retrieving DNS servers from GSettings: {e}", file=sys.stderr)
-
-        # Use shlex.join for proper quoting of arguments, especially those with spaces (like some NSE script args)
-        return shlex.join(final_args_list)
 
     def _is_arg_present(self, args_list: List[str], check_args: List[str], is_prefix_check: bool = False) -> bool:
         """
@@ -500,7 +510,6 @@ class NmapScanner:
                                 "conf": str(port_details.get("conf", "N/A")),
                                 "cpe": port_details.get("cpe"),
                             },
-                            # <--- SCRIPT OUTPUT WILL BE ADDED HERE
                         }
 
                         # Extract NSE script output if available
