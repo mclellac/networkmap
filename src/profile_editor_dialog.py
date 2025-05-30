@@ -353,8 +353,8 @@ class ProfileEditorDialog(Adw.Dialog):
         print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr) # Keep for console logging
 
         alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
-        alert_dialog.add_button(label="OK") # Response is "default"
-        alert_dialog.set_default_response("default")
+        alert_dialog.add_response("ok", "OK") # Use add_response with an ID and label
+        alert_dialog.set_default_response("ok") # Set the default response to the added ID
         alert_dialog.set_transient_for(self) # 'self' is ProfileEditorDialog
         alert_dialog.set_modal(True)
         alert_dialog.present()
