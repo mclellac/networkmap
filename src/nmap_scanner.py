@@ -380,8 +380,23 @@ class NmapScanner:
             final_args_list.append("-O")
 
     def _apply_nse_script_arg(self, final_args_list: List[str], nse_script: Optional[str]) -> None:
-        """Applies NSE script argument (--script) if specified and not present."""
-        if nse_script and not self._is_arg_present(final_args_list, ["--script"], True):
+        """Applies NSE script argument (--script), ensuring it overrides any previous --script or --script= options."""
+        new_list = []
+        skip_next = False
+        for i, arg in enumerate(final_args_list):
+            if skip_next:
+                skip_next = False
+                continue
+            if arg == "--script":
+                if i + 1 < len(final_args_list) and not final_args_list[i+1].startswith("-"):
+                    skip_next = True # Skip the argument part
+                continue # Skip the --script flag itself
+            if arg.startswith("--script="):
+                continue # Skip --script=value form
+            new_list.append(arg)
+        final_args_list[:] = new_list
+
+        if nse_script and nse_script.strip(): # Ensure nse_script is not empty or just whitespace
             final_args_list.extend(["--script", nse_script])
 
     def _apply_stealth_scan_arg(self, final_args_list: List[str], stealth_scan: bool) -> None:
@@ -399,17 +414,35 @@ class NmapScanner:
             final_args_list.append("-Pn")
 
     def _apply_port_spec_arg(self, final_args_list: List[str], port_spec: Optional[str]) -> None:
-        """Applies port specification argument (-p) if specified and not present."""
-        if port_spec and port_spec.strip() and not self._is_arg_present(final_args_list, ["-p"], True):
+        """Applies port specification argument (-p), ensuring it overrides any previous -p option."""
+        new_list = []
+        skip_next = False
+        for i, arg in enumerate(final_args_list):
+            if skip_next:
+                skip_next = False
+                continue
+            if arg == "-p":
+                if i + 1 < len(final_args_list) and not final_args_list[i+1].startswith("-"):
+                    skip_next = True # Skip the argument part
+                continue # Skip the -p flag itself
+            # Add other forms like -p<ports_directly_attached> if necessary, though shlex.split might separate them.
+            new_list.append(arg)
+        final_args_list[:] = new_list
+
+        if port_spec and port_spec.strip():
             final_args_list.extend(["-p", port_spec.strip()])
 
     def _apply_timing_template_arg(self, final_args_list: List[str], timing_template: Optional[str]) -> None:
-        """Applies timing template argument (-T<0-5>) if specified and not present."""
-        if timing_template and timing_template.strip() and \
-           not self._is_arg_present(final_args_list, ["-T0","-T1","-T2","-T3","-T4","-T5"], False):
+        """Applies timing template argument (-T<0-5>), ensuring it overrides any previous -T option."""
+        # Remove any existing timing options (-T0 through -T5)
+        final_args_list[:] = [arg for arg in final_args_list if not (arg.startswith("-T") and len(arg) == 3 and arg[2].isdigit())]
+
+        if timing_template and timing_template.strip():
             if timing_template in {"-T0", "-T1", "-T2", "-T3", "-T4", "-T5"}:
                 final_args_list.append(timing_template.strip())
             else:
+                # This case should ideally be prevented by UI validation if timing_template comes from a fixed list.
+                # If it can come from free-form text, this warning is relevant.
                 print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
 
     def _apply_gsettings_dns_arg(self, final_args_list: List[str]) -> None:
