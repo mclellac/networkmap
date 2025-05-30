@@ -73,7 +73,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_entry_row.connect("apply", self._on_scan_button_clicked)
         self.start_scan_button.connect("clicked", self._on_start_scan_button_clicked)
         self.profile_combo_row.connect("notify::selected", self._on_profile_selected)
-        
+
         # Live validation for target entry
         self.target_entry_row.connect("notify::text", self._on_target_entry_changed)
 
@@ -102,15 +102,15 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # Target validation (existing logic)
         target_text = self.target_entry_row.get_text().strip()
         target_is_valid = True
-        if not target_text: 
+        if not target_text:
             target_is_valid = False
         else:
-            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"] 
+            temp_forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
             for char in temp_forbidden_chars:
                 if char in target_text:
                     target_is_valid = False
                     break
-        
+
         # Additional arguments validation (existing logic)
         additional_args_text = self.arguments_entry_row.get_text().strip()
         additional_args_are_valid, _ = self.validator.validate_arguments(additional_args_text)
@@ -121,16 +121,16 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if ports_text: # Only validate if non-empty
             # Use the validator, prepending "-p "
             ports_are_valid, _ = self.validator.validate_arguments(f"-p {ports_text}")
-            
+
         return target_is_valid and additional_args_are_valid and ports_are_valid
 
     def _on_additional_args_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
         """Handles text changes in the additional Nmap arguments entry row for live validation."""
         args_text = entry_row.get_text().strip()
-        
+
         # Use the NmapCommandValidator for "Additional Arguments"
         is_valid, error_message = self.validator.validate_arguments(args_text)
-        
+
         if not is_valid and args_text: # Show error only if text is present but invalid
             if "error" not in self.arguments_entry_row.get_css_classes():
                 self.arguments_entry_row.add_css_class("error")
@@ -138,7 +138,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         else: # Valid or empty
             if "error" in self.arguments_entry_row.get_css_classes():
                 self.arguments_entry_row.remove_css_class("error")
-        
+
         self._update_ui_state("ready") # Refresh scan button sensitivity etc.
 
     def _on_target_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
@@ -159,14 +159,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     is_valid = False
                     # error_message = f"Target contains forbidden character: '{char}'" # For future label
                     break
-        
+
         if not is_valid and target_text : # Only show error CSS if text is present and invalid
             if "error" not in self.target_entry_row.get_css_classes():
                 self.target_entry_row.add_css_class("error")
         else:
             if "error" in self.target_entry_row.get_css_classes():
                 self.target_entry_row.remove_css_class("error")
-        
+
         # Update scan button sensitivity based on current validity
         # We can pass the current state, or determine it if _update_ui_state needs it
         # For now, assume "ready" state or let _update_ui_state manage its current state logic.
@@ -175,22 +175,22 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _on_ports_entry_changed(self, entry_row: Adw.EntryRow, pspec: Optional[GObject.ParamSpec] = None) -> None:
         """Handles text changes in the port specification entry row for live validation."""
         ports_text = entry_row.get_text().strip()
-        
+
         is_valid = True
         error_message = "" # Not directly displayed in UI label for this step, but good for debug
 
         if ports_text: # Only validate if there's actual text; empty is fine (Nmap default scan)
             # Validate the argument in context of the -p option
-            is_valid, error_message = self.validator.validate_arguments(f"-p {ports_text}") 
-        
+            is_valid, error_message = self.validator.validate_arguments(f"-p {ports_text}")
+
         if not is_valid and ports_text: # Show error only if text is present AND invalid
             if "error" not in self.port_spec_entry_row.get_css_classes():
                 self.port_spec_entry_row.add_css_class("error")
-            print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr) 
+            print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr)
         else: # Valid or empty
             if "error" in self.port_spec_entry_row.get_css_classes():
                 self.port_spec_entry_row.remove_css_class("error")
-        
+
         self._update_ui_state("ready") # Refresh scan button sensitivity etc.
 
     def _populate_profile_combo(self) -> None:
@@ -387,7 +387,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.spinner.set_visible(is_scanning)
         
         base_sensitive = not is_scanning
-        
+
         # Determine button sensitivity based on input validity AND scan progress
         all_inputs_valid = self._are_inputs_valid_for_scan()
         self.start_scan_button.set_sensitive(base_sensitive and all_inputs_valid)
@@ -432,7 +432,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _apply_scan_profile(self, profile: Optional[ScanProfile]) -> None:
         """Applies settings from a scan profile to the UI, parsing the command string."""
-        
+
         # For now, skip complex signal blocking and rely on one update at the end.
 
         if profile:
@@ -442,23 +442,23 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
             command_str = profile.get('command', '')
             parts = command_str.split()
-            additional_parts_for_entry = list(parts) 
+            additional_parts_for_entry = list(parts)
 
             # 1. Reset UI elements to a baseline
             self.os_fingerprint_switch.set_active(False)
             self.stealth_scan_switch.set_active(False)
             self.no_ping_switch.set_active(False)
             self.port_spec_entry_row.set_text("")
-            self.nse_script_combo_row.set_selected(0) 
+            self.nse_script_combo_row.set_selected(0)
             self.selected_nse_script = None
-            
+
             default_timing_display_name = list(self.timing_options.keys())[0] if self.timing_options else "Default (T3)"
-            self.timing_template_combo_row.set_selected(0) 
+            self.timing_template_combo_row.set_selected(0)
             self.selected_timing_template = self.timing_options.get(default_timing_display_name)
             self.arguments_entry_row.set_text("")
 
             # 2. Parse and Set Timing
-            timing_arg_to_display_map = {val: key for key, val in self.timing_options.items() if val} 
+            timing_arg_to_display_map = {val: key for key, val in self.timing_options.items() if val}
             found_timing = False
             temp_additional_parts = list(additional_parts_for_entry) # Iterate and modify a copy
             for part_val in list(temp_additional_parts): # Iterate copy for safe removal if needed from original parts
@@ -473,9 +473,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                                 if part_val in additional_parts_for_entry: additional_parts_for_entry.remove(part_val)
                                 found_timing = True
                                 break
-                    if found_timing: break 
-            if not found_timing: 
-                self.timing_template_combo_row.set_selected(0) 
+                    if found_timing: break
+            if not found_timing:
+                self.timing_template_combo_row.set_selected(0)
                 self.selected_timing_template = self.timing_options.get(default_timing_display_name)
 
             # 3. Parse and Set Simple Switches
@@ -510,7 +510,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 idx += 1
             additional_parts_for_entry = new_additional_parts
             self.port_spec_entry_row.set_text(temp_ports_text)
-            
+
             # 5. Parse and Set NSE Script (--script or -sC)
             temp_selected_nse_script = None
             new_additional_parts = [] # Rebuild list again
@@ -522,7 +522,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     if part_val == "--script":
                         if (idx + 1) < len(additional_parts_for_entry) and not additional_parts_for_entry[idx+1].startswith("-"):
                             temp_selected_nse_script = additional_parts_for_entry[idx+1]
-                            idx += 1 
+                            idx += 1
                         script_flag_found_and_processed = True
                     elif part_val.startswith("--script="):
                         temp_selected_nse_script = part_val.split("=", 1)[1]
@@ -536,7 +536,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     new_additional_parts.append(part_val)
                 idx += 1
             additional_parts_for_entry = new_additional_parts
-            
+
             self.selected_nse_script = temp_selected_nse_script
             # Update NSE ComboBox selection
             if self.selected_nse_script:
@@ -554,7 +554,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             else: # No script flag found or parsed
                 self.nse_script_combo_row.set_selected(0) # "None"
                 self.selected_nse_script = None
-            
+
             # 6. Set remaining parts to Additional Arguments
             self.arguments_entry_row.set_text(" ".join(additional_parts_for_entry))
 
@@ -567,7 +567,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.nse_script_combo_row.set_selected(0)
             self.selected_nse_script = None
             default_timing_display_name = list(self.timing_options.keys())[0] if self.timing_options else "Default (T3)"
-            self.timing_template_combo_row.set_selected(0) 
+            self.timing_template_combo_row.set_selected(0)
             self.selected_timing_template = self.timing_options.get(default_timing_display_name)
             
             # Clear error styling when resetting to manual
@@ -601,14 +601,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if not target:
             self._show_toast("Error: Target cannot be empty")
             # Toast is already shown by _initiate_scan_procedure if target is empty
-            # self._show_toast("Error: Target cannot be empty") 
+            # self._show_toast("Error: Target cannot be empty")
             # _update_ui_state is called by _on_target_entry_changed, ensuring button is disabled
             return
 
         self._add_target_to_history(target) 
         self._clear_results_ui()
         # _update_ui_state("scanning") will be called, which also handles button sensitivity
-        self._update_ui_state("scanning") 
+        self._update_ui_state("scanning")
         self._show_toast(f"Scan started for {target}")
         
         # Prepare kwargs for _run_scan_worker, matching its signature
@@ -651,7 +651,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         # This assumes NmapScanner.scan might use self.validator if passed or accessible
         # For now, NmapScanner.scan does its own validation if validator is passed.
         # The main validation for starting scan is now _are_inputs_valid_for_scan
-        
+
         try:
             # Pass the validator instance if NmapScanner.scan is designed to use it
             # For now, assume NmapScanner.scan already instantiates or uses a passed one
@@ -689,7 +689,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         scan_message = scan_result["scan_message"]
 
         self.current_scan_results = hosts_data if hosts_data is not None else []
-        
+
         current_ui_state = "ready" # Default state after scan attempt
         status_message_override = None
 
