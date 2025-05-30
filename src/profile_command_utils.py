@@ -42,14 +42,14 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
         'tcp_ack_ping': False, 'udp_ping': False, 'icmp_echo_ping': False,
         'no_dns': False, 'traceroute': False, 'tcp_null_scan': False,
         'tcp_fin_scan': False, 'tcp_xmas_scan': False, 'version_detection': False,
-        'tcp_syn_ping_ports': '', # Changed from None
-        'tcp_ack_ping_ports': '', # Changed from None
-        'udp_ping_ports': '',   # Changed from None
-        'primary_scan_type': None, # Remains None (used by ComboBox)
-        'ports': '',            # Changed from None
-        'nse_script': '',       # Changed from None (used by ComboBox, but good default for text)
-        'timing_template': None, # Remains None (used by ComboBox)
-        'additional_args': ''    # Remains ''
+        'tcp_syn_ping_ports': '',
+        'tcp_ack_ping_ports': '',
+        'udp_ping_ports': '',
+        'primary_scan_type': None,
+        'ports': '',
+        'nse_script': '',
+        'timing_template': None,
+        'additional_args': ''
     }
 
     if not command_str:
@@ -95,7 +95,7 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
         elif part == "-p":
             if i + 1 < len(parts) and not parts[i+1].startswith("-"):
                 options['ports'] = parts[i+1]
-                i += 1 # Consume argument
+                i += 1
             else: # -p without argument or followed by another option
                 remaining_parts.append(part) # Treat as unparsed for now
         elif part == "--script":

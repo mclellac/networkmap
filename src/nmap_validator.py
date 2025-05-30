@@ -149,7 +149,7 @@ class NmapCommandValidator:
                             for char_fn in filename_forbidden_chars:
                                 if char_fn in arg_value:
                                     return False, f"Filename argument for {part} ('{arg_value}') contains forbidden character: '{char_fn}'."
-                        i += 1 # Consume the argument for options_with_args
+                        i += 1
 
                     elif part in ["-PS", "-PA", "-PU"]: # Optional space-separated argument
                         if (i + 1) < len(parts) and not parts[i+1].startswith("-"):
@@ -158,9 +158,9 @@ class NmapCommandValidator:
                                 port_regex = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
                                 if not port_regex.fullmatch(port_arg):
                                     return False, f"Invalid port specification format for {part}: '{port_arg}'."
-                            i += 1 # Consume validated argument
+                            i += 1
                         # If no argument or next is an option, it's fine (-PS alone is valid)
-            i += 1 # Consume the option part itself or a non-option part
+            i += 1
         return True, ""
 
 

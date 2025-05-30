@@ -10,6 +10,7 @@ from .nmap_validator import NmapCommandValidator
 from .utils import discover_nse_scripts
 from .profile_manager import ScanProfile, ProfileManager, PROFILES_SCHEMA_KEY
 from .profile_command_utils import parse_command_to_options, ProfileOptions
+from .config import DEBUG_ENABLED
 
 
 @Gtk.Template(resource_path="/com/github/mclellac/NetworkMap/window.ui")
@@ -59,7 +60,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         GLib.idle_add(self._apply_font_preference)
 
     def _show_toast(self, message: str):
-        print(f"MAIN WINDOW TOAST: {message}", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"MAIN WINDOW TOAST: {message}", file=sys.stderr)
         self.toast_overlay.add_toast(Adw.Toast.new(message))
 
     def _connect_settings_signals(self) -> None:
@@ -137,7 +139,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         is_valid = True
         if ports_text:
             is_valid, error_message = self.validator.validate_arguments(f"-p {ports_text}")
-            if not is_valid:
+            if not is_valid and DEBUG_ENABLED: # Made this conditional
                  print(f"DEBUG Ports Entry Error: {error_message} for input '{ports_text}'", file=sys.stderr)
         if not is_valid and ports_text:
             if "error" not in self.port_spec_entry_row.get_css_classes():
@@ -155,47 +157,47 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if string_list_model.get_n_items() > 0:
             self.profile_combo_row.set_selected(0)
         else:
-            print("Warning: Profile combo box is empty after population.", file=sys.stderr)
+            print("Warning: Profile combo box is empty after population.", file=sys.stderr) # Keep as warning
 
     def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.")
         selected_idx = combo_row.get_selected()
         model = combo_row.get_model()
-        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - selected_idx: {selected_idx}, model type: {type(model)}")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - selected_idx: {selected_idx}, model type: {type(model)}")
         effective_model = None
         if isinstance(model, Gtk.StringList):
             effective_model = model
         elif isinstance(model, Gtk.FilterListModel):
             underlying_model = model.get_model()
-            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is FilterListModel, underlying model type: {type(underlying_model)}")
+            # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is FilterListModel, underlying model type: {type(underlying_model)}")
             if isinstance(underlying_model, Gtk.StringList):
                 effective_model = underlying_model
             else:
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Underlying model of FilterListModel is not StringList.")
+                # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Underlying model of FilterListModel is not StringList.")
                 return
         else:
-            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Model is not StringList or FilterListModel with StringList.")
-            # if model is None:
-                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is None.")
+            # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Model is not StringList or FilterListModel with StringList.")
+            # if DEBUG_ENABLED and model is None: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is None.")
             return
         if selected_idx < 0 :
-            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: selected_idx is {selected_idx} (invalid list position or no selection).")
+            # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: selected_idx is {selected_idx} (invalid list position or no selection).")
              return
         selected_name = effective_model.get_string(selected_idx)
-        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Selected name from model: '{selected_name}'")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Selected name from model: '{selected_name}'")
         if selected_idx == 0 and selected_name == "Manual Configuration":
-            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Applying 'Manual Configuration'.")
+            # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Applying 'Manual Configuration'.")
             self._apply_scan_profile(None) 
         else:
             profile_name_to_find = selected_name
-            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Searching for profile: '{profile_name_to_find}'")
+            # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Searching for profile: '{profile_name_to_find}'")
             profiles = []
             try:
                 profiles = self.profile_manager.load_profiles()
-                # profile_names_loaded = [p.get('name', 'UnknownName') for p in profiles]
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Loaded profiles from manager: {profile_names_loaded}")
+                # if DEBUG_ENABLED:
+                #     profile_names_loaded = [p.get('name', 'UnknownName') for p in profiles]
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Loaded profiles from manager: {profile_names_loaded}")
             except Exception as e:
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Error loading profiles: {e}")
+                # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Error loading profiles: {e}")
                 if self.profile_combo_row.get_selected() != 0:
                     self.profile_combo_row.set_selected(0)
                 else:
@@ -203,24 +205,26 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 return
             found_profile = next((p for p in profiles if p.get('name') == profile_name_to_find), None)
             if found_profile:
-                # profile_name_found = found_profile.get('name', 'UnknownName')
-                # profile_command_found = found_profile.get('command', 'NoCommand')
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
+                # if DEBUG_ENABLED:
+                #     profile_name_found = found_profile.get('name', 'UnknownName')
+                #     profile_command_found = found_profile.get('command', 'NoCommand')
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
                 self._apply_scan_profile(found_profile)
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_nse_script: '{self.selected_nse_script}'")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_timing_template: '{self.selected_timing_template}'")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - os_fingerprint_switch: {self.os_fingerprint_switch.get_active()}")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - stealth_scan_switch: {self.stealth_scan_switch.get_active()}")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - no_ping_switch: {self.no_ping_switch.get_active()}")
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - port_spec_entry_row: '{self.port_spec_entry_row.get_text()}'")
+                # if DEBUG_ENABLED:
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_nse_script: '{self.selected_nse_script}'")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_timing_template: '{self.selected_timing_template}'")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - os_fingerprint_switch: {self.os_fingerprint_switch.get_active()}")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - stealth_scan_switch: {self.stealth_scan_switch.get_active()}")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - no_ping_switch: {self.no_ping_switch.get_active()}")
+                #     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - port_spec_entry_row: '{self.port_spec_entry_row.get_text()}'")
             else: 
-                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile NOT found by name: '{profile_name_to_find}'. Reverting to Manual Configuration.")
+                # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile NOT found by name: '{profile_name_to_find}'. Reverting to Manual Configuration.")
                 if self.profile_combo_row.get_selected() != 0:
                     self.profile_combo_row.set_selected(0)
                 else:
                      self._apply_scan_profile(None)
-        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler EXITED.")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler EXITED.")
 
     def _populate_timing_template_combo(self) -> None:
         self.timing_options = {
@@ -283,9 +287,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     css_rules.append(f"font-size: {size_points}pt;")
                 if css_rules:
                     css_data = f"* {{ {' '.join(css_rules)} }}".encode()
-            except GLib.Error as e:
+            except GLib.Error as e: # Keep this as it's a real error
                 print(f"Error parsing font string '{font_str}' with Pango: {e}. CSS will not be applied.", file=sys.stderr)
-            except Exception as e:
+            except Exception as e: # Keep this as it's a real error
                 print(f"An unexpected error occurred while parsing font string '{font_str}': {e}. CSS will not be applied.", file=sys.stderr)
         self.font_css_provider.load_from_data(css_data)
         child = self.results_listbox.get_first_child()
@@ -310,8 +314,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nse_script_combo_row.set_model(filter_model)
         if filter_model.get_n_items() > 0:
             self.nse_script_combo_row.set_selected(0)
-        else:
+        else: # Keep as warning
             print("Warning: NSE script combo box is empty after population.", file=sys.stderr)
+
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         selected_item = combo_row.get_selected_item()
@@ -322,7 +327,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.selected_nse_script = None
         else:
             self.selected_nse_script = None
-            print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
+            if DEBUG_ENABLED: # Made this conditional
+                print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
 
@@ -381,17 +387,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if profile:
             command_str = profile.get('command', '')
             options: ProfileOptions = parse_command_to_options(command_str)
-
-            # Initialize a list to hold parts of the command that don't have direct UI controls
             unmapped_args_parts: List[str] = []
-
-            # Apply options with dedicated UI controls and collect others
             self.os_fingerprint_switch.set_active(options.get('os_fingerprint', False))
             self.stealth_scan_switch.set_active(options.get('stealth_scan', False))
             self.no_ping_switch.set_active(options.get('no_ping', False))
             self.port_spec_entry_row.set_text(options.get('ports') or '')
-
-            # Timing Template
             selected_timing_value = options.get('timing_template')
             self.selected_timing_template = selected_timing_value
             timing_model = self.timing_template_combo_row.get_model()
@@ -412,8 +412,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             else:
                  self.timing_template_combo_row.set_selected(0)
                  self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
-
-            # NSE Script
             self.selected_nse_script = options.get('nse_script') or ''
             nse_model = self.nse_script_combo_row.get_model()
             if isinstance(nse_model, Gtk.FilterListModel):
@@ -428,52 +426,33 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             else:
                 self.nse_script_combo_row.set_selected(0)
                 self.selected_nse_script = None
-
-            # Handle options without direct UI controls on the main window
-            if options.get('list_scan', False):
-                unmapped_args_parts.append("-sL")
-            if options.get('ping_scan', False):
-                unmapped_args_parts.append("-sn")
-            if options.get('version_detection', False):
-                unmapped_args_parts.append("-sV")
-            if options.get('tcp_null_scan', False):
-                unmapped_args_parts.append("-sN")
-            if options.get('tcp_fin_scan', False):
-                unmapped_args_parts.append("-sF")
-            if options.get('tcp_xmas_scan', False):
-                unmapped_args_parts.append("-sX")
-            if options.get('icmp_echo_ping', False):
-                unmapped_args_parts.append("-PE")
-            if options.get('no_dns', False):
-                unmapped_args_parts.append("-n")
-            if options.get('traceroute', False):
-                unmapped_args_parts.append("--traceroute")
-
-            # Host Discovery Ping Types with optional ports
+            if options.get('list_scan', False): unmapped_args_parts.append("-sL")
+            if options.get('ping_scan', False): unmapped_args_parts.append("-sn")
+            if options.get('version_detection', False): unmapped_args_parts.append("-sV")
+            if options.get('tcp_null_scan', False): unmapped_args_parts.append("-sN")
+            if options.get('tcp_fin_scan', False): unmapped_args_parts.append("-sF")
+            if options.get('tcp_xmas_scan', False): unmapped_args_parts.append("-sX")
+            if options.get('icmp_echo_ping', False): unmapped_args_parts.append("-PE")
+            if options.get('no_dns', False): unmapped_args_parts.append("-n")
+            if options.get('traceroute', False): unmapped_args_parts.append("--traceroute")
             if options.get('tcp_syn_ping', False):
                 arg = "-PS"
                 tcp_syn_ports = options.get('tcp_syn_ping_ports')
-                if tcp_syn_ports:
-                    arg += tcp_syn_ports
+                if tcp_syn_ports: arg += tcp_syn_ports
                 unmapped_args_parts.append(arg)
             if options.get('tcp_ack_ping', False):
                 arg = "-PA"
                 tcp_ack_ports = options.get('tcp_ack_ping_ports')
-                if tcp_ack_ports:
-                    arg += tcp_ack_ports
+                if tcp_ack_ports: arg += tcp_ack_ports
                 unmapped_args_parts.append(arg)
             if options.get('udp_ping', False):
                 arg = "-PU"
                 udp_ports = options.get('udp_ping_ports')
-                if udp_ports:
-                    arg += udp_ports
+                if udp_ports: arg += udp_ports
                 unmapped_args_parts.append(arg)
-
             primary_type = options.get('primary_scan_type')
             if primary_type and primary_type != "-sS":
                 unmapped_args_parts.append(primary_type)
-
-            # Combine unmapped args with original additional_args
             final_additional_args_list = unmapped_args_parts
             original_additional_args = options.get('additional_args', '')
             if original_additional_args:
@@ -481,13 +460,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     final_additional_args_list.extend(shlex.split(original_additional_args))
                 except ValueError:
                     final_additional_args_list.append(original_additional_args)
-
             if final_additional_args_list:
                 self.arguments_entry_row.set_text(shlex.join(final_additional_args_list))
             else:
                 self.arguments_entry_row.set_text('')
-
-        else: # Manual Configuration selected or no profile
+        else:
             self.os_fingerprint_switch.set_active(False)
             self.stealth_scan_switch.set_active(False)
             self.no_ping_switch.set_active(False)
@@ -501,15 +478,12 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             if "error" in self.target_entry_row.get_css_classes(): self.target_entry_row.remove_css_class("error")
             if "error" in self.port_spec_entry_row.get_css_classes(): self.port_spec_entry_row.remove_css_class("error")
             if "error" in self.arguments_entry_row.get_css_classes(): self.arguments_entry_row.remove_css_class("error")
-
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
 
     def _add_target_to_history(self, target: str) -> None:
-        """Adds a target to the scan history and updates GSettings."""
         clean_target = target.strip()
         if not clean_target: return
-
         if clean_target in self.target_history_list:
             self.target_history_list.remove(clean_target)
         self.target_history_list.insert(0, clean_target)
@@ -517,24 +491,19 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.settings.set_strv(self.TARGET_HISTORY_SCHEMA_KEY, self.target_history_list)
 
     def _on_target_history_changed(self, settings_obj: Gio.Settings, key_name: str) -> None:
-        """Updates internal target history list when GSettings change."""
         self.target_history_list = list(self.settings.get_strv(key_name))
 
     def _initiate_scan_procedure(self) -> None:
-        """Collects parameters and starts the Nmap scan in a worker thread."""
         scan_params = self._get_current_scan_parameters()
-        # print(f"DEBUG_PROFILE_TRACE: _initiate_scan_procedure - scan_params collected: {scan_params}")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _initiate_scan_procedure - scan_params collected: {scan_params}")
         target: str = scan_params["target"]
-
         if not target:
             self._show_toast("Error: Target cannot be empty")
             return
-
         self._add_target_to_history(target) 
         self._clear_results_ui()
         self._update_ui_state("scanning")
         self._show_toast(f"Scan started for {target}")
-        
         worker_kwargs = {
             "target": scan_params["target"],
             "do_os_fingerprint": scan_params["do_os_fingerprint"],
@@ -545,7 +514,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             "timing_template_val": scan_params["timing_template"],
             "do_no_ping_val": scan_params["no_ping"]
         }
-
         scan_thread = threading.Thread(target=self._run_scan_worker, kwargs=worker_kwargs)
         scan_thread.daemon = True
         scan_thread.start()
@@ -559,7 +527,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _run_scan_worker(self, target: str, do_os_fingerprint: bool, additional_args_str: str, 
                          nse_script: Optional[str], stealth_scan: bool, port_spec_str: Optional[str], 
                          timing_template_val: Optional[str], do_no_ping_val: bool) -> None:
-        # print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
+        # if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
         scan_result: Dict[str, Any] = {
             "hosts_data": None, "error_type": None, "error_message": None, "scan_message": None
         }
@@ -582,7 +550,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         except Exception as e:
             scan_result["error_type"] = "UnexpectedError"
             scan_result["error_message"] = f"An unexpected error occurred: {str(e)}"
-            import traceback
+            import traceback # Keep this for unexpected errors
             print(traceback.format_exc(), file=sys.stderr)
         GLib.idle_add(self._process_scan_completion, scan_result)
 
@@ -631,7 +599,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             child = self.results_listbox.get_first_child()
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
-        """Populates the results_listbox with discovered hosts."""
         for host_data in hosts_data:
             row = HostInfoExpanderRow(host_data=host_data, raw_details_text=host_data.get("raw_details_text", ""))
             if hasattr(self, 'font_css_provider'): 
@@ -649,7 +616,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self._clear_results_ui()
         friendly_message = f"Scan Error ({error_type}): {error_message}" if error_type != "ScanMessage" else error_message
         self.status_page.set_property("description", friendly_message)
-        print(f"Scan Error Displayed: Type={error_type}, Message={error_message}", file=sys.stderr)
+        if DEBUG_ENABLED: # Made this conditional
+            print(f"Scan Error Displayed: Type={error_type}, Message={error_message}", file=sys.stderr)
 
 class HostInfoExpanderRow(Adw.ExpanderRow):
     __gtype_name__ = "HostInfoExpanderRow"
@@ -683,7 +651,7 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
             markup_text = self.raw_details_text if self.raw_details_text else "<i>No additional details available.</i>"
             try: 
                 buffer.insert_markup(buffer.get_end_iter(), markup_text, -1)
-            except GLib.Error as e:
+            except GLib.Error as e: # Keep this as it's a real error
                 print(f"Pango markup error: {e}. Setting text plainly.", file=sys.stderr)
                 plain_text_fallback = GLib.markup_escape_text(self.raw_details_text or "No additional details.")
                 buffer.set_text(plain_text_fallback)

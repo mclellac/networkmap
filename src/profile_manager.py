@@ -41,7 +41,7 @@ class ProfileManager:
             raise ProfileStorageError(f"Failed to load profiles from GSettings: {e}") from e
 
         profiles: List[ScanProfile] = []
-        malformed_entries_details = [] # Store details of malformed entries
+        malformed_entries_details = []
 
         for i, json_str in enumerate(profiles_json):
             try:
@@ -51,7 +51,7 @@ class ProfileManager:
                     continue
                 
                 profile_name = profile_data.get('name')
-                profile_command = profile_data.get('command') # Get the command
+                profile_command = profile_data.get('command')
 
                 if not profile_name or not isinstance(profile_name, str):
                     malformed_entries_details.append(f"Entry at index {i} has missing or invalid 'name': {json_str[:100]}")
@@ -128,9 +128,8 @@ class ProfileManager:
                ProfileExistsError: If `updated_profile_data['name']` (the new name) conflicts with another existing profile's name.
                ProfileStorageError: If underlying storage fails.
         """
-        profiles = self.load_profiles() # Load current profiles
+        profiles = self.load_profiles()
         
-        # Find the index of the profile to update
         profile_index_to_update = -1
         for i, p in enumerate(profiles):
             if p['name'] == profile_name:
@@ -140,9 +139,8 @@ class ProfileManager:
         if profile_index_to_update == -1:
             raise ProfileNotFoundError(f"Profile with name '{profile_name}' not found and cannot be updated.")
 
-        # If the name is being changed, check for conflicts with other profiles' names
         new_profile_name = updated_profile_data['name']
-        if new_profile_name != profile_name: # Name is changing
+        if new_profile_name != profile_name:
             if any(p['name'] == new_profile_name for idx, p in enumerate(profiles) if idx != profile_index_to_update):
                 raise ProfileExistsError(f"Cannot rename profile to '{new_profile_name}' as another profile with this name already exists.")
             
@@ -176,13 +174,12 @@ class ProfileManager:
                                     serializing profiles, or writing to the file.
         """
         try:
-            profiles_to_export = self.load_profiles() # Load current profiles from GSettings
+            profiles_to_export = self.load_profiles()
             
             # Serialize the list of profiles to a JSON string
             # indent=4 makes the JSON file human-readable
             json_data_to_export = json.dumps(profiles_to_export, indent=4)
             
-            # Write the JSON string to the specified file
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(json_data_to_export)
         except FileNotFoundError: # More specific for the case where the directory path doesn't exist
@@ -225,7 +222,7 @@ class ProfileManager:
         if not isinstance(imported_data_list, list):
             raise ProfileStorageError("Invalid import file format: Expected a JSON list of profiles.")
 
-        current_profiles = self.load_profiles() # Load existing profiles
+        current_profiles = self.load_profiles()
         existing_profile_names = {p['name'] for p in current_profiles}
         
         imported_count = 0

@@ -3,6 +3,7 @@ from gi.repository import Adw, Gtk, GObject, Gio, Pango, GLib
 from typing import Optional
 
 from .utils import apply_theme
+from .config import DEBUG_ENABLED
 from .profile_manager import (
     ProfileManager, ScanProfile,
     ProfileNotFoundError, ProfileExistsError, ProfileStorageError
@@ -50,7 +51,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self._load_and_display_profiles() # Initial population
 
     def _show_toast(self, message: str):
-        print(f"PREFERENCES TOAST: {message}", file=sys.stderr) # Keep original message for logging
+        if DEBUG_ENABLED:
+            print(f"PREFERENCES TOAST: {message}", file=sys.stderr)
         escaped_message = GLib.markup_escape_text(message)
         self.add_toast(Adw.Toast.new(escaped_message))
 
@@ -180,7 +182,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                         # Handle errors specifically raised by ProfileManager (e.g., file not found, JSON error)
                         self._show_toast(f"Import failed: {e}")
                     except Exception as e: # Catch any other unexpected errors during the process
-                        print(f"Unexpected error during profile import: {e}", file=sys.stderr) # Log for debugging
+                        # Keep this print as it's for unexpected errors, not routine debug tracing
+                        print(f"Unexpected error during profile import: {e}", file=sys.stderr)
                         self._show_toast("An unexpected error occurred during import.")
                 else: # Should not happen if gfile is valid, but as a safeguard
                      self._show_toast("Failed to get file path for import.")
@@ -213,7 +216,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                         # Handle errors specifically raised by ProfileManager (e.g., file write error)
                         self._show_toast(f"Export failed: {e}")
                     except Exception as e: # Catch any other unexpected errors
-                        print(f"Unexpected error during profile export: {e}", file=sys.stderr) # Log for debugging
+                        # Keep this print as it's for unexpected errors
+                        print(f"Unexpected error during profile export: {e}", file=sys.stderr)
                         self._show_toast("An unexpected error occurred during export.")
                 else: # Safeguard
                     self._show_toast("Failed to get file path for export.")
@@ -223,7 +227,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
 
     def _load_and_display_profiles(self) -> None:
         """Clears and re-populates the profiles list box from storage."""
-        # Clear existing rows
         while (child := self.profiles_list_box.get_row_at_index(0)) is not None:
             self.profiles_list_box.remove(child)
         

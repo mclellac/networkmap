@@ -35,21 +35,17 @@ class NseScriptSelectionDialog(Adw.Dialog):
         if current_scripts_str:
             self.current_selected_scripts = set(s.strip() for s in current_scripts_str.split(',') if s.strip())
 
-        # Main layout box
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         self.set_child(main_box)
 
-        # Scrolled window for the list of scripts
         scrolled_window = Gtk.ScrolledWindow(has_frame=True, policy=(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC), vexpand=True)
         main_box.append(scrolled_window)
 
-        # ListBox to hold script rows
         self.list_box = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         scrolled_window.set_child(self.list_box)
 
         self.check_buttons: dict[str, Gtk.CheckButton] = {} # Stores script_name: Gtk.CheckButton
 
-        # Populate list with predefined NSE scripts
         for display_name, script_name in PREDEFINED_NSE_SCRIPTS:
             row = Adw.ActionRow(title=display_name)
             check_button = Gtk.CheckButton(active=(script_name in self.current_selected_scripts))
@@ -59,7 +55,6 @@ class NseScriptSelectionDialog(Adw.Dialog):
             row.set_activatable_widget(check_button) # Allows toggling by clicking the row
             self.list_box.append(row)
 
-        # Action buttons (Cancel, Select)
         action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.END, margin_top=12)
         
         cancel_button = Gtk.Button(label="Cancel")

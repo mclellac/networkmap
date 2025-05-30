@@ -40,6 +40,7 @@ networkmap_sources = [
   'profile_manager.py',
   'utils.py',
   'window.py',
+  'config.py' # Added config.py
 ]
 
 py_installation.install_sources(
