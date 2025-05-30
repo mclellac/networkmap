@@ -1,6 +1,6 @@
 import sys
 import threading
-import shlex
+import shlex # Added for shlex.split and shlex.join
 from typing import Optional, List, Dict, Any, Tuple
 
 from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
@@ -218,51 +218,51 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         """Handles changes in the selected scan profile."""
-        print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.") # Log entry
+        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.") # Log entry
 
         selected_idx = combo_row.get_selected()
         model = combo_row.get_model()
 
-        print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - selected_idx: {selected_idx}, model type: {type(model)}")
+        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - selected_idx: {selected_idx}, model type: {type(model)}")
 
         effective_model = None
         if isinstance(model, Gtk.StringList):
             effective_model = model
         elif isinstance(model, Gtk.FilterListModel): # Should not be the case for profile_combo_row
             underlying_model = model.get_model()
-            print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is FilterListModel, underlying model type: {type(underlying_model)}")
+            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is FilterListModel, underlying model type: {type(underlying_model)}")
             if isinstance(underlying_model, Gtk.StringList):
                 effective_model = underlying_model
             else:
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Underlying model of FilterListModel is not StringList.")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Underlying model of FilterListModel is not StringList.")
                 return
         else:
-            print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Model is not StringList or FilterListModel with StringList.")
-            if model is None:
-                 print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is None.")
+            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: Model is not StringList or FilterListModel with StringList.")
+            # if model is None:
+                 # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Model is None.")
             return
 
         if selected_idx < 0 :
-             print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: selected_idx is {selected_idx} (invalid list position or no selection).")
+            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Exiting: selected_idx is {selected_idx} (invalid list position or no selection).")
              return
 
         selected_name = effective_model.get_string(selected_idx)
-        print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Selected name from model: '{selected_name}'")
+        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Selected name from model: '{selected_name}'")
 
         if selected_idx == 0 and selected_name == "Manual Configuration":
-            print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Applying 'Manual Configuration'.")
+            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Applying 'Manual Configuration'.")
             self._apply_scan_profile(None) 
         else:
             profile_name_to_find = selected_name
-            print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Searching for profile: '{profile_name_to_find}'")
+            # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Searching for profile: '{profile_name_to_find}'")
 
             profiles = []
             try:
                 profiles = self.profile_manager.load_profiles()
-                profile_names_loaded = [p.get('name', 'UnknownName') for p in profiles]
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Loaded profiles from manager: {profile_names_loaded}")
+                # profile_names_loaded = [p.get('name', 'UnknownName') for p in profiles]
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Loaded profiles from manager: {profile_names_loaded}")
             except Exception as e:
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Error loading profiles: {e}")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Error loading profiles: {e}")
                 if self.profile_combo_row.get_selected() != 0:
                     self.profile_combo_row.set_selected(0)
                 else:
@@ -272,25 +272,25 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             found_profile = next((p for p in profiles if p.get('name') == profile_name_to_find), None)
             
             if found_profile:
-                profile_name_found = found_profile.get('name', 'UnknownName')
-                profile_command_found = found_profile.get('command', 'NoCommand')
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
+                # profile_name_found = found_profile.get('name', 'UnknownName')
+                # profile_command_found = found_profile.get('command', 'NoCommand')
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
                 self._apply_scan_profile(found_profile)
                 # Detailed UI state logs after applying the profile
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_nse_script: '{self.selected_nse_script}'")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_timing_template: '{self.selected_timing_template}'")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - os_fingerprint_switch: {self.os_fingerprint_switch.get_active()}")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - stealth_scan_switch: {self.stealth_scan_switch.get_active()}")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - no_ping_switch: {self.no_ping_switch.get_active()}")
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - port_spec_entry_row: '{self.port_spec_entry_row.get_text()}'")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_nse_script: '{self.selected_nse_script}'")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - selected_timing_template: '{self.selected_timing_template}'")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - os_fingerprint_switch: {self.os_fingerprint_switch.get_active()}")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - stealth_scan_switch: {self.stealth_scan_switch.get_active()}")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - no_ping_switch: {self.no_ping_switch.get_active()}")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - port_spec_entry_row: '{self.port_spec_entry_row.get_text()}'")
             else: 
-                print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile NOT found by name: '{profile_name_to_find}'. Reverting to Manual Configuration.")
+                # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile NOT found by name: '{profile_name_to_find}'. Reverting to Manual Configuration.")
                 if self.profile_combo_row.get_selected() != 0:
                     self.profile_combo_row.set_selected(0)
                 else:
                      self._apply_scan_profile(None)
-        print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler EXITED.")
+        # print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler EXITED.")
 
     def _populate_timing_template_combo(self) -> None:
         """Populates the timing template combo box."""
@@ -640,7 +640,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _initiate_scan_procedure(self) -> None:
         """Collects parameters and starts the Nmap scan in a worker thread."""
         scan_params = self._get_current_scan_parameters()
-        print(f"DEBUG_PROFILE_TRACE: _initiate_scan_procedure - scan_params collected: {scan_params}")
+        # print(f"DEBUG_PROFILE_TRACE: _initiate_scan_procedure - scan_params collected: {scan_params}")
         target: str = scan_params["target"]
 
         if not target:
@@ -685,7 +685,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                          nse_script: Optional[str], stealth_scan: bool, port_spec_str: Optional[str], 
                          timing_template_val: Optional[str], do_no_ping_val: bool) -> None:
         """Worker function to perform Nmap scan (runs in a separate thread)."""
-        print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
+        # print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
         scan_result: Dict[str, Any] = {
             "hosts_data": None,
             "error_type": None,

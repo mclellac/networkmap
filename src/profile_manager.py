@@ -24,13 +24,7 @@ PROFILES_SCHEMA_KEY = "scan-profiles"
 # Define a TypedDict for type hinting profile structure
 class ScanProfile(TypedDict):
     name: str
-    os_fingerprint: bool
-    stealth_scan: bool
-    no_ping: bool
-    ports: str  # Port specification string, empty if not set
-    nse_script: str # NSE script name, empty if not set
-    timing_template: str # Timing template value (e.g., '-T4'), empty if not set
-    additional_args: str # Additional arguments string, empty if not set
+    command: str
 
 class ProfileManager:
     def __init__(self, settings_schema_id: str = "com.github.mclellac.NetworkMap"):
@@ -57,26 +51,26 @@ class ProfileManager:
                     continue
                 
                 profile_name = profile_data.get('name')
+                profile_command = profile_data.get('command') # Get the command
+
                 if not profile_name or not isinstance(profile_name, str):
                     malformed_entries_details.append(f"Entry at index {i} has missing or invalid 'name': {json_str[:100]}")
                     continue
 
-                # Create ScanProfile ensuring all keys are present and correctly typed.
-                # Missing keys will use defaults provided by .get() and then cast.
+                # Ensure command is also a string; treat missing command as an issue or default to empty.
+                # For consistency, a profile should always have a command string, even if empty.
+                if not isinstance(profile_command, str): # Check if command is string, allow empty string
+                    malformed_entries_details.append(f"Entry at index {i} (name: {profile_name}) has missing or invalid 'command': {json_str[:100]}")
+                    continue
+
                 profile = ScanProfile(
-                    name=profile_name, # Already validated as a non-empty string
-                    os_fingerprint=bool(profile_data.get('os_fingerprint', False)),
-                    stealth_scan=bool(profile_data.get('stealth_scan', False)),
-                    no_ping=bool(profile_data.get('no_ping', False)),
-                    ports=str(profile_data.get('ports', '')),
-                    nse_script=str(profile_data.get('nse_script', '')),
-                    timing_template=str(profile_data.get('timing_template', '')), 
-                    additional_args=str(profile_data.get('additional_args', ''))
+                    name=profile_name,
+                    command=profile_command
                 )
                 profiles.append(profile)
             except json.JSONDecodeError as e:
                 malformed_entries_details.append(f"JSON decoding error for entry at index {i}: {e}. Data: {json_str[:100]}")
-            except (TypeError, ValueError) as e: # Catch type conversion errors during ScanProfile creation
+            except TypeError as e: # Should be less likely with simpler ScanProfile
                 malformed_entries_details.append(f"Type error for entry at index {i} (name: {profile_data.get('name', 'N/A')}): {e}. Data: {json_str[:100]}")
         
         if malformed_entries_details:
@@ -260,19 +254,18 @@ class ProfileManager:
                 skipped_count += 1
                 continue
             
-            # Construct ScanProfile, providing defaults and type casting for robustness.
+            # Construct ScanProfile
+            profile_command_imported = item_data.get('command')
+            if not isinstance(profile_command_imported, str):
+                malformed_import_details.append(f"Profile '{profile_name}' (index {index}) has missing or invalid 'command'.")
+                skipped_count += 1
+                continue
+
             try:
                 new_profile = ScanProfile(
-                    name=profile_name, 
-                    os_fingerprint=bool(item_data.get('os_fingerprint', False)),
-                    stealth_scan=bool(item_data.get('stealth_scan', False)),
-                    no_ping=bool(item_data.get('no_ping', False)),
-                    ports=str(item_data.get('ports', '')).strip(),
-                    nse_script=str(item_data.get('nse_script', '')).strip(),
-                    timing_template=str(item_data.get('timing_template', '')).strip(),
-                    additional_args=str(item_data.get('additional_args', '')).strip()
+                    name=profile_name,
+                    command=profile_command_imported
                 )
-                # Further validation could be added here, e.g., for port format, timing template values.
                 profiles_to_add_to_gsettings.append(new_profile)
                 existing_profile_names.add(profile_name) # Add to set to handle duplicates within the import file
                 imported_count += 1

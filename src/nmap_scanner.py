@@ -88,8 +88,8 @@ class NmapScanner:
             timing_template=timing_template,
             no_ping=no_ping
         )
-        print(f"DEBUG_PROFILE_TRACE: NmapScanner._prepare_scan_args_list - Built scan_args_str: '{scan_args_str}'")
-        print(f"DEBUG_PROFILE_TRACE: NmapScanner._prepare_scan_args_list - Inputs to build_scan_args were: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', gsettings_default_args='{gsettings_default_args}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
+        # print(f"DEBUG_PROFILE_TRACE: NmapScanner._prepare_scan_args_list - Built scan_args_str: '{scan_args_str}'")
+        # print(f"DEBUG_PROFILE_TRACE: NmapScanner._prepare_scan_args_list - Inputs to build_scan_args were: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', gsettings_default_args='{gsettings_default_args}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
 
         current_scan_args_list: List[str] = []
         try:
@@ -219,7 +219,7 @@ class NmapScanner:
         timing_template: Optional[str] = None,
         no_ping: bool = False
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
-        print(f"DEBUG_PROFILE_TRACE: NmapScanner.scan - Received parameters: target='{target}', os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
+        # print(f"DEBUG_PROFILE_TRACE: NmapScanner.scan - Received parameters: target='{target}', os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         
         try:
             current_scan_args_list, scan_args_str_for_direct_scan = self._prepare_scan_args_list(
@@ -335,7 +335,7 @@ class NmapScanner:
         GSettings defaults, user-provided additional arguments, and UI-selected options.
         Returns a string representation suitable for `nmap.PortScanner().scan()`.
         """
-        print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Input parameters: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', default_args_str='{default_args_str}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
+        # print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Input parameters: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', default_args_str='{default_args_str}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         if not isinstance(additional_args_str, str):
             raise NmapArgumentError("Additional arguments must be a string.")
 
@@ -375,7 +375,7 @@ class NmapScanner:
         # 4. Apply GSettings-based DNS arguments
         self._apply_gsettings_dns_arg(final_args_list)
 
-        print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Final constructed args list (before join): {final_args_list}")
+        # print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Final constructed args list (before join): {final_args_list}")
         # Use shlex.join for proper quoting of arguments
         return shlex.join(final_args_list)
 
