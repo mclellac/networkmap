@@ -1,5 +1,6 @@
 import sys
 import threading
+import shlex # Added for shlex.split and shlex.join
 from typing import Optional, List, Dict, Any, Tuple
 
 from gi.repository import Adw, Gtk, GLib, GObject, Gio, Pango
@@ -445,24 +446,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             command_str = profile.get('command', '')
             options: ProfileOptions = parse_command_to_options(command_str)
 
-            # Apply parsed options to UI elements that exist in NetworkMapWindow
+            # Initialize a list to hold parts of the command that don't have direct UI controls
+            unmapped_args_parts: List[str] = []
+
+            # Apply options with dedicated UI controls and collect others
             self.os_fingerprint_switch.set_active(options.get('os_fingerprint', False))
-            # The 'stealth_scan' key in ProfileOptions is set if -sS is found by parser.
             self.stealth_scan_switch.set_active(options.get('stealth_scan', False))
             self.no_ping_switch.set_active(options.get('no_ping', False))
-
-            # The following options are parsed by profile_command_utils's current version
-            # but NetworkMapWindow (window.ui) does not have dedicated switches for them.
-            # They will be part of 'additional_args' if not recognized by parse_command_to_options,
-            # or if recognized, they are stored in 'options' but not set on specific UI elements here
-            # if those elements don't exist on NetworkMapWindow.
-            # Example: options.get('list_scan', False) -> no self.list_scan_switch
-            # options.get('version_detection', False) -> no self.version_detection_switch on main window
-            # This is okay; the command preview and scan will use these values from 'options'
-            # when build_command_from_options is called (indirectly via NmapScanner).
-
             self.port_spec_entry_row.set_text(options.get('ports') or '')
-            self.arguments_entry_row.set_text(options.get('additional_args') or '')
 
             # Timing Template
             selected_timing_value = options.get('timing_template')
@@ -470,9 +461,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             timing_model = self.timing_template_combo_row.get_model()
             if isinstance(timing_model, Gtk.StringList):
                 found_timing_in_combo = False
-                if selected_timing_value is None: # Should select "Default (T3)"
+                if selected_timing_value is None:
                     self.timing_template_combo_row.set_selected(0)
-                    found_timing_in_combo = True # Technically found, it's the default
+                    found_timing_in_combo = True
                 else:
                     for i in range(timing_model.get_n_items()):
                         display_name = timing_model.get_string(i)
@@ -481,21 +472,17 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                             found_timing_in_combo = True
                             break
                 if not found_timing_in_combo:
-                    self.timing_template_combo_row.set_selected(0) # Default to "Default (T3)" in UI
-                    # self.selected_timing_template already holds the specific value from command
-            else: # Fallback
+                    self.timing_template_combo_row.set_selected(0)
+            else:
                  self.timing_template_combo_row.set_selected(0)
                  self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
 
-
             # NSE Script
-            self.selected_nse_script = options.get('nse_script')
+            self.selected_nse_script = options.get('nse_script') or ''
             nse_model = self.nse_script_combo_row.get_model()
             if isinstance(nse_model, Gtk.FilterListModel):
                 target_nse_script_name = self.selected_nse_script if self.selected_nse_script else "None"
-                self.nse_script_combo_row.set_selected(0) # Default to "None" in UI
-
-                # Iterate through the *visible* items in the FilterListModel
+                self.nse_script_combo_row.set_selected(0)
                 for i in range(nse_model.get_n_items()):
                     item_obj = nse_model.get_item(i)
                     if isinstance(item_obj, Gtk.StringObject):
@@ -506,36 +493,75 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 self.nse_script_combo_row.set_selected(0)
                 self.selected_nse_script = None
 
+            # Handle options without direct UI controls on the main window
+            if options.get('list_scan', False):
+                unmapped_args_parts.append("-sL")
+            if options.get('ping_scan', False):
+                unmapped_args_parts.append("-sn")
+            if options.get('version_detection', False):
+                unmapped_args_parts.append("-sV")
+            if options.get('tcp_null_scan', False):
+                unmapped_args_parts.append("-sN")
+            if options.get('tcp_fin_scan', False):
+                unmapped_args_parts.append("-sF")
+            if options.get('tcp_xmas_scan', False):
+                unmapped_args_parts.append("-sX")
+            if options.get('icmp_echo_ping', False):
+                unmapped_args_parts.append("-PE")
+            if options.get('no_dns', False):
+                unmapped_args_parts.append("-n")
+            if options.get('traceroute', False):
+                unmapped_args_parts.append("--traceroute")
+
+            # Host Discovery Ping Types with optional ports
+            if options.get('tcp_syn_ping', False):
+                arg = "-PS"
+                tcp_syn_ports = options.get('tcp_syn_ping_ports')
+                if tcp_syn_ports:
+                    arg += tcp_syn_ports
+                unmapped_args_parts.append(arg)
+            if options.get('tcp_ack_ping', False):
+                arg = "-PA"
+                tcp_ack_ports = options.get('tcp_ack_ping_ports')
+                if tcp_ack_ports:
+                    arg += tcp_ack_ports
+                unmapped_args_parts.append(arg)
+            if options.get('udp_ping', False):
+                arg = "-PU"
+                udp_ports = options.get('udp_ping_ports')
+                if udp_ports:
+                    arg += udp_ports
+                unmapped_args_parts.append(arg)
+
+            primary_type = options.get('primary_scan_type')
+            if primary_type and primary_type != "-sS":
+                unmapped_args_parts.append(primary_type)
+
+            # Combine unmapped args with original additional_args
+            final_additional_args_list = unmapped_args_parts
+            original_additional_args = options.get('additional_args', '')
+            if original_additional_args:
+                try:
+                    final_additional_args_list.extend(shlex.split(original_additional_args))
+                except ValueError:
+                    final_additional_args_list.append(original_additional_args)
+
+            if final_additional_args_list:
+                self.arguments_entry_row.set_text(shlex.join(final_additional_args_list))
+            else:
+                self.arguments_entry_row.set_text('')
+
         else: # Manual Configuration selected or no profile
-            # Reset UI elements to default/manual state
             self.os_fingerprint_switch.set_active(False)
             self.stealth_scan_switch.set_active(False)
             self.no_ping_switch.set_active(False)
-
-            # Reset other switches that might have been part of a profile but aren't default
-            # (These switches don't exist on the main window UI as per current window.ui,
-            #  but if they did, they'd be reset here)
-            # self.list_scan_switch.set_active(False)
-            # self.ping_scan_switch.set_active(False)
-            # self.icmp_echo_ping_switch.set_active(False)
-            # self.no_dns_switch.set_active(False)
-            # self.traceroute_switch.set_active(False)
-            # self.tcp_null_scan_switch.set_active(False)
-            # self.tcp_fin_scan_switch.set_active(False)
-            # self.tcp_xmas_scan_switch.set_active(False)
-            # self.version_detection_switch.set_active(False)
-
-
             self.port_spec_entry_row.set_text("")
             self.arguments_entry_row.set_text(self.settings.get_string("default-nmap-arguments"))
-
-            self.nse_script_combo_row.set_selected(0) # "None"
+            self.nse_script_combo_row.set_selected(0)
             self.selected_nse_script = None
-            
             default_timing_display_name = list(self.timing_options.keys())[0]
-            self.timing_template_combo_row.set_selected(0) # "Default (T3)"
+            self.timing_template_combo_row.set_selected(0)
             self.selected_timing_template = self.timing_options.get(default_timing_display_name)
-
             if "error" in self.target_entry_row.get_css_classes(): self.target_entry_row.remove_css_class("error")
             if "error" in self.port_spec_entry_row.get_css_classes(): self.port_spec_entry_row.remove_css_class("error")
             if "error" in self.arguments_entry_row.get_css_classes(): self.arguments_entry_row.remove_css_class("error")
