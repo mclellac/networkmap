@@ -44,7 +44,14 @@ class TestNmapCommandValidator(unittest.TestCase):
             "-PU137-139",
             "-PS T:25,U:53",
             "-PS 22-25,80,T:110,U:161",
-            "-n --traceroute scanme.nmap.org"
+            "-n --traceroute scanme.nmap.org",
+            # Scan Technique Valid Cases
+            "-sS -sN localhost",
+            "-sU --traceroute target",
+            "-sA -PE scanme.nmap.org",
+            "-sW -Pn",
+            "-sM -T1",
+            "-sX -sV"
         ]
         for cmd_args in valid_cases:
             is_valid, msg = self.validator.validate_arguments(cmd_args)
@@ -82,6 +89,7 @@ class TestNmapCommandValidator(unittest.TestCase):
             if cmd_args == "-sV --foo": token = "--foo"
             if cmd_args == "-fjdskfjdshk": token = "-fjdskfjdshk"
             if cmd_args == "--gibberish-flag-123": token = "--gibberish-flag-123"
+            if cmd_args == "-sZ": token = "-sZ"
 
 
             self.assertFalse(is_valid, f"Expected invalid due to unknown option for command: '{cmd_args}'")

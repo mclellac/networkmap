@@ -100,6 +100,38 @@ class ProfileEditorDialog(Adw.Dialog):
         self.traceroute_switch = Adw.SwitchRow(title="Traceroute (--traceroute)")
         host_discovery_expander.add_row(self.traceroute_switch)
 
+        # Expander for Scan Techniques
+        scan_techniques_expander = Adw.ExpanderRow(title="Scan Techniques")
+        scan_techniques_expander.set_expanded(False) # Start collapsed
+        preferences_group.add(scan_techniques_expander)
+
+        # Primary Scan Type ComboRow
+        self.primary_scan_type_options_map = {
+            "Default (No Specific Type)": None,
+            "TCP SYN (-sS)": "-sS",
+            "TCP Connect (-sT)": "-sT",
+            "UDP Scan (-sU)": "-sU",
+            "TCP ACK (-sA)": "-sA",
+            "TCP Window (-sW)": "-sW",
+            "TCP Maimon (-sM)": "-sM"
+        }
+        primary_scan_type_display_names = list(self.primary_scan_type_options_map.keys())
+        
+        self.scan_type_combo = Adw.ComboRow(title="Primary Scan Type")
+        self.scan_type_combo.set_model(Gtk.StringList.new(primary_scan_type_display_names))
+        self.scan_type_combo.set_selected(0) # Default to "Default (No Specific Type)"
+        scan_techniques_expander.add_row(self.scan_type_combo)
+
+        # Special TCP Scan Switches
+        self.tcp_null_scan_switch = Adw.SwitchRow(title="TCP Null Scan (-sN)")
+        scan_techniques_expander.add_row(self.tcp_null_scan_switch)
+
+        self.tcp_fin_scan_switch = Adw.SwitchRow(title="TCP FIN Scan (-sF)")
+        scan_techniques_expander.add_row(self.tcp_fin_scan_switch)
+
+        self.tcp_xmas_scan_switch = Adw.SwitchRow(title="TCP Xmas Scan (-sX)")
+        scan_techniques_expander.add_row(self.tcp_xmas_scan_switch)
+
         # Expander for Additional Arguments
         additional_args_expander = Adw.ExpanderRow(title="Additional Manual Arguments")
         additional_args_expander.set_expanded(True) # Keep open
@@ -197,6 +229,34 @@ class ProfileEditorDialog(Adw.Dialog):
                 i += 1
             
             additional_parts_for_entry = final_additional_parts_after_parsing_pings
+
+            # --- Scan Technique Options START ---
+            self.scan_type_combo.set_selected(0) # Default to "Default (No Specific Type)"
+            
+            # Determine the order of scan type display names as used in the ComboRow model
+            primary_scan_type_display_names_ordered = list(self.primary_scan_type_options_map.keys())
+            
+            found_primary_scan_type_for_ui = False
+            for display_name in primary_scan_type_display_names_ordered:
+                flag = self.primary_scan_type_options_map.get(display_name)
+                if flag and flag in parts: # Check in original 'parts'
+                    if not found_primary_scan_type_for_ui:
+                        # Set the combo box to the first one found
+                        idx = primary_scan_type_display_names_ordered.index(display_name)
+                        self.scan_type_combo.set_selected(idx)
+                        found_primary_scan_type_for_ui = True 
+                    
+                    # Remove all occurrences of this flag from additional_parts_for_entry
+                    # This ensures if multiple conflicting primary scan types are in the command,
+                    # they are all removed from additional_args, and one is chosen for UI.
+                    additional_parts_for_entry = [p for p in additional_parts_for_entry if p != flag]
+
+            # Special TCP Scan Switches
+            check_and_set_switch(self.tcp_null_scan_switch, "-sN", parts, additional_parts_for_entry)
+            check_and_set_switch(self.tcp_fin_scan_switch, "-sF", parts, additional_parts_for_entry)
+            check_and_set_switch(self.tcp_xmas_scan_switch, "-sX", parts, additional_parts_for_entry)
+            # --- Scan Technique Options END ---
+
             self.additional_args_row.set_text(" ".join(additional_parts_for_entry))
 
         # Action area for buttons
@@ -294,6 +354,27 @@ class ProfileEditorDialog(Adw.Dialog):
             if self.traceroute_switch.get_active():
                 command_parts.append("--traceroute")
             # --- Host Discovery Options END ---
+
+            # --- Scan Technique Options START ---
+            selected_scan_type_idx = self.scan_type_combo.get_selected()
+            if selected_scan_type_idx > 0: # Index 0 is "Default (No Specific Type)"
+                scan_type_model = self.scan_type_combo.get_model()
+                # Model should be Gtk.StringList as set in __init__
+                if isinstance(scan_type_model, Gtk.StringList): # Check instance for safety
+                    display_name = scan_type_model.get_string(selected_scan_type_idx)
+                    nmap_flag = self.primary_scan_type_options_map.get(display_name)
+                    if nmap_flag: 
+                        command_parts.append(nmap_flag)
+
+            if self.tcp_null_scan_switch.get_active():
+                command_parts.append("-sN")
+            
+            if self.tcp_fin_scan_switch.get_active():
+                command_parts.append("-sF")
+                
+            if self.tcp_xmas_scan_switch.get_active():
+                command_parts.append("-sX")
+            # --- Scan Technique Options END ---
             
             # Additional Arguments
             additional_args = self.additional_args_row.get_text().strip()
