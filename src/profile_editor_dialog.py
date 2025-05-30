@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 
 from .nmap_validator import NmapCommandValidator
 from .profile_command_utils import parse_command_to_options, build_command_from_options, ProfileOptions
+from .config import DEBUG_ENABLED
 
 class ProfileEditorDialog(Adw.Dialog):
     __gtype_name__ = "NetworkMapProfileEditorDialog" # Unique GType name
@@ -142,7 +143,7 @@ class ProfileEditorDialog(Adw.Dialog):
         self.additional_args_row = Adw.EntryRow(title="Arguments") # Title can be simpler now
         additional_args_expander.add_row(self.additional_args_row)
 
-        self.set_child(main_box) # Set the main content of the dialog
+        self.set_child(main_box)
 
         # Populate fields if editing
         if self.profile_to_edit:
@@ -232,7 +233,8 @@ class ProfileEditorDialog(Adw.Dialog):
         self.set_size_request(400, -1) # Width, height can be auto
 
     def do_response(self, response_id: str): # Renamed and signature changed
-        print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
 
@@ -318,7 +320,8 @@ class ProfileEditorDialog(Adw.Dialog):
             is_valid, error_message = validator.validate_arguments(final_command)
             if not is_valid:
                 self._show_alert_dialog(error_message)
-                print(f"DEBUG (ProfileEditorDialog): Validation failed - '{error_message}' in command: {final_command}", file=sys.stderr)
+                if DEBUG_ENABLED:
+                    print(f"DEBUG (ProfileEditorDialog): Validation failed - '{error_message}' in command: {final_command}", file=sys.stderr)
                 return True # Keep dialog open
             # --- New Validator Integration END ---
 
@@ -327,34 +330,39 @@ class ProfileEditorDialog(Adw.Dialog):
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
 
-            print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Print the data being saved
-            print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Print the data being saved
+                print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)
-            print("DEBUG: apply - calling self.force_close()", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print("DEBUG: apply - calling self.force_close()", file=sys.stderr)
             self.force_close() # Use force_close as response handling is manual
-            print("DEBUG: apply - after self.force_close(), returning False", file=sys.stderr) # Should not be reached if closed
+            # if DEBUG_ENABLED: print("DEBUG: apply - after self.force_close(), returning False", file=sys.stderr) # Should not be reached if closed
             # No return needed here as force_close should have destroyed it
         elif response_id == "cancel":
-            print("DEBUG: cancel - emitting profile-action 'cancel'", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print("DEBUG: cancel - emitting profile-action 'cancel'", file=sys.stderr)
             self.emit("profile-action", "cancel", None)
-            print("DEBUG: cancel - calling self.force_close()", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print("DEBUG: cancel - calling self.force_close()", file=sys.stderr)
             self.force_close() # Use force_close
-            print("DEBUG: cancel - after self.force_close(), returning False", file=sys.stderr) # Should not be reached
+            # if DEBUG_ENABLED: print("DEBUG: cancel - after self.force_close(), returning False", file=sys.stderr) # Should not be reached
         # No return needed here as force_close should handle destruction
 
     def _on_host_discovery_ping_switch_toggled(self, switch_row: Adw.SwitchRow, pspec: Optional[GObject.ParamSpec], entry_row: Adw.EntryRow) -> None:
         entry_row.set_visible(switch_row.get_active())
         if not switch_row.get_active():
-            entry_row.set_text("") # Clear text when hiding
+            entry_row.set_text("")
 
     def _show_alert_dialog(self, message: str):
         # For proper error display within the dialog context, use Adw.AlertDialog
         # Adw.Toast is typically for non-modal, transient notifications on a parent window.
-        print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr) # Keep for console logging
+        if DEBUG_ENABLED:
+            print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr) # Keep for console logging
 
         alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
-        alert_dialog.add_response("ok", "OK") # Use add_response with an ID and label
-        alert_dialog.set_default_response("ok") # Set the default response to the added ID
+        alert_dialog.add_response("ok", "OK")
+        alert_dialog.set_default_response("ok")
         alert_dialog.set_transient_for(self) # 'self' is ProfileEditorDialog
         alert_dialog.set_modal(True)
         alert_dialog.present()

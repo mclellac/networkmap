@@ -163,7 +163,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     Returns:
         The exit status of the application.
     """
-    # Use current sys.argv if argv is None
     current_argv = argv if argv is not None else sys.argv
 
     parser = argparse.ArgumentParser(description="Network Map application")
@@ -179,7 +178,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         config.DEBUG_ENABLED = True
 
     if config.DEBUG_ENABLED:
-        print("DEBUG: Debug mode enabled.") # Initial confirmation if debug is on
+        print("DEBUG: Debug mode enabled.")
 
     # Pass remaining arguments (plus program name) to app.run()
     # GTK application typically expects sys.argv format

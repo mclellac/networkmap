@@ -1,6 +1,6 @@
 import os
 import sys 
-from typing import List, Tuple # Added Tuple for type hint
+from typing import List, Tuple
 import logging
 
 from gi.repository import Adw
@@ -74,10 +74,9 @@ def discover_nse_scripts() -> List[str]:
     try:
         for item_name in os.listdir(scripts_directory):
             if item_name.endswith(".nse") and os.path.isfile(os.path.join(scripts_directory, item_name)):
-                script_name_no_ext = item_name[:-4] # Remove .nse
+                script_name_no_ext = item_name[:-4]
                 
                 assigned_category = DEFAULT_CATEGORY
-                # Attempt to categorize based on prefixes
                 for prefix in SCRIPT_PREFIXES:
                     if script_name_no_ext.startswith(prefix + '-') or \
                        script_name_no_ext.startswith(prefix + '_') or \
@@ -90,15 +89,14 @@ def discover_nse_scripts() -> List[str]:
         # Sort by category (prefix alphabetical), then by script name within each category.
         categorized_scripts.sort() 
         
-        # Extract just the script names, now sorted
         final_script_names = [name for category, name in categorized_scripts]
 
     except OSError as e:
-        logging.error(f"Error reading NSE script directory {scripts_directory}: {e}") # Changed to error
-        return [] # Return empty list on error
+        logging.error(f"Error reading NSE script directory {scripts_directory}: {e}")
+        return []
 
     if not final_script_names:
-        logging.info(f"No NSE scripts found in {scripts_directory}.") # Info if dir was found but no scripts
+        logging.info(f"No NSE scripts found in {scripts_directory}.")
         
     return final_script_names
 
