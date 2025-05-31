@@ -271,5 +271,3 @@ class ProfileEditorDialog(Adw.Dialog):
         alert_dialog.set_transient_for(self)
         alert_dialog.set_modal(True)
         alert_dialog.present()
-
-[end of src/profile_editor_dialog.py]
