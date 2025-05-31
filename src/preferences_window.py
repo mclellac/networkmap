@@ -21,34 +21,23 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
     THEME_MAP_GSETTINGS_TO_INDEX = {"system": 0, "light": 1, "dark": 2}
     THEME_MAP_INDEX_TO_GSETTINGS = ["system", "light", "dark"]
 
-    # Template children, ensure names match those in the .ui file's <object> tags
     pref_font_button: Gtk.FontButton = Gtk.Template.Child("pref_font_button")
     pref_theme_combo_row: Adw.ComboRow = Gtk.Template.Child("pref_theme_combo_row")
     pref_dns_servers_entry_row: Adw.EntryRow = Gtk.Template.Child("pref_dns_servers_entry_row")
-    # Ensure 'pref_default_nmap_args_entry_row' is correctly named in the .ui file
     pref_default_nmap_args_entry_row: Adw.EntryRow = Gtk.Template.Child("pref_default_nmap_args_entry_row")
-
     profiles_list_box: Gtk.ListBox = Gtk.Template.Child("profiles_list_box")
     add_profile_button: Gtk.Button = Gtk.Template.Child("add_profile_button")
     export_profiles_button: Gtk.Button = Gtk.Template.Child("export_profiles_button")
     import_profiles_button: Gtk.Button = Gtk.Template.Child("import_profiles_button")
 
-
-    def __init__(self, parent_window: Optional[Gtk.Window] = None): # Allow None for parent_window
-        """
-        Initializes the PreferencesWindow.
-        Args:
-            parent_window: The parent window to which this dialog is transient. Can be None.
-        """
+    def __init__(self, parent_window: Optional[Gtk.Window] = None):
         super().__init__(transient_for=parent_window if parent_window else None)
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
         self.profile_manager = ProfileManager()
-
         self._init_settings_and_bindings()
         self._init_ui_components()
         self._connect_signals()
-        
-        self._load_and_display_profiles() # Initial population
+        self._load_and_display_profiles()
 
     def _show_toast(self, message: str):
         if DEBUG_ENABLED:
@@ -57,22 +46,16 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self.add_toast(Adw.Toast.new(escaped_message))
 
     def _init_settings_and_bindings(self) -> None:
-        """Initializes GSettings and binds them to UI elements."""
-        # Font settings
         font_str = self.settings.get_string("results-font")
         if font_str:
             try:
                 font_desc = Pango.FontDescription.from_string(font_str)
                 self.pref_font_button.set_font_desc(font_desc)
-            except GLib.Error as e: # Pango.FontDescription.from_string can raise GLib.Error
+            except GLib.Error as e:
                 print(f"Error setting font from GSettings string '{font_str}': {e}", file=sys.stderr)
-        
-        # Theme settings
         theme_str = self.settings.get_string("theme")
-        selected_theme_index = self.THEME_MAP_GSETTINGS_TO_INDEX.get(theme_str, 0) # Default to "system"
+        selected_theme_index = self.THEME_MAP_GSETTINGS_TO_INDEX.get(theme_str, 0)
         self.pref_theme_combo_row.set_selected(selected_theme_index)
-
-        # Bind DNS servers and default Nmap arguments directly
         self.settings.bind(
             "dns-servers", self.pref_dns_servers_entry_row, "text", Gio.SettingsBindFlags.DEFAULT
         )
@@ -81,23 +64,16 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         )
 
     def _init_ui_components(self) -> None:
-        """Initializes UI components not directly handled by Gtk.Template or simple bindings."""
-        # This method is now empty as the import/export buttons and rows are defined in the UI file.
         pass
 
     def _connect_signals(self) -> None:
-        """Connects signals for UI elements to their handlers."""
         self.pref_font_button.connect("font-set", self._on_font_changed)
         self.pref_theme_combo_row.connect("notify::selected", self._on_theme_changed)
         self.add_profile_button.connect("clicked", self._on_add_profile_clicked)
-        
-        # Connect signals for the declaratively defined buttons
         self.export_profiles_button.connect("clicked", self._on_export_profiles_clicked)
         self.import_profiles_button.connect("clicked", self._on_import_profiles_clicked)
 
-
-    def _init_font_settings(self) -> None:
-        """Initializes font button and connects its signal."""
+    def _init_font_settings(self) -> None: # Not called, but kept for potential future use or direct call
         font_str = self.settings.get_string("results-font")
         if font_str:
             try:
@@ -107,15 +83,13 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 print(f"Error setting font from GSettings: {e}", file=sys.stderr)
         self.pref_font_button.connect("font-set", self._on_font_changed)
 
-    def _init_theme_settings(self) -> None:
-        """Initializes theme combobox and connects its signal."""
+    def _init_theme_settings(self) -> None: # Not called
         theme_str = self.settings.get_string("theme")
-        selected_theme_index = self.THEME_MAP_GSETTINGS_TO_INDEX.get(theme_str, 0) # Default to system
+        selected_theme_index = self.THEME_MAP_GSETTINGS_TO_INDEX.get(theme_str, 0)
         self.pref_theme_combo_row.set_selected(selected_theme_index)
         self.pref_theme_combo_row.connect("notify::selected", self._on_theme_changed)
 
-    def _bind_gsettings(self) -> None:
-        """Binds GSettings to UI elements."""
+    def _bind_gsettings(self) -> None: # Not called
         self.settings.bind(
             "dns-servers", self.pref_dns_servers_entry_row, "text", Gio.SettingsBindFlags.DEFAULT
         )
@@ -123,235 +97,168 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             "default-nmap-arguments", self.pref_default_nmap_args_entry_row, "text", Gio.SettingsBindFlags.DEFAULT
         )
 
-    def _init_profile_management_ui(self) -> None:
-        """Initializes profile management UI elements, including add, import, and export buttons."""
-        # This method is now part of _init_ui_components and signal connections in _connect_signals
-        # Actually, with declarative UI, this method is no longer needed.
+    def _init_profile_management_ui(self) -> None: # Not called
         pass
 
-    # _find_parent_preferences_group method is removed.
-
     def _create_file_chooser(self, title: str, action: Gtk.FileChooserAction, accept_label: str) -> Gtk.FileChooserNative:
-        """Helper to create and configure a Gtk.FileChooserNative dialog."""
         file_chooser = Gtk.FileChooserNative.new(
-            title=title,
-            parent=self.get_root(), # Use get_root() for the top-level window
-            action=action,
-            accept_label=accept_label,
-            cancel_label="_Cancel"
+            title=title, parent=self.get_root(), action=action,
+            accept_label=accept_label, cancel_label="_Cancel"
         )
         json_filter = Gtk.FileFilter()
         json_filter.set_name("JSON files (*.json)")
         json_filter.add_mime_type("application/json")
-        json_filter.add_pattern("*.json") # Also add pattern for non-MIME systems
+        json_filter.add_pattern("*.json")
         file_chooser.add_filter(json_filter)
         return file_chooser
 
     def _on_import_profiles_clicked(self, button: Gtk.Button) -> None:
-        """Handles the click event for the import profiles button."""
         dialog = self._create_file_chooser(
-            title="Import Profiles",
-            action=Gtk.FileChooserAction.OPEN,
-            accept_label="_Open"
+            title="Import Profiles", action=Gtk.FileChooserAction.OPEN, accept_label="_Open"
         )
         dialog.connect("response", self._on_import_file_chooser_response)
         dialog.show()
 
     def _on_import_file_chooser_response(self, dialog: Gtk.FileChooserNative, response_id: int) -> None:
-        """Handles the response from the import file chooser dialog."""
         if response_id == Gtk.ResponseType.ACCEPT:
-            gfile = dialog.get_file() # Use GFile for more robust path handling
+            gfile = dialog.get_file()
             if gfile:
-                filepath = gfile.get_path() # Returns a string path
+                filepath = gfile.get_path()
                 if filepath:
                     try:
                         imported_count, skipped_count = self.profile_manager.import_profiles_from_file(filepath)
-                        
                         summary_message = f"Successfully imported {imported_count} profiles."
                         if skipped_count > 0:
                             summary_message += f" Skipped {skipped_count} profiles (duplicates or malformed)."
-                        
-                        # Provide more detailed feedback if some profiles were skipped.
-                        # This could be a more complex dialog if many details are needed.
-                        # For now, a toast with a summary is used.
-                        # Logging in ProfileManager provides console details for malformed entries.
                         self._show_toast(summary_message)
-                        self._load_and_display_profiles() # Refresh the list UI
-                    
+                        self._load_and_display_profiles()
                     except ProfileStorageError as e:
-                        # Handle errors specifically raised by ProfileManager (e.g., file not found, JSON error)
                         self._show_toast(f"Import failed: {e}")
-                    except Exception as e: # Catch any other unexpected errors during the process
-                        # Keep this print as it's for unexpected errors, not routine debug tracing
+                    except Exception as e:
                         print(f"Unexpected error during profile import: {e}", file=sys.stderr)
                         self._show_toast("An unexpected error occurred during import.")
-                else: # Should not happen if gfile is valid, but as a safeguard
+                else:
                      self._show_toast("Failed to get file path for import.")
-        
-        dialog.destroy() # Ensure dialog is destroyed
-
+        dialog.destroy()
 
     def _on_export_profiles_clicked(self, button: Gtk.Button) -> None:
-        """Handles the click event for the export profiles button."""
         dialog = self._create_file_chooser(
-            title="Export All Profiles",
-            action=Gtk.FileChooserAction.SAVE,
-            accept_label="_Save"
+            title="Export All Profiles", action=Gtk.FileChooserAction.SAVE, accept_label="_Save"
         )
-        dialog.set_current_name("networkmap_profiles.json") # Suggest a filename
+        dialog.set_current_name("networkmap_profiles.json")
         dialog.connect("response", self._on_export_file_chooser_response)
         dialog.show()
 
     def _on_export_file_chooser_response(self, dialog: Gtk.FileChooserNative, response_id: int) -> None:
-        """Handles the response from the export file chooser dialog."""
         if response_id == Gtk.ResponseType.ACCEPT:
-            gfile = dialog.get_file() # Use GFile
+            gfile = dialog.get_file()
             if gfile:
-                filepath = gfile.get_path() # Returns a string path
+                filepath = gfile.get_path()
                 if filepath:
                     try:
                         self.profile_manager.export_profiles_to_file(filepath)
                         self._show_toast(f"Profiles successfully exported to: {filepath}")
                     except ProfileStorageError as e:
-                        # Handle errors specifically raised by ProfileManager (e.g., file write error)
                         self._show_toast(f"Export failed: {e}")
-                    except Exception as e: # Catch any other unexpected errors
-                        # Keep this print as it's for unexpected errors
+                    except Exception as e:
                         print(f"Unexpected error during profile export: {e}", file=sys.stderr)
                         self._show_toast("An unexpected error occurred during export.")
-                else: # Safeguard
+                else:
                     self._show_toast("Failed to get file path for export.")
-        
-        dialog.destroy() # Ensure dialog is destroyed
-
+        dialog.destroy()
 
     def _load_and_display_profiles(self) -> None:
-        """Clears and re-populates the profiles list box from storage."""
         while (child := self.profiles_list_box.get_row_at_index(0)) is not None:
             self.profiles_list_box.remove(child)
-        
         try:
             profiles = self.profile_manager.load_profiles()
             if not profiles:
-                # Optionally, display a placeholder if no profiles exist
                 placeholder_row = Adw.ActionRow(title="No scan profiles configured.")
                 placeholder_row.set_activatable(False)
                 self.profiles_list_box.append(placeholder_row)
                 return
-
             for profile in profiles:
-                row = Adw.ActionRow(title=profile['name'], activatable=False) # Row itself not activatable
-
+                row = Adw.ActionRow(title=profile['name'], activatable=False)
                 button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-                
                 edit_button = Gtk.Button(icon_name="document-edit-symbolic", css_classes=["flat"])
-                edit_button.connect("clicked", self._on_edit_profile_clicked, profile['name']) # Pass profile_name
+                edit_button.connect("clicked", self._on_edit_profile_clicked, profile['name'])
                 button_box.append(edit_button)
-
                 delete_button = Gtk.Button(icon_name="edit-delete-symbolic", css_classes=["flat", "destructive-action"])
-                delete_button.connect("clicked", self._on_delete_profile_clicked, profile['name']) # Pass profile_name
+                delete_button.connect("clicked", self._on_delete_profile_clicked, profile['name'])
                 button_box.append(delete_button)
-                
                 row.add_suffix(button_box)
                 self.profiles_list_box.append(row)
         except ProfileStorageError as e:
             self._show_toast(f"Error loading profiles: {e}")
-            # Optionally, display an error message in the list box itself
-        except Exception as e: # Catch any other unexpected errors
+        except Exception as e:
             self._show_toast(f"An unexpected error occurred while loading profiles: {e}")
 
-
     def _on_add_profile_clicked(self, button: Gtk.Button) -> None:
-        """Handles the click event for the add profile button."""
         try:
             all_profile_names = [p['name'] for p in self.profile_manager.load_profiles()]
         except ProfileStorageError as e:
             self._show_toast(f"Could not load existing profiles to check names: {e}")
-            all_profile_names = [] # Proceed with caution or disallow adding
-        
+            all_profile_names = []
         dialog = ProfileEditorDialog(existing_profile_names=all_profile_names)
         dialog.connect("profile-action", self._handle_profile_dialog_action_add)
-        # Adw.Dialog.present() takes an optional Gtk.Window parent argument for transiency.
-        # This is the correct way to set the transient parent if not done during __init__ or via set_transient_for().
         dialog.present(self)
 
-
     def _handle_profile_dialog_action_add(self, dialog: ProfileEditorDialog, action: str, profile_data: Optional[ScanProfile]) -> None:
-        """Handles actions from the ProfileEditorDialog when adding a profile."""
         if action == "save" and profile_data:
             try:
                 self.profile_manager.add_profile(profile_data)
-                self._load_and_display_profiles() # Refresh list
+                self._load_and_display_profiles()
                 self._show_toast(f"Profile '{profile_data['name']}' added successfully.")
             except (ProfileExistsError, ProfileStorageError) as e:
                 self._show_toast(f"Failed to add profile: {e}")
-            except Exception as e: # Catch any other unexpected errors
+            except Exception as e:
                 self._show_toast(f"An unexpected error occurred while adding profile: {e}")
-        # Dialog closes itself on "save" or "cancel"
 
     def _on_edit_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
-        """Handles the click event for editing a specific profile."""
         try:
             current_profiles = self.profile_manager.load_profiles()
             profile_to_edit = next((p for p in current_profiles if p['name'] == profile_name), None)
-            
             if profile_to_edit:
                 all_profile_names = [p['name'] for p in current_profiles]
                 dialog = ProfileEditorDialog(
                     profile_to_edit=profile_to_edit,
                     existing_profile_names=all_profile_names
                 )
-                # Pass original_profile_name for context in the handler
                 dialog.connect("profile-action", self._handle_profile_dialog_action_edit, profile_name)
-                # Adw.Dialog.present() takes an optional Gtk.Window parent argument for transiency.
                 dialog.present(self)
             else:
                 self._show_toast(f"Error: Profile '{profile_name}' not found for editing.")
-        except (ProfileStorageError, Exception) as e: # Catch loading or other errors
+        except (ProfileStorageError, Exception) as e:
             self._show_toast(f"Failed to load profile for editing: {e}")
 
-
     def _handle_profile_dialog_action_edit(self, dialog: ProfileEditorDialog, action: str, profile_data: Optional[ScanProfile], original_profile_name: str) -> None:
-        """Handles actions from the ProfileEditorDialog when editing a profile."""
         if action == "save" and profile_data:
             try:
                 self.profile_manager.update_profile(original_profile_name, profile_data)
-                self._load_and_display_profiles() # Refresh list
+                self._load_and_display_profiles()
                 self._show_toast(f"Profile '{profile_data['name']}' updated successfully.")
             except (ProfileNotFoundError, ProfileExistsError, ProfileStorageError) as e:
                 self._show_toast(f"Failed to update profile: {e}")
-            except Exception as e: # Catch any other unexpected errors
+            except Exception as e:
                 self._show_toast(f"An unexpected error occurred while updating profile: {e}")
-        # Dialog closes itself
 
     def _on_delete_profile_clicked(self, button: Gtk.Button, profile_name: str) -> None:
-        """Handles the click event for deleting a specific profile."""
-        # Confirmation dialog might be good UX here, but not implemented for brevity.
         try:
             self.profile_manager.delete_profile(profile_name)
-            self._load_and_display_profiles() # Refresh list
+            self._load_and_display_profiles()
             self._show_toast(f"Profile '{profile_name}' deleted successfully.")
         except (ProfileNotFoundError, ProfileStorageError) as e:
             self._show_toast(f"Failed to delete profile: {e}")
-        except Exception as e: # Catch any other unexpected errors
+        except Exception as e:
             self._show_toast(f"An unexpected error occurred while deleting profile: {e}")
 
-
     def _on_font_changed(self, font_button: Gtk.FontButton) -> None:
-        """
-        Handles changes to the results-font GSettings key when the GtkFontButton's
-        font is set.
-        """
         font_desc = font_button.get_font_desc()
         if font_desc: 
             font_str = font_desc.to_string()
             self.settings.set_string("results-font", font_str)
 
     def _on_theme_changed(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
-        """
-        Handles changes to the theme GSettings key when the theme ComboRow's
-        selection changes. Also applies the theme immediately.
-        """
         selected_index = combo_row.get_selected()
         if 0 <= selected_index < len(self.THEME_MAP_INDEX_TO_GSETTINGS):
             theme_str = self.THEME_MAP_INDEX_TO_GSETTINGS[selected_index]
