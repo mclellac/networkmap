@@ -12,9 +12,9 @@ except ImportError as e:
 import shlex
 import subprocess
 import sys 
-import shutil 
+import shutil
 from typing import Tuple, Optional, List, Dict, Any
-from .utils import is_root, is_macos, is_linux, is_flatpak 
+from .utils import is_root, is_macos, is_linux, is_flatpak, _get_arg_value_reprs
 from .config import DEBUG_ENABLED
 
 
@@ -42,22 +42,35 @@ class NmapScanner:
         """
         Initializes the NmapScanner with an nmap.PortScanner instance and Nmap path.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner.__init__(args: self)")
         self.nm = nmap.PortScanner()
         self.nmap_executable_path = self._find_nmap_executable()
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner.__init__")
 
     def _find_nmap_executable(self) -> str:
         """Finds the Nmap executable path or defaults to a common location."""
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._find_nmap_executable(args: self)")
         nmap_path = shutil.which('nmap')
         if nmap_path:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._find_nmap_executable - Found nmap in PATH: {nmap_path}")
+                print(f"DEBUG: Exiting NmapScanner._find_nmap_executable")
             return nmap_path
         
         default_path = '/usr/local/bin/nmap' if is_macos() else '/usr/bin/nmap'
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._find_nmap_executable - Nmap not in PATH, checking default: {default_path}")
         if not shutil.which(default_path):
              print(f"Warning: Nmap not found in PATH or at the default location ({default_path}). "
                   "Please ensure Nmap is installed and accessible.", file=sys.stderr)
         else:
             print(f"Warning: Nmap not found in PATH. Using default location: {default_path}. "
                   "Consider adding Nmap's directory to your system's PATH.", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._find_nmap_executable")
         return default_path
 
 
@@ -74,10 +87,15 @@ class NmapScanner:
         """
         Prepares the Nmap scan arguments string and list.
         """
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, do_os_fingerprint, additional_args_str, nse_script, stealth_scan, port_spec, timing_template, no_ping)
+            print(f"DEBUG: Entering NmapScanner._prepare_scan_args_list(args: {arg_str})")
         gsettings_default_args: Optional[str] = None
         try:
             settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
             gsettings_default_args = settings.get_string("default-nmap-arguments")
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._prepare_scan_args_list - Loaded gsettings_default_args: {gsettings_default_args}")
         except Exception as e:
             if DEBUG_ENABLED:
                 print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=sys.stderr)
@@ -101,10 +119,16 @@ class NmapScanner:
             current_scan_args_list = shlex.split(scan_args_str)
         except ValueError as e:
             raise NmapArgumentError(f"Internal error splitting scan arguments: {e}") from e
-            
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._prepare_scan_args_list - Returning: current_scan_args_list={current_scan_args_list}, scan_args_str='{scan_args_str}'")
+            print(f"DEBUG: Exiting NmapScanner._prepare_scan_args_list")
         return current_scan_args_list, scan_args_str
 
     def _should_escalate(self, do_os_fingerprint: bool, current_scan_args_list: List[str]) -> bool:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, do_os_fingerprint, current_scan_args_list)
+            print(f"DEBUG: Entering NmapScanner._should_escalate(args: {arg_str})")
         ROOT_REQUIRING_ARGS = {
             "-sS", "-sU", "-sN", "-sF", "-sX", "-sA", "-sW", "-sM",
             "-sI", "-sY", "-sZ", "-sO", "-O",
@@ -115,45 +139,85 @@ class NmapScanner:
         if not ROOT_REQUIRING_ARGS.isdisjoint(current_scan_args_list):
             return not is_root()
         if do_os_fingerprint:
-            return not is_root()
-        return False
+            decision = not is_root()
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._should_escalate - OS fingerprint requested, decision: {decision}")
+                print(f"DEBUG: Exiting NmapScanner._should_escalate")
+            return decision
+        decision = False
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._should_escalate - Default decision: {decision}")
+            print(f"DEBUG: Exiting NmapScanner._should_escalate")
+        return decision
 
     def _get_nmap_escalation_command_path(self) -> str:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._get_nmap_escalation_command_path(args: self)")
+            print(f"DEBUG: Exiting NmapScanner._get_nmap_escalation_command_path with path: {self.nmap_executable_path}")
         return self.nmap_executable_path
 
     def _execute_with_privileges(
         self, nmap_base_cmd: str, scan_args_list: List[str], target: str
     ) -> subprocess.CompletedProcess[str]:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, nmap_base_cmd, scan_args_list, target)
+            print(f"DEBUG: Entering NmapScanner._execute_with_privileges(args: {arg_str})")
         if not isinstance(nmap_base_cmd, str):
             raise ValueError("nmap_base_cmd must be a string path to the Nmap executable.")
         final_nmap_command_parts = [nmap_base_cmd] + scan_args_list + [target]
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._execute_with_privileges - final_nmap_command_parts: {final_nmap_command_parts}")
         escalation_cmd: List[str] = []
         try:
             if is_macos():
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: NmapScanner._execute_with_privileges - macOS detected, preparing osascript.")
                 nmap_command_str = shlex.join(final_nmap_command_parts)
                 escaped_nmap_cmd_str = nmap_command_str.replace('"', '\\"')
                 applescript_cmd = f'do shell script "{escaped_nmap_cmd_str}" with administrator privileges'
                 escalation_cmd = ["osascript", "-e", applescript_cmd]
             elif is_flatpak():
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: NmapScanner._execute_with_privileges - Flatpak detected, preparing flatpak-spawn.")
                 escalation_cmd = ["flatpak-spawn", "--host", "pkexec", "nmap"] + scan_args_list + [target]
             elif is_linux():
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: NmapScanner._execute_with_privileges - Linux detected, preparing pkexec.")
                 escalation_cmd = ["pkexec"] + final_nmap_command_parts
             else:
                 unsupported_msg = f"Privilege escalation not supported on this platform: {sys.platform}"
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: NmapScanner._execute_with_privileges - {unsupported_msg}")
+                    print(f"DEBUG: Exiting NmapScanner._execute_with_privileges")
                 return subprocess.CompletedProcess(
                     args=final_nmap_command_parts, returncode=1, stdout="", stderr=unsupported_msg
                 )
-            return subprocess.run(
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._execute_with_privileges - Escalation command: {escalation_cmd}")
+            process_result = subprocess.run(
                 escalation_cmd, capture_output=True, text=True, check=False, timeout=300
             )
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._execute_with_privileges - Process result: code={process_result.returncode}, stdout='{process_result.stdout[:200]}...', stderr='{process_result.stderr[:200]}...'")
+                print(f"DEBUG: Exiting NmapScanner._execute_with_privileges")
+            return process_result
         except FileNotFoundError as e:
             error_msg = f"Escalation command '{escalation_cmd[0] if escalation_cmd else 'N/A'}' not found. Is it installed? Original error: {e}"
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._execute_with_privileges - FileNotFoundError: {error_msg}")
+                print(f"DEBUG: Exiting NmapScanner._execute_with_privileges")
             return subprocess.CompletedProcess(args=escalation_cmd, returncode=127, stdout="", stderr=error_msg)
         except subprocess.TimeoutExpired as e:
             error_msg = f"Privileged scan timed out after {e.timeout} seconds. Command: {' '.join(e.cmd or [])}"
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._execute_with_privileges - TimeoutExpired: {error_msg}")
+                print(f"DEBUG: Exiting NmapScanner._execute_with_privileges")
             return subprocess.CompletedProcess(args=e.cmd, returncode=-1, stdout=e.stdout or "", stderr=e.stderr or error_msg)
         except Exception as e:
             error_msg = f"An unexpected error occurred during privileged execution ({type(e).__name__}): {e}"
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._execute_with_privileges - Exception: {error_msg}")
+                print(f"DEBUG: Exiting NmapScanner._execute_with_privileges")
             return subprocess.CompletedProcess(args=escalation_cmd, returncode=1, stdout="", stderr=error_msg)
 
     def scan(
@@ -168,6 +232,9 @@ class NmapScanner:
         no_ping: bool = False
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, target, do_os_fingerprint, additional_args_str, nse_script, stealth_scan, port_spec, timing_template, no_ping)
+            print(f"DEBUG: Entering NmapScanner.scan(args: {arg_str})")
+            # This print below is more specific and was requested, so keeping it.
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.scan - Received parameters: target='{target}', os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         
         try:
@@ -175,22 +242,26 @@ class NmapScanner:
                 do_os_fingerprint, additional_args_str, nse_script,
                 stealth_scan, port_spec, timing_template, no_ping
             )
-        except NmapArgumentError as e: 
+        except NmapArgumentError as e:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting NmapScanner.scan due to NmapArgumentError: {e}")
             return None, f"Argument error: {e}"
         
         needs_privilege_escalation = self._should_escalate(do_os_fingerprint, current_scan_args_list)
-
         if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner.scan - needs_privilege_escalation: {needs_privilege_escalation}")
+            print(f"DEBUG: NmapScanner.scan - current_scan_args_list: {current_scan_args_list}")
+            print(f"DEBUG: NmapScanner.scan - scan_args_str_for_direct_scan: '{scan_args_str_for_direct_scan}'")
+
+
+        if DEBUG_ENABLED: # Duplicates part of the logic from the previous DEBUG block, but ensures it's just before execution
             nmap_command_to_log = ""
             if needs_privilege_escalation:
-                # For privileged scans, current_scan_args_list is more relevant before -oX - is added
-                # and self.nmap_executable_path is used by pkexec/osascript directly with these args
-                # The exact command depends on the escalation method in _execute_with_privileges
-                # This provides a general idea of the core nmap part of the command.
-                nmap_command_to_log = f"(Privileged) Nmap part: {self.nmap_executable_path} {' '.join(current_scan_args_list)} {target}"
+                # This will show the command before -oX - might be added for privileged XML parsing
+                nmap_command_to_log = f"(Privileged) Nmap base command: {self.nmap_executable_path} {' '.join(current_scan_args_list)} {target}"
             else:
                 nmap_command_to_log = f"nmap {scan_args_str_for_direct_scan} {target}"
-            print(f"DEBUG: NmapScanner.scan - Effective Nmap command to be executed: {nmap_command_to_log}")
+            print(f"DEBUG: NmapScanner.scan - Final Nmap command to be executed: {nmap_command_to_log}")
 
         if needs_privilege_escalation:
             # For privileged scans, ensure Nmap produces XML output to stdout (`-oX -`)
@@ -219,11 +290,20 @@ class NmapScanner:
             
             if completed_process.returncode == 0 and completed_process.stdout:
                 try:
+                    if DEBUG_ENABLED:
+                        print(f"DEBUG: NmapScanner.scan - Privileged scan successful, parsing XML output. Output size: {len(completed_process.stdout)}")
                     self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout)
-                    return self._parse_scan_results(do_os_fingerprint)
+                    result = self._parse_scan_results(do_os_fingerprint)
+                    if DEBUG_ENABLED:
+                        print(f"DEBUG: Exiting NmapScanner.scan (privileged path) with result: {repr(result)[:200]}...")
+                    return result
                 except nmap.PortScannerError as e:
+                    if DEBUG_ENABLED:
+                        print(f"DEBUG: Exiting NmapScanner.scan due to nmap.PortScannerError (privileged path): {e}")
                     return None, f"Failed to parse Nmap XML output: {getattr(e, 'value', str(e))}"
                 except Exception as e:
+                    if DEBUG_ENABLED:
+                        print(f"DEBUG: Exiting NmapScanner.scan due to Exception (privileged path): {e}")
                     return None, f"An unexpected error occurred parsing Nmap output: {e}"
             else:
                 error_message = f"Privileged scan execution error (Code {completed_process.returncode}): "
@@ -233,19 +313,30 @@ class NmapScanner:
                     error_message += completed_process.stdout.strip()
                 else:
                     error_message += "Unknown error during privileged scan execution. Nmap command might not be found by the escalation tool (e.g., pkexec)."
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting NmapScanner.scan (privileged path) with error: {error_message}")
                 return None, error_message
-        else:
+        else: # Non-privileged scan
             try:
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: NmapScanner.scan - Executing non-privileged scan.")
                 self.nm.scan(hosts=target, arguments=scan_args_str_for_direct_scan, sudo=False)
-                return self._parse_scan_results(do_os_fingerprint)
+                result = self._parse_scan_results(do_os_fingerprint)
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting NmapScanner.scan (non-privileged path) with result: {repr(result)[:200]}...")
+                return result
             except nmap.PortScannerError as e:
                 nmap_error_output = getattr(e, 'value', str(e)).strip()
                 if "program was not found in path" in nmap_error_output:
                     nmap_error_output = f"Nmap executable not found. Please ensure Nmap is installed and in your system's PATH. (Original error: {nmap_error_output})"
                 elif not nmap_error_output:
                     nmap_error_output = str(e)
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting NmapScanner.scan due to nmap.PortScannerError (non-privileged path): {nmap_error_output}")
                 return None, f"Nmap execution error: {nmap_error_output}"
             except Exception as e:
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting NmapScanner.scan due to Exception (non-privileged path): {e}")
                 return None, f"An unexpected error occurred during direct scan ({type(e).__name__}): {e}"
         
     def build_scan_args(
@@ -260,6 +351,9 @@ class NmapScanner:
         no_ping: bool = False
     ) -> str:
         if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, do_os_fingerprint, additional_args_str, nse_script, default_args_str, stealth_scan, port_spec, timing_template, no_ping)
+            print(f"DEBUG: Entering NmapScanner.build_scan_args(args: {arg_str})")
+            # This print below is more specific and was requested, so keeping it.
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Input parameters: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', default_args_str='{default_args_str}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         if not isinstance(additional_args_str, str):
             raise NmapArgumentError("Additional arguments must be a string.")
@@ -290,13 +384,20 @@ class NmapScanner:
         final_command_str = shlex.join(final_args_list)
         if DEBUG_ENABLED:
             print(f"DEBUG: NmapScanner.build_scan_args - Final Nmap arguments string: {final_command_str}")
+            print(f"DEBUG: Exiting NmapScanner.build_scan_args")
         return final_command_str
 
     def _apply_os_fingerprint_arg(self, final_args_list: List[str], do_os_fingerprint: bool) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_os_fingerprint_arg(final_args_list: {final_args_list}, do_os_fingerprint: {do_os_fingerprint})")
         if do_os_fingerprint and not self._is_arg_present(final_args_list, ["-O"]):
             final_args_list.append("-O")
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_os_fingerprint_arg (final_args_list: {final_args_list})")
 
     def _apply_nse_script_arg(self, final_args_list: List[str], nse_script: Optional[str]) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_nse_script_arg(final_args_list: {final_args_list}, nse_script: {nse_script})")
         new_list = []
         skip_next = False
         for i, arg in enumerate(final_args_list):
@@ -313,8 +414,12 @@ class NmapScanner:
         final_args_list[:] = new_list
         if nse_script and nse_script.strip():
             final_args_list.extend(["--script", nse_script])
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_nse_script_arg (final_args_list: {final_args_list})")
 
     def _apply_stealth_scan_arg(self, final_args_list: List[str], stealth_scan: bool) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_stealth_scan_arg(final_args_list: {final_args_list}, stealth_scan: {stealth_scan})")
         SCAN_TYPE_ARGS = ["-sS", "-sT", "-sU", "-sA", "-sW", "-sM", "-sN", "-sF", "-sX", "-sY", "-sZ", "-sO", "-PR"]
         if stealth_scan and not self._is_arg_present(final_args_list, SCAN_TYPE_ARGS):
             final_args_list.append("-sS")
@@ -322,12 +427,20 @@ class NmapScanner:
             if DEBUG_ENABLED:
                  print(f"Warning: Stealth scan (-sS) selected, but conflicting scan type arguments are already present: "
                        f"{' '.join(final_args_list)}. User/default arguments will take precedence.", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_stealth_scan_arg (final_args_list: {final_args_list})")
 
     def _apply_no_ping_arg(self, final_args_list: List[str], no_ping: bool) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_no_ping_arg(final_args_list: {final_args_list}, no_ping: {no_ping})")
         if no_ping and not self._is_arg_present(final_args_list, ["-Pn"]):
             final_args_list.append("-Pn")
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_no_ping_arg (final_args_list: {final_args_list})")
 
     def _apply_port_spec_arg(self, final_args_list: List[str], port_spec: Optional[str]) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_port_spec_arg(final_args_list: {final_args_list}, port_spec: {port_spec})")
         new_list = []
         skip_next = False
         for i, arg in enumerate(final_args_list):
@@ -342,8 +455,12 @@ class NmapScanner:
         final_args_list[:] = new_list
         if port_spec and port_spec.strip():
             final_args_list.extend(["-p", port_spec.strip()])
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_port_spec_arg (final_args_list: {final_args_list})")
 
     def _apply_timing_template_arg(self, final_args_list: List[str], timing_template: Optional[str]) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_timing_template_arg(final_args_list: {final_args_list}, timing_template: {timing_template})")
         final_args_list[:] = [arg for arg in final_args_list if not (arg.startswith("-T") and len(arg) == 3 and arg[2].isdigit())]
         if timing_template and timing_template.strip():
             if timing_template in {"-T0", "-T1", "-T2", "-T3", "-T4", "-T5"}:
@@ -351,8 +468,12 @@ class NmapScanner:
             else:
                 if DEBUG_ENABLED:
                     print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_timing_template_arg (final_args_list: {final_args_list})")
 
     def _apply_gsettings_dns_arg(self, final_args_list: List[str]) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering NmapScanner._apply_gsettings_dns_arg(final_args_list: {final_args_list})")
         try:
             gsettings_dns = Gio.Settings.new("com.github.mclellac.NetworkMap") 
             dns_servers_str = gsettings_dns.get_string("dns-servers")
@@ -370,20 +491,35 @@ class NmapScanner:
         except Exception as e:
             if DEBUG_ENABLED:
                 print(f"Warning: An unexpected error occurred while retrieving DNS servers from GSettings: {e}", file=sys.stderr)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NmapScanner._apply_gsettings_dns_arg (final_args_list: {final_args_list})")
 
     def _is_arg_present(self, args_list: List[str], check_args: List[str], is_prefix_check: bool = False) -> bool:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, args_list, check_args, is_prefix_check=is_prefix_check)
+            print(f"DEBUG: Entering NmapScanner._is_arg_present(args: {arg_str})")
         for arg_to_check in check_args:
             if is_prefix_check:
                 if any(existing_arg.startswith(arg_to_check) for existing_arg in args_list):
+                    if DEBUG_ENABLED: print(f"DEBUG: Exiting NmapScanner._is_arg_present with True (prefix match for {arg_to_check})")
                     return True
             else:
                 if arg_to_check in args_list:
+                    if DEBUG_ENABLED: print(f"DEBUG: Exiting NmapScanner._is_arg_present with True (exact match for {arg_to_check})")
                     return True
+        if DEBUG_ENABLED: print(f"DEBUG: Exiting NmapScanner._is_arg_present with False")
         return False
 
     def _parse_scan_results(
         self, do_os_fingerprint: bool
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, do_os_fingerprint)
+            print(f"DEBUG: Entering NmapScanner._parse_scan_results(args: {arg_str})")
+            # For now, not logging self.nm.analyse_nmap_xml_scan() output directly as it can be huge.
+            # Consider logging a hash or size if needed: print(f"DEBUG: Parsing Nmap XML Data (Size: {len(self.nm.analyse_nmap_xml_scan()) if self.nm.analyse_nmap_xml_scan() else 0})")
+            print(f"DEBUG: NmapScanner._parse_scan_results - Parsing Nmap XML data...")
+
         hosts_data: List[Dict[str, Any]] = []
         scanned_host_ids = self.nm.all_hosts()
         if not scanned_host_ids:
@@ -524,7 +660,11 @@ class NmapScanner:
         scan_stats = self.nm.scanstats()
         if scan_stats and DEBUG_ENABLED:
             stats_str = f"Scan stats: {scan_stats.get('uphosts', 'N/A')} up, {scan_stats.get('downhosts', 'N/A')} down, {scan_stats.get('totalhosts', 'N/A')} total. Elapsed: {scan_stats.get('elapsed', 'N/A')}s."
+            # This print was already conditional, ensuring it stays.
             if DEBUG_ENABLED:
                 print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._parse_scan_results - Returning hosts_data: {repr(hosts_data)[:200]}..., current_message: {current_message}")
+            print(f"DEBUG: Exiting NmapScanner._parse_scan_results")
         return hosts_data, current_message

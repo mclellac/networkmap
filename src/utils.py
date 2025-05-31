@@ -1,13 +1,19 @@
 import os
 import sys 
-from typing import List, Tuple
+from typing import List, Tuple, Optional # Added Optional for scripts_directory type hint
 import logging
+from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
 
 from gi.repository import Adw
 
 
 def apply_theme(theme: str):
     """Applies the selected Adwaita theme using Adw.StyleManager."""
+    if DEBUG_ENABLED:
+        # Not using _get_arg_value_reprs here as it's in the same file and might not be defined yet
+        # depending on import order if this file was structured differently.
+        # Direct repr is safer for self-contained utils.
+        print(f"DEBUG: Entering utils.apply_theme(args: theme={repr(theme)})")
     style_manager = Adw.StyleManager.get_default()
     if theme == "light":
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
@@ -15,6 +21,8 @@ def apply_theme(theme: str):
         style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
     else: # Default or system theme
         style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+    if DEBUG_ENABLED:
+        print(f"DEBUG: Exiting utils.apply_theme")
 
 
 def discover_nse_scripts() -> List[str]:
@@ -25,11 +33,13 @@ def discover_nse_scripts() -> List[str]:
         A sorted list of script names (without .nse extension).
         Returns an empty list if the directory is not accessible or an error occurs.
     """
+    if DEBUG_ENABLED:
+        print(f"DEBUG: Entering utils.discover_nse_scripts()")
     # Standard Nmap script directory locations for Linux/macOS.
     # Order matters: check user-specific paths first, then system paths.
     # Flatpak sandboxed paths are not directly accessible; Nmap inside Flatpak would use its own paths.
     potential_paths = []
-    if is_flatpak():
+    if is_flatpak(): # is_flatpak will also be logged
         potential_paths.append("/app/share/nmap/scripts/") # Add Flatpak path first
 
     potential_paths.extend([
@@ -37,6 +47,8 @@ def discover_nse_scripts() -> List[str]:
         "/usr/local/share/nmap/scripts/",      # Common for locally compiled Nmap on macOS/Linux
         "/usr/share/nmap/scripts/",            # Standard system path for Nmap on Linux
     ])
+    if DEBUG_ENABLED:
+        print(f"DEBUG: utils.discover_nse_scripts - Potential NSE script paths: {potential_paths}")
     
     # For Flatpak, Nmap scripts are bundled within the Flatpak environment.
     # Accessing host system Nmap scripts from a sandboxed Flatpak app is generally not done.
@@ -58,7 +70,12 @@ def discover_nse_scripts() -> List[str]:
         # If running in Flatpak, this might be expected if Nmap isn't bundled in a way this function can find.
         # The application might rely on Nmap finding its own scripts internally.
         # Consider if an empty list is appropriate or if this indicates a setup issue outside Flatpak.
+        if DEBUG_ENABLED:
+            print(f"DEBUG: utils.discover_nse_scripts - No accessible script directory found.")
+            print(f"DEBUG: Exiting utils.discover_nse_scripts")
         return []
+    if DEBUG_ENABLED:
+        print(f"DEBUG: utils.discover_nse_scripts - Using scripts_directory: {scripts_directory}")
 
     categorized_scripts: List[Tuple[str, str]] = []
     # Define common prefixes for categorization.
@@ -97,7 +114,10 @@ def discover_nse_scripts() -> List[str]:
 
     if not final_script_names:
         logging.info(f"No NSE scripts found in {scripts_directory}.")
-        
+
+    if DEBUG_ENABLED:
+        print(f"DEBUG: utils.discover_nse_scripts - Found {len(final_script_names)} scripts.")
+        print(f"DEBUG: Exiting utils.discover_nse_scripts")
     return final_script_names
 
 
@@ -108,15 +128,19 @@ def is_root() -> bool:
     Returns:
         True if the effective user ID is 0, False otherwise.
     """
+    # This is a simple check, extensive logging might be too much.
+    # Consider adding if specific issues arise.
     return os.geteuid() == 0
 
 
 def is_macos() -> bool:
     """Checks if the current platform is macOS."""
+    # Simple check.
     return sys.platform == "darwin"
 
 def is_linux() -> bool:
     """Checks if the current platform is Linux."""
+    # Simple check.
     return sys.platform.startswith("linux")
 
 def is_flatpak() -> bool:
@@ -125,8 +149,22 @@ def is_flatpak() -> bool:
     Tries to detect Flatpak by checking for the /.flatpak-info file
     or the FLATPAK_ID environment variable.
     """
+    # This function is used by logging itself, so avoid direct print here to prevent recursion if logging is set up early.
+    # If DEBUG_ENABLED were available and this wasn't a primordial check, logging would be:
+    # if DEBUG_ENABLED:
+    #     print(f"DEBUG: Entering utils.is_flatpak()")
+    #     result = os.path.exists('/.flatpak-info') or bool(os.environ.get('FLATPAK_ID'))
+    #     print(f"DEBUG: Exiting utils.is_flatpak with result: {result}")
+    #     return result
     if os.path.exists('/.flatpak-info'): # Standard Flatpak sandbox file
         return True
     if os.environ.get('FLATPAK_ID'): # Standard Flatpak environment variable
         return True
     return False
+
+def _get_arg_value_reprs(*args, **kwargs) -> str:
+    """Helper to create a string representation of function arguments for logging."""
+    # Do not add DEBUG logging to this helper itself to avoid recursion.
+    arg_reprs = [repr(arg) for arg in args]
+    kwarg_reprs = [f"{key}={repr(value)}" for key, value in kwargs.items()]
+    return ", ".join(arg_reprs + kwarg_reprs)

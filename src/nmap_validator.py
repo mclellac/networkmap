@@ -1,8 +1,12 @@
 import re
 import sys
+from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs # Import the helper
 
 class NmapCommandValidator:
     def __init__(self):
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: self)")
         self.forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
 
         # Common Nmap options
@@ -52,6 +56,8 @@ class NmapCommandValidator:
         # Options that can have arguments directly appended (e.g., -T4)
         # For these, the main parser might not see a separate arg, so we must recognize them.
         self.prefix_options = {"-T"} # -T0, -T1, ..., -T5 are distinct, but -T is a prefix
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
 
     def validate_arguments(self, command_args_str: str) -> tuple[bool, str]:
@@ -66,9 +72,15 @@ class NmapCommandValidator:
             is_valid is True if arguments are considered valid, False otherwise.
             error_message contains a description of the validation failure if any.
         """
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, command_args_str)
+            print(f"DEBUG: Entering {self.__class__.__name__}.validate_arguments(args: {arg_str})")
+
         # 1. Overall check for forbidden characters (shell injection, etc.)
         for char in self.forbidden_chars:
             if char in command_args_str:
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting {self.__class__.__name__}.validate_arguments (Validation Fail: Forbidden char '{char}')")
                 return False, f"Command arguments contain forbidden character: '{char}'."
 
         parts = command_args_str.split()
@@ -160,6 +172,9 @@ class NmapCommandValidator:
                             i += 1
                         # If no argument or next is an option, it's fine (-PS alone is valid)
             i += 1
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.validate_arguments (Validation OK)")
         return True, ""
 
 
