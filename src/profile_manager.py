@@ -93,6 +93,9 @@ class ProfileManager:
             # Depending on strictness, could raise ProfileStorageError here if any entry is malformed.
             # Current behavior: loads valid profiles, skips invalid ones.
         if DEBUG_ENABLED:
+            print(f"DEBUG: {self.__class__.__name__}.load_profiles - Loaded {len(profiles)} profiles.")
+            for idx, profile_item in enumerate(profiles):
+                print(f"DEBUG: {self.__class__.__name__}.load_profiles - Profile {idx} ('{profile_item.get('name', 'N/A')}'): {repr(profile_item)}")
             print(f"DEBUG: Exiting {self.__class__.__name__}.load_profiles (loaded {len(profiles)} profiles)")
         return profiles
 
@@ -102,8 +105,11 @@ class ProfileManager:
                ProfileStorageError: If there's an issue serializing or saving profiles.
         """
         if DEBUG_ENABLED:
-            # repr(profiles) might be very long
             print(f"DEBUG: Entering {self.__class__.__name__}.save_profiles(args: self, num_profiles={len(profiles)})")
+            if profiles:
+                 print(f"DEBUG: {self.__class__.__name__}.save_profiles - Saving {len(profiles)} profiles.")
+                 for idx, profile_item in enumerate(profiles):
+                     print(f"DEBUG: {self.__class__.__name__}.save_profiles - Profile {idx} ('{profile_item.get('name', 'N/A')}'): {repr(profile_item)}")
         profiles_json_list: List[str] = []
         for profile in profiles:
             try:

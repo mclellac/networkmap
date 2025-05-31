@@ -303,6 +303,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                     profile_to_edit=profile_to_edit,
                     existing_profile_names=all_profile_names
                 )
+                if DEBUG_ENABLED and profile_to_edit: # Check if profile_to_edit is not None before printing
+                    print(f"DEBUG: {self.__class__.__name__}._on_edit_profile_clicked - Loading profile for editing: {repr(profile_to_edit)}")
                 dialog.connect("profile-action", self._handle_profile_dialog_action_edit, profile_name)
                 dialog.present(self)
             else:

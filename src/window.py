@@ -103,7 +103,14 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _on_simple_scan_param_changed(self, widget: Gtk.Widget, pspec: Optional[GObject.ParamSpec] = None) -> None:
         if DEBUG_ENABLED:
             arg_str = _get_arg_value_reprs(self, widget, pspec)
+            widget_name = "Unknown"
+            new_state = "Unknown"
+            if isinstance(widget, Gtk.Switch):
+                widget_name = widget.get_buildable_id() if hasattr(widget, 'get_buildable_id') and widget.get_buildable_id() else widget.get_name()
+                new_state = widget.get_active()
             print(f"DEBUG: Entering {self.__class__.__name__}._on_simple_scan_param_changed(args: {arg_str})")
+            print(f"DEBUG: Window._on_simple_scan_param_changed - Widget '{widget_name}' new state: {new_state}")
+
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
         if DEBUG_ENABLED:
@@ -263,8 +270,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             if found_profile:
                 if DEBUG_ENABLED:
                     profile_name_found = found_profile.get('name', 'UnknownName')
-                    profile_command_found = found_profile.get('command', 'NoCommand')
-                    print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}', command='{profile_command_found}'")
+                    # profile_command_found = found_profile.get('command', 'NoCommand') # Redundant, _apply_scan_profile will log it
+                    print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}'")
+                    print(f"DEBUG: {self.__class__.__name__}._on_profile_selected - Selected profile '{profile_name_found}': {repr(found_profile)}")
                 self._apply_scan_profile(found_profile)
                 if DEBUG_ENABLED:
                     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected (after apply) - arguments_entry_row text: '{self.arguments_entry_row.get_text()}'")
@@ -299,15 +307,36 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _get_current_scan_parameters(self) -> Dict[str, Any]:
         # Utility method, verbose logging might be too much.
         # The caller _initiate_scan_procedure already logs the returned dict.
+        # However, per new requirement, adding itemized logging here.
+        target_value = self.target_entry_row.get_text().strip()
+        os_fingerprint_toggle_state = self.os_fingerprint_switch.get_active()
+        additional_args_value = self.arguments_entry_row.get_text()
+        nse_script_value = self.selected_nse_script
+        stealth_scan_toggle_state = self.stealth_scan_switch.get_active()
+        ports_value = self.port_spec_entry_row.get_text().strip()
+        timing_template_value = self.selected_timing_template
+        no_ping_toggle_state = self.no_ping_switch.get_active()
+
+        if DEBUG_ENABLED:
+            print("DEBUG: Window - UI Scan Parameters:")
+            print(f"  Target: {repr(target_value)}")
+            print(f"  OS Fingerprint (-O): {os_fingerprint_toggle_state}")
+            print(f"  Additional Args: {repr(additional_args_value)}")
+            print(f"  NSE Script: {repr(nse_script_value)}")
+            print(f"  Stealth Scan (-sS): {stealth_scan_toggle_state}")
+            print(f"  Ports: {repr(ports_value)}")
+            print(f"  Timing Template: {repr(timing_template_value)}")
+            print(f"  No Ping (-Pn): {no_ping_toggle_state}")
+
         return {
-            "target": self.target_entry_row.get_text().strip(),
-            "do_os_fingerprint": self.os_fingerprint_switch.get_active(),
-            "additional_args_str": self.arguments_entry_row.get_text(),
-            "nse_script": self.selected_nse_script,
-            "stealth_scan": self.stealth_scan_switch.get_active(),
-            "port_spec": self.port_spec_entry_row.get_text().strip(),
-            "timing_template": self.selected_timing_template,
-            "no_ping": self.no_ping_switch.get_active()
+            "target": target_value,
+            "do_os_fingerprint": os_fingerprint_toggle_state,
+            "additional_args_str": additional_args_value,
+            "nse_script": nse_script_value,
+            "stealth_scan": stealth_scan_toggle_state,
+            "port_spec": ports_value,
+            "timing_template": timing_template_value,
+            "no_ping": no_ping_toggle_state
         }
 
     def _update_nmap_command_preview(self, *args) -> None:
@@ -409,6 +438,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.selected_nse_script = None
             if DEBUG_ENABLED:
                 print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Window._on_nse_script_selected - New selection: {repr(self.selected_nse_script)}")
+
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
         if DEBUG_ENABLED:
@@ -425,6 +458,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.selected_timing_template = self.timing_options.get(display_string)
         else: 
             self.selected_timing_template = None
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Window._on_timing_template_selected - New selection: {repr(self.selected_timing_template)}")
+
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
         if DEBUG_ENABLED:
@@ -474,9 +511,10 @@ class NetworkMapWindow(Adw.ApplicationWindow):
     def _apply_scan_profile(self, profile: Optional[ScanProfile]) -> None:
         """Applies settings from a scan profile to the UI using parsed command options."""
         if DEBUG_ENABLED:
-            # repr(profile) might be too long if command is long, just log name or if it exists
-            profile_repr = f"Profile(name={profile['name']})" if profile else "None"
-            print(f"DEBUG: Entering {self.__class__.__name__}._apply_scan_profile(args: self, profile: {profile_repr})")
+            profile_name_for_log = profile['name'] if profile else "None"
+            # Using repr(profile) for full content as requested by task for this specific log
+            print(f"DEBUG: Entering {self.__class__.__name__}._apply_scan_profile(args: self, profile_name='{profile_name_for_log}')")
+            print(f"DEBUG: {self.__class__.__name__}._apply_scan_profile - Applying profile '{profile_name_for_log}': {repr(profile)}")
 
         if profile:
             command_str = profile.get('command', '')
@@ -745,11 +783,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
         if DEBUG_ENABLED:
-            # This existing log is good.
+            # This existing log is good for entry and host count.
             print(f"DEBUG: NetworkMapWindow._populate_results_listbox - Populating results for {len(hosts_data)} hosts.")
-            # Entry log for the method itself
-            arg_str = _get_arg_value_reprs(self, f"len(hosts_data)={len(hosts_data)}")
+            arg_str = _get_arg_value_reprs(self, f"len(hosts_data)={len(hosts_data)}") # Redundant with above but follows pattern
             print(f"DEBUG: Entering {self.__class__.__name__}._populate_results_listbox(args: {arg_str})")
+            # Optionally, iterate and log a one-liner summary for each host if not too verbose
+            for host_info in hosts_data:
+                print(f"DEBUG:   Host for UI: ID: {host_info.get('id')}, State: {host_info.get('state')}, Ports: {len(host_info.get('ports', []))}")
         for host_data in hosts_data:
             row = HostInfoExpanderRow(host_data=host_data, raw_details_text=host_data.get("raw_details_text", ""))
             if hasattr(self, 'font_css_provider'): 

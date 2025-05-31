@@ -102,7 +102,9 @@ class NseScriptSelectionDialog(Adw.Dialog):
         # For now, only predefined scripts are handled, so direct list comprehension is fine.
         final_scripts_str = ",".join(sorted(list(set(selected_scripts_list))))
         if DEBUG_ENABLED:
-            print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Emitting scripts-selected with: {final_scripts_str}")
+            # Log the list before joining, and the final string
+            print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Selected NSE scripts list: {repr(selected_scripts_list)}")
+            print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Final NSE scripts string to emit: {repr(final_scripts_str)}")
 
         self.emit("scripts-selected", final_scripts_str)
         self.close()
