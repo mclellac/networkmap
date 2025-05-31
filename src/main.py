@@ -19,7 +19,7 @@ from gi.repository import Gtk, Gio, Adw, GLib
 
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
-from .utils import apply_theme
+from .utils import apply_theme, _get_arg_value_reprs
 from . import config
 
 APP_ID: str = "com.github.mclellac.NetworkMap"
@@ -39,6 +39,8 @@ class NetworkMapApplication(Adw.Application):
 
     def __init__(self) -> None:
         """Initializes the NetworkMapApplication."""
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Entering NetworkMapApplication.__init__(args: self)")
         super().__init__(
             application_id=APP_ID,
             flags=Gio.ApplicationFlags.FLAGS_NONE,
@@ -51,30 +53,47 @@ class NetworkMapApplication(Adw.Application):
         self.create_action("help_shortcuts", self._on_help_shortcuts_action, ["<Control>question", "F1"])
 
         self._apply_initial_theme()
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication.__init__")
 
     def _apply_initial_theme(self) -> None:
         """Applies the saved theme preference at application startup."""
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Entering NetworkMapApplication._apply_initial_theme(args: self)")
         settings = Gio.Settings.new(APP_ID)
         theme_str = settings.get_string("theme")
         apply_theme(theme_str)
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication._apply_initial_theme")
 
     def do_activate(self) -> None:
         """
         Called when the application is activated.
         Presents the main application window, creating it if necessary.
         """
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Entering NetworkMapApplication.do_activate(args: self)")
         win: Optional[NetworkMapWindow] = self.get_active_window()
         if not win:
             win = NetworkMapWindow(application=self)
         win.present()
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication.do_activate")
 
     def _on_quit_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'quit' action to exit the application."""
+        if config.DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(action, parameter)
+            print(f"DEBUG: Entering NetworkMapApplication._on_quit_action(args: {arg_str})")
         self.quit()
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication._on_quit_action")
 
     def _on_about_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'about' action by showing the application's About dialog."""
         if config.DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(action, parameter)
+            print(f"DEBUG: Entering NetworkMapApplication._on_about_action(args: {arg_str})")
             print(f"DEBUG: UI Action: Opening About dialog.")
         about_dialog = Adw.AboutDialog(
             application_name=APP_NAME,
@@ -99,12 +118,16 @@ class NetworkMapApplication(Adw.Application):
             pass # It's okay if translator_credits are not set
 
         about_dialog.present()
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication._on_about_action")
 
     def _on_preferences_action(
         self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]
     ) -> None:
         """Handles the 'preferences' action by creating and presenting the preferences window."""
         if config.DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(action, parameter)
+            print(f"DEBUG: Entering NetworkMapApplication._on_preferences_action(args: {arg_str})")
             print(f"DEBUG: UI Action: Opening Preferences window.")
         active_window = self.get_active_window()
         if active_window is None:
@@ -116,10 +139,14 @@ class NetworkMapApplication(Adw.Application):
 
         prefs_window = NetworkMapPreferencesWindow(parent_window=active_window)
         prefs_window.present()
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication._on_preferences_action")
 
     def _on_help_shortcuts_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'help_shortcuts' action by displaying the shortcuts window."""
         if config.DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(action, parameter)
+            print(f"DEBUG: Entering NetworkMapApplication._on_help_shortcuts_action(args: {arg_str})")
             print(f"DEBUG: UI Action: Opening Help Shortcuts window.")
         # Assuming 'help-overlay.ui' is the compiled UI file for the shortcuts
         # and it's included in the GResources.
@@ -136,6 +163,8 @@ class NetworkMapApplication(Adw.Application):
                 print("Error: Could not load the shortcuts window object 'help_overlay' from resources.", file=sys.stderr)
         except GLib.Error as e:
             print(f"Error loading shortcuts window from resource: {e}", file=sys.stderr)
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication._on_help_shortcuts_action")
 
 
     def create_action(
@@ -152,11 +181,16 @@ class NetworkMapApplication(Adw.Application):
             callback: The function to be called when the action is activated.
             shortcuts: An optional list of keyboard accelerators for the action.
         """
+        if config.DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(name, callback, shortcuts)
+            print(f"DEBUG: Entering NetworkMapApplication.create_action(args: {arg_str})")
         action = Gio.SimpleAction.new(name, None)
         action.connect("activate", callback)
         self.add_action(action)
         if shortcuts:
             self.set_accels_for_action(f"app.{name}", shortcuts)
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: Exiting NetworkMapApplication.create_action")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -175,6 +209,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     # For now, let's check args.debug as it's the earliest point.
     # A more complex setup might involve a pre-config logging setup.
     if '--debug' in current_argv: # Basic check before full parsing
+        # This print is before config.DEBUG_ENABLED is officially set via parsing,
+        # so it relies on the raw argument check.
         print(f"DEBUG: main() received initial sys.argv: {current_argv}")
 
     parser = argparse.ArgumentParser(description="Network Map application")
@@ -188,16 +224,27 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.debug:
         config.DEBUG_ENABLED = True
+        # This is the first point where config.DEBUG_ENABLED is reliably set.
+        print(f"DEBUG: config.DEBUG_ENABLED set to True via --debug flag.")
+        print(f"DEBUG: main() parsed args: {args}, remaining_argv: {remaining_argv}")
+
 
     if config.DEBUG_ENABLED:
-        print("DEBUG: Debug mode enabled.")
+        print("DEBUG: Debug mode enabled.") # This one is slightly redundant if the above is printed.
 
     # Pass remaining arguments (plus program name) to app.run()
     # GTK application typically expects sys.argv format
     processed_argv_for_app = [current_argv[0]] + remaining_argv
 
+    if config.DEBUG_ENABLED:
+        print(f"DEBUG: Entering main function with processed_argv_for_app: {processed_argv_for_app}")
+
     app = NetworkMapApplication()
-    return app.run(processed_argv_for_app)
+    exit_status = app.run(processed_argv_for_app)
+
+    if config.DEBUG_ENABLED:
+        print(f"DEBUG: Exiting main function with status: {exit_status}")
+    return exit_status
 
 
 if __name__ == "__main__":

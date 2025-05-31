@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 from .nmap_validator import NmapCommandValidator
 from .profile_command_utils import parse_command_to_options, build_command_from_options, ProfileOptions
 from .config import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs # Import the helper
 
 class ProfileEditorDialog(Adw.Dialog):
     __gtype_name__ = "NetworkMapProfileEditorDialog"
@@ -16,6 +17,11 @@ class ProfileEditorDialog(Adw.Dialog):
     def __init__(self,
                  profile_to_edit: Optional[Dict[str, Any]] = None,
                  existing_profile_names: Optional[List[str]] = None):
+        if DEBUG_ENABLED:
+            # repr(profile_to_edit) could be large if command is long
+            profile_name_for_log = profile_to_edit['name'] if profile_to_edit else "None"
+            arg_str = _get_arg_value_reprs(self, f"profile_to_edit_name={profile_name_for_log}", existing_profile_names=existing_profile_names)
+            print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: {arg_str})")
 
         super().__init__()
 
@@ -178,9 +184,13 @@ class ProfileEditorDialog(Adw.Dialog):
         self.set_default_widget(save_button)
         self.set_can_close(False)
         self.set_size_request(400, -1)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
     def do_response(self, response_id: str):
         if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.do_response(args: self, response_id={repr(response_id)})")
+            # Existing specific log for response_id is good.
             print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
@@ -263,18 +273,30 @@ class ProfileEditorDialog(Adw.Dialog):
             if DEBUG_ENABLED:
                 print("DEBUG: cancel - calling self.force_close()", file=sys.stderr)
             self.force_close()
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.do_response")
 
     def _on_host_discovery_ping_switch_toggled(self, switch_row: Adw.SwitchRow, pspec: Optional[GObject.ParamSpec], entry_row: Adw.EntryRow) -> None:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, switch_row, pspec, entry_row)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_host_discovery_ping_switch_toggled(args: {arg_str}, active: {switch_row.get_active()})")
         entry_row.set_visible(switch_row.get_active())
         if not switch_row.get_active():
             entry_row.set_text("")
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_host_discovery_ping_switch_toggled")
 
     def _show_alert_dialog(self, message: str):
         if DEBUG_ENABLED:
+            # Existing specific log is fine.
             print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr)
+            # Entry log for the method itself
+            print(f"DEBUG: Entering {self.__class__.__name__}._show_alert_dialog(args: self, message={repr(message)})")
         alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
         alert_dialog.add_response("ok", "OK")
         alert_dialog.set_default_response("ok")
         alert_dialog.set_transient_for(self)
         alert_dialog.set_modal(True)
         alert_dialog.present()
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._show_alert_dialog")

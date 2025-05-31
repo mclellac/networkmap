@@ -1,7 +1,9 @@
 import json
-import sys # Added to fix NameError for sys.stderr
+import sys
 from typing import List, Dict, Any, TypedDict, Optional, Tuple
 from gi.repository import Gio
+from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs # Import the helper
 
 class ProfileManagerError(Exception):
     """Base class for exceptions in ProfileManager."""
@@ -28,16 +30,25 @@ class ScanProfile(TypedDict):
 
 class ProfileManager:
     def __init__(self, settings_schema_id: str = "com.github.mclellac.NetworkMap"):
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, settings_schema_id=settings_schema_id)
+            print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: {arg_str})")
         self.settings = Gio.Settings.new(settings_schema_id)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
     def load_profiles(self) -> List[ScanProfile]:
         """Loads scan profiles from GSettings.
            Raises:
                ProfileStorageError: If there's an issue loading or parsing profiles.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.load_profiles(args: self)")
         try:
             profiles_json = self.settings.get_strv(PROFILES_SCHEMA_KEY)
         except Exception as e: # GSettings access errors might be GLib.Error
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.load_profiles with Exception: {e}")
             raise ProfileStorageError(f"Failed to load profiles from GSettings: {e}") from e
 
         profiles: List[ScanProfile] = []
@@ -81,7 +92,8 @@ class ProfileManager:
             print(error_summary, file=sys.stderr)
             # Depending on strictness, could raise ProfileStorageError here if any entry is malformed.
             # Current behavior: loads valid profiles, skips invalid ones.
-
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.load_profiles (loaded {len(profiles)} profiles)")
         return profiles
 
     def save_profiles(self, profiles: List[ScanProfile]) -> None:
@@ -89,6 +101,9 @@ class ProfileManager:
            Raises:
                ProfileStorageError: If there's an issue serializing or saving profiles.
         """
+        if DEBUG_ENABLED:
+            # repr(profiles) might be very long
+            print(f"DEBUG: Entering {self.__class__.__name__}.save_profiles(args: self, num_profiles={len(profiles)})")
         profiles_json_list: List[str] = []
         for profile in profiles:
             try:
@@ -99,14 +114,22 @@ class ProfileManager:
                 profiles_json_list.append(json.dumps(profile))
             except TypeError as e: # Should not happen if ScanProfile is used correctly
                 profile_name = profile.get('name', 'Unknown Profile') if isinstance(profile, dict) else 'Unknown Profile'
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting {self.__class__.__name__}.save_profiles with TypeError: {e}")
                 raise ProfileStorageError(f"Failed to serialize profile '{profile_name}' due to unexpected data type: {e}") from e
         
         try:
             self.settings.set_strv(PROFILES_SCHEMA_KEY, profiles_json_list)
         except GLib.Error as e: # More specific error type for GSettings issues
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.save_profiles with GLib.Error: {e}")
             raise ProfileStorageError(f"Failed to save profiles to GSettings: {e}") from e
         except Exception as e: # Catch any other unexpected GSettings errors
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.save_profiles with Exception: {e}")
             raise ProfileStorageError(f"An unexpected error occurred while saving profiles to GSettings: {e}") from e
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.save_profiles (successfully saved {len(profiles_json_list)} profiles)")
 
 
     def add_profile(self, new_profile: ScanProfile) -> None:
@@ -115,11 +138,17 @@ class ProfileManager:
                ProfileExistsError: If a profile with the same name already exists.
                ProfileStorageError: If underlying storage fails.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.add_profile(args: self, new_profile={repr(new_profile)})")
         profiles = self.load_profiles()
         if any(p['name'] == new_profile['name'] for p in profiles):
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.add_profile with ProfileExistsError")
             raise ProfileExistsError(f"Profile with name '{new_profile['name']}' already exists.")
         profiles.append(new_profile)
         self.save_profiles(profiles)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.add_profile (profile '{new_profile['name']}' added)")
 
     def update_profile(self, profile_name: str, updated_profile_data: ScanProfile) -> None:
         """Updates an existing scan profile.
@@ -128,6 +157,9 @@ class ProfileManager:
                ProfileExistsError: If `updated_profile_data['name']` (the new name) conflicts with another existing profile's name.
                ProfileStorageError: If underlying storage fails.
         """
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, profile_name, updated_profile_data)
+            print(f"DEBUG: Entering {self.__class__.__name__}.update_profile(args: {arg_str})")
         profiles = self.load_profiles()
         
         profile_index_to_update = -1
@@ -137,11 +169,15 @@ class ProfileManager:
                 break
         
         if profile_index_to_update == -1:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.update_profile with ProfileNotFoundError for '{profile_name}'")
             raise ProfileNotFoundError(f"Profile with name '{profile_name}' not found and cannot be updated.")
 
         new_profile_name = updated_profile_data['name']
         if new_profile_name != profile_name:
             if any(p['name'] == new_profile_name for idx, p in enumerate(profiles) if idx != profile_index_to_update):
+                if DEBUG_ENABLED:
+                    print(f"DEBUG: Exiting {self.__class__.__name__}.update_profile with ProfileExistsError for new name '{new_profile_name}'")
                 raise ProfileExistsError(f"Cannot rename profile to '{new_profile_name}' as another profile with this name already exists.")
             
         # Update the profile at the found index
@@ -149,6 +185,8 @@ class ProfileManager:
         # though type hinting should help enforce this at call sites.
         profiles[profile_index_to_update] = updated_profile_data 
         self.save_profiles(profiles)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.update_profile (profile '{profile_name}' updated to '{new_profile_name}')")
 
     def delete_profile(self, profile_name: str) -> None:
         """Deletes a scan profile.
@@ -156,14 +194,20 @@ class ProfileManager:
                ProfileNotFoundError: If the profile with `profile_name` is not found.
                ProfileStorageError: If underlying storage fails.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.delete_profile(args: self, profile_name={repr(profile_name)})")
         profiles = self.load_profiles()
         original_length = len(profiles)
         profiles = [p for p in profiles if p['name'] != profile_name]
         
         if len(profiles) == original_length:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: Exiting {self.__class__.__name__}.delete_profile with ProfileNotFoundError for '{profile_name}'")
             raise ProfileNotFoundError(f"Profile with name '{profile_name}' not found.")
             
         self.save_profiles(profiles)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.delete_profile (profile '{profile_name}' deleted)")
 
     def export_profiles_to_file(self, filepath: str) -> None:
         """Exports all current scan profiles to a JSON file.
@@ -173,6 +217,8 @@ class ProfileManager:
                ProfileStorageError: If there's an issue loading current profiles,
                                     serializing profiles, or writing to the file.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.export_profiles_to_file(args: self, filepath={repr(filepath)})")
         try:
             profiles_to_export = self.load_profiles()
             
@@ -183,14 +229,19 @@ class ProfileManager:
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(json_data_to_export)
         except FileNotFoundError: # More specific for the case where the directory path doesn't exist
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.export_profiles_to_file with FileNotFoundError")
             raise ProfileStorageError(f"Cannot write to filepath '{filepath}'. Ensure the directory exists.")
         except OSError as e: # Catches broader I/O errors like permissions issues
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.export_profiles_to_file with OSError: {e}")
             raise ProfileStorageError(f"Failed to write profiles to file '{filepath}': {e}") from e
         except TypeError as e: # Should ideally be caught by json.dumps if data is not serializable
             # This might happen if ScanProfile structure is violated or contains non-serializable types.
             # This is less likely if type hints are respected, but good to be aware of.
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.export_profiles_to_file with TypeError: {e}")
             raise ProfileStorageError(f"Failed to serialize profiles for export due to data type issues: {e}") from e
         # load_profiles() itself can raise ProfileStorageError, which will propagate up if it occurs.
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.export_profiles_to_file (exported {len(profiles_to_export)} profiles to {filepath})")
 
     def import_profiles_from_file(self, filepath: str) -> Tuple[int, int]:
         """Imports scan profiles from a JSON file.
@@ -205,21 +256,28 @@ class ProfileManager:
                                     or saving updated profiles to GSettings.
                                     Individual malformed profiles within the file are skipped and reported via print.
         """
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Entering {self.__class__.__name__}.import_profiles_from_file(args: self, filepath={repr(filepath)})")
         imported_data_list: List[Dict[Any, Any]] # Type hint for data read from file
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 try:
                     imported_data_list = json.load(f)
                 except json.JSONDecodeError as e:
+                    if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file with JSONDecodeError")
                     raise ProfileStorageError(f"Invalid JSON structure in file '{filepath}': {e}") from e
         except FileNotFoundError:
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file with FileNotFoundError")
             raise ProfileStorageError(f"Import file not found: '{filepath}'")
         except PermissionError:
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file with PermissionError")
             raise ProfileStorageError(f"Permission denied when trying to read import file: '{filepath}'")
         except OSError as e: # Catch other potential OS-level errors during file reading
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file with OSError: {e}")
             raise ProfileStorageError(f"Could not read import file '{filepath}' due to OS error: {e}") from e
 
         if not isinstance(imported_data_list, list):
+            if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file (Invalid format - not a list)")
             raise ProfileStorageError("Invalid import file format: Expected a JSON list of profiles.")
 
         current_profiles = self.load_profiles()
@@ -284,13 +342,22 @@ class ProfileManager:
             except ProfileStorageError as e:
                 # Re-raise with context if saving fails, indicating that import was incomplete.
                 # This is a critical error for the import process.
+                if DEBUG_ENABLED: print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file with ProfileStorageError during save")
                 raise ProfileStorageError(f"Failed to save profiles to GSettings after processing import file '{filepath}': {e}") from e
-                
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.import_profiles_from_file (imported: {imported_count}, skipped: {skipped_count})")
         return imported_count, skipped_count
 
 
 # Example usage (for local testing, not part of the main application flow)
 if __name__ == '__main__':
+    # Need to set DEBUG_ENABLED for these prints to show if config cannot be imported by test execution
+    # For example: ProfileManager.DEBUG_ENABLED = True (if it were a class var)
+    # Or ensure config.py is in path and DEBUG_ENABLED is True there for testing.
+    # from .config import DEBUG_ENABLED # This would fail if run directly here
+    # if DEBUG_ENABLED: # This won't work as expected if file run directly unless config is discoverable
+    #     print("DEBUG: ProfileManager __main__ test block")
     manager = ProfileManager()
     # Clear existing profiles for testing
     # manager.save_profiles([])

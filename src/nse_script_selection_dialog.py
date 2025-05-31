@@ -1,5 +1,7 @@
 from gi.repository import Adw, Gtk, GObject
 from typing import List, Optional
+from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs # Import the helper
 
 # A predefined list of common NSE scripts with a display name and script name
 # (display_name, script_name_for_nmap)
@@ -22,6 +24,9 @@ class NseScriptSelectionDialog(Adw.Dialog):
     }
 
     def __init__(self, parent_window: Optional[Gtk.Window] = None, current_scripts_str: Optional[str] = None):
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, parent_window=parent_window, current_scripts_str=current_scripts_str)
+            print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: {arg_str})")
         super().__init__()
 
         if parent_window:
@@ -66,13 +71,23 @@ class NseScriptSelectionDialog(Adw.Dialog):
         action_box.append(select_button)
         
         main_box.append(action_box)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
     def _on_cancel_clicked(self, button: Gtk.Button) -> None:
         """Handles the Cancel button click event."""
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, button)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_cancel_clicked(args: {arg_str})")
         self.close()
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_cancel_clicked")
 
     def _on_select_clicked(self, button: Gtk.Button) -> None:
         """Handles the Select button click event, emitting selected scripts."""
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, button)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_select_clicked(args: {arg_str})")
         selected_scripts_list = [
             script_name for script_name, check_button in self.check_buttons.items() if check_button.get_active()
         ]
@@ -86,6 +101,10 @@ class NseScriptSelectionDialog(Adw.Dialog):
         # Using a set then list ensures uniqueness if custom scripts could duplicate checked ones.
         # For now, only predefined scripts are handled, so direct list comprehension is fine.
         final_scripts_str = ",".join(sorted(list(set(selected_scripts_list))))
+        if DEBUG_ENABLED:
+            print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Emitting scripts-selected with: {final_scripts_str}")
 
         self.emit("scripts-selected", final_scripts_str)
         self.close()
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_select_clicked")

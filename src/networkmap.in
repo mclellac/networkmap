@@ -24,15 +24,29 @@ site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packag
 if site_packages_path not in sys.path:
     sys.path.insert(0, site_packages_path)
 
+# Attempt to import config early for debug flags.
+# This assumes 'networkmap' is in the path, which it should be due to the above.
+try:
+    from networkmap import config
+except ImportError:
+    # Fallback if config cannot be imported, debug messages will not be conditional here.
+    # This might happen if script is run in a weird environment or before full package setup.
+    class DummyConfig:
+        DEBUG_ENABLED = False # Default to False if config is not available
+    config = DummyConfig()
+
 # --- BEGIN Adwaita Import Test ---
-print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr)
+if config.DEBUG_ENABLED:
+    print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr)
 try:
     import gi
     gi.require_version("Adw", "1")
     from gi.repository import Adw
-    print("DEBUG: Direct import of Adwaita (Adw) SUCCEEDED.", file=sys.stderr)
+    if config.DEBUG_ENABLED:
+        print("DEBUG: Direct import of Adwaita (Adw) SUCCEEDED.", file=sys.stderr)
 except Exception as e_adw_test:
-    print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr)
+    if config.DEBUG_ENABLED:
+        print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr)
 # --- END Adwaita Import Test ---
 
 # 2. Load GResources
@@ -42,10 +56,12 @@ try:
     resource_path = conf['RESOURCE_PATH']
 
     if os.path.exists(resource_path):
-        print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
+        if config.DEBUG_ENABLED:
+            print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
         resource = Gio.Resource.load(resource_path)
         Gio.resources_register(resource)
-        print(f"INFO: Successfully loaded and registered resources from: {resource_path}", file=sys.stderr)
+        if config.DEBUG_ENABLED:
+            print(f"INFO: Successfully loaded and registered resources from: {resource_path}", file=sys.stderr)
     else:
         print(f"ERROR: Compiled GResource file not found at {resource_path}. Application may fail to load UI.", file=sys.stderr)
 

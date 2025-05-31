@@ -1,5 +1,7 @@
 from typing import TypedDict, Optional, List
 import shlex
+from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs # Import the helper
 
 class ProfileOptions(TypedDict, total=False):
     name: Optional[str] # Profile name, not part of Nmap command itself
@@ -35,6 +37,9 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
     """
     Parses a raw Nmap command string and populates a ProfileOptions dictionary.
     """
+    if DEBUG_ENABLED:
+        # Not using _get_arg_value_reprs here as it's a module-level function
+        print(f"DEBUG: Entering profile_command_utils.parse_command_to_options(command_str={repr(command_str)})")
     options: ProfileOptions = {
         'os_fingerprint': False, 'stealth_scan': False, 'no_ping': False,
         'list_scan': False, 'ping_scan': False, 'tcp_syn_ping': False,
@@ -134,12 +139,17 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
     if remaining_parts:
         options['additional_args'] = shlex.join(remaining_parts)
 
+    if DEBUG_ENABLED:
+        print(f"DEBUG: Exiting profile_command_utils.parse_command_to_options (options={repr(options)})")
     return options
 
 def build_command_from_options(options: ProfileOptions) -> str:
     """
     Constructs an Nmap command string from a ProfileOptions dictionary.
     """
+    if DEBUG_ENABLED:
+        # Not using _get_arg_value_reprs here
+        print(f"DEBUG: Entering profile_command_utils.build_command_from_options(options={repr(options)})")
     parts: List[str] = []
 
     # Order: Scan Type, Detection, Timing, Ports, Scripts, Other options, Additional Args
@@ -211,7 +221,10 @@ def build_command_from_options(options: ProfileOptions) -> str:
         # shlex.split additional_args in case it contains multiple space-separated arguments
         parts.extend(shlex.split(options['additional_args']))
 
-    return shlex.join(parts)
+    result_command = shlex.join(parts)
+    if DEBUG_ENABLED:
+        print(f"DEBUG: Exiting profile_command_utils.build_command_from_options (command='{result_command}')")
+    return result_command
 
 # Example Usage & Basic Tests (can be expanded)
 if __name__ == '__main__':
