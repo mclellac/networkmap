@@ -232,6 +232,13 @@ class ProfileEditorDialog(Adw.Dialog):
             if name != self.original_profile_name and name in self.existing_profile_names:
                 self._show_alert_dialog(f"A profile with the name '{name}' already exists.")
                 return True
+
+            if DEBUG_ENABLED:
+                action_type = "Updating" if self.profile_to_edit else "Adding"
+                print(f"DEBUG: UI Action: {action_type} profile: '{name}'")
+                # Optionally, also log final_command if it's not too verbose or sensitive
+                # print(f"DEBUG: Profile command: {final_command}")
+
             validator = NmapCommandValidator()
             is_valid, error_message = validator.validate_arguments(final_command)
             if not is_valid:
