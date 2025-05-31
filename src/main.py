@@ -7,7 +7,7 @@ actions, and window management. It also contains the `main` function
 which serves as the entry point for the application.
 """
 import sys
-import argparse # Added for --debug flag
+import argparse
 from typing import Callable, List, Optional
 
 import gi
@@ -20,7 +20,7 @@ from gi.repository import Gtk, Gio, Adw, GLib
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
 from .utils import apply_theme
-from . import config # Added for --debug flag
+from . import config
 
 APP_ID: str = "com.github.mclellac.NetworkMap"
 APP_NAME: str = "Network Map"
