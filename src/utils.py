@@ -1,10 +1,11 @@
-import os
-import sys 
-from typing import List, Tuple, Optional # Added Optional for scripts_directory type hint
 import logging
-from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
+import os
+import sys
+from typing import List, Optional
 
 from gi.repository import Adw
+
+from .config import DEBUG_ENABLED
 
 
 def apply_theme(theme: str):
@@ -40,12 +41,12 @@ def discover_nse_scripts() -> List[str]:
     # Flatpak sandboxed paths are not directly accessible; Nmap inside Flatpak would use its own paths.
     potential_paths = []
     if is_flatpak(): # is_flatpak will also be logged
-        potential_paths.append("/app/share/nmap/scripts/") # Add Flatpak path first
+        potential_paths.append("/app/share/nmap/scripts/")
 
     potential_paths.extend([
-        os.path.expanduser("~/.nmap/scripts/"), # User's local Nmap scripts
-        "/usr/local/share/nmap/scripts/",      # Common for locally compiled Nmap on macOS/Linux
-        "/usr/share/nmap/scripts/",            # Standard system path for Nmap on Linux
+        os.path.expanduser("~/.nmap/scripts/"),
+        "/usr/local/share/nmap/scripts/",
+        "/usr/share/nmap/scripts/",
     ])
     if DEBUG_ENABLED:
         print(f"DEBUG: utils.discover_nse_scripts - Potential NSE script paths: {potential_paths}")
@@ -63,7 +64,7 @@ def discover_nse_scripts() -> List[str]:
     for path in potential_paths:
         if os.path.isdir(path) and os.access(path, os.R_OK):
             scripts_directory = path
-            break # Use the first valid path found
+            break
 
     if not scripts_directory:
         logging.warning("No accessible Nmap NSE script directory found in standard locations.")
@@ -78,15 +79,14 @@ def discover_nse_scripts() -> List[str]:
         print(f"DEBUG: utils.discover_nse_scripts - Using scripts_directory: {scripts_directory}")
 
     categorized_scripts: List[Tuple[str, str]] = []
-    # Define common prefixes for categorization.
     # Using "zzz_" for the default category ensures it sorts last for display.
-    DEFAULT_CATEGORY = "zzz_other" # For scripts that don't match common prefixes
-    SCRIPT_PREFIXES = sorted([ # Sorted for consistent category checking order, if it matters
+    DEFAULT_CATEGORY = "zzz_other"
+    SCRIPT_PREFIXES = sorted([
         'http', 'smb', 'dns', 'ssh', 'smtp', 'ftp', 'imap', 'pop3', 
         'mysql', 'oracle', 'ms-sql', 'rdp', 'vnc', 'ssl', 'tls', 'snmp', 'whois',
         'broadcast', 'discovery', 'dos', 'exploit', 'external', 'fuzzer', 
         'intrusive', 'malware', 'safe', 'version', 'vuln', 'auth' # 'auth' added back
-    ], reverse=True) # Process longer prefixes first if there's overlap (e.g. 'ms-sql' vs 'sql') - not strictly necessary here
+    ], reverse=True)
 
     try:
         for item_name in os.listdir(scripts_directory):
@@ -97,14 +97,13 @@ def discover_nse_scripts() -> List[str]:
                 for prefix in SCRIPT_PREFIXES:
                     if script_name_no_ext.startswith(prefix + '-') or \
                        script_name_no_ext.startswith(prefix + '_') or \
-                       script_name_no_ext == prefix: # Handles exact matches like "smb.nse"
+                       script_name_no_ext == prefix:
                         assigned_category = prefix
                         break 
                 
                 categorized_scripts.append((assigned_category, script_name_no_ext))
 
-        # Sort by category (prefix alphabetical), then by script name within each category.
-        categorized_scripts.sort() 
+        categorized_scripts.sort()
         
         final_script_names = [name for category, name in categorized_scripts]
 
@@ -128,20 +127,18 @@ def is_root() -> bool:
     Returns:
         True if the effective user ID is 0, False otherwise.
     """
-    # This is a simple check, extensive logging might be too much.
-    # Consider adding if specific issues arise.
     return os.geteuid() == 0
 
 
 def is_macos() -> bool:
     """Checks if the current platform is macOS."""
-    # Simple check.
     return sys.platform == "darwin"
+
 
 def is_linux() -> bool:
     """Checks if the current platform is Linux."""
-    # Simple check.
     return sys.platform.startswith("linux")
+
 
 def is_flatpak() -> bool:
     """
@@ -156,11 +153,12 @@ def is_flatpak() -> bool:
     #     result = os.path.exists('/.flatpak-info') or bool(os.environ.get('FLATPAK_ID'))
     #     print(f"DEBUG: Exiting utils.is_flatpak with result: {result}")
     #     return result
-    if os.path.exists('/.flatpak-info'): # Standard Flatpak sandbox file
+    if os.path.exists('/.flatpak-info'):
         return True
-    if os.environ.get('FLATPAK_ID'): # Standard Flatpak environment variable
+    if os.environ.get('FLATPAK_ID'):
         return True
     return False
+
 
 def _get_arg_value_reprs(*args, **kwargs) -> str:
     """Helper to create a string representation of function arguments for logging."""

@@ -15,12 +15,13 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Gtk, Gio, Adw, GLib
+from gi.repository import Adw, GLib, Gio, Gtk
 
 from .window import NetworkMapWindow
 from .preferences_window import NetworkMapPreferencesWindow
 from .utils import apply_theme, _get_arg_value_reprs
 from . import config
+
 
 APP_ID: str = "com.github.mclellac.NetworkMap"
 APP_NAME: str = "Network Map"
@@ -133,7 +134,6 @@ class NetworkMapApplication(Adw.Application):
         if active_window is None:
             # This should ideally not happen for an action that requires a window
             print(f"Warning: Action 'app.{action.get_name()}' called without an active window.", file=sys.stderr)
-            # Optionally, create a new window or disable the action if no window context.
             # For now, just return to prevent None errors.
             return
 
@@ -205,9 +205,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     """
     current_argv = argv if argv is not None else sys.argv
     # config.DEBUG_ENABLED is not set yet, so we check args.debug directly for this one print.
-    # Or, defer this print until after config.DEBUG_ENABLED is set.
     # For now, let's check args.debug as it's the earliest point.
-    # A more complex setup might involve a pre-config logging setup.
     if '--debug' in current_argv: # Basic check before full parsing
         # This print is before config.DEBUG_ENABLED is officially set via parsing,
         # so it relies on the raw argument check.
@@ -230,7 +228,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
     if config.DEBUG_ENABLED:
-        print("DEBUG: Debug mode enabled.") # This one is slightly redundant if the above is printed.
+        print("DEBUG: Debug mode enabled.")
 
     # Pass remaining arguments (plus program name) to app.run()
     # GTK application typically expects sys.argv format

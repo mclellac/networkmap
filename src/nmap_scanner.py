@@ -234,7 +234,6 @@ class NmapScanner:
         if DEBUG_ENABLED:
             arg_str = _get_arg_value_reprs(self, target, do_os_fingerprint, additional_args_str, nse_script, stealth_scan, port_spec, timing_template, no_ping)
             print(f"DEBUG: Entering NmapScanner.scan(args: {arg_str})")
-            # This print below is more specific and was requested, so keeping it.
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.scan - Received parameters: target='{target}', os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         
         try:
@@ -254,14 +253,14 @@ class NmapScanner:
             print(f"DEBUG: NmapScanner.scan - scan_args_str_for_direct_scan: '{scan_args_str_for_direct_scan}'")
 
 
-        if DEBUG_ENABLED: # Duplicates part of the logic from the previous DEBUG block, but ensures it's just before execution
+        if DEBUG_ENABLED:
             nmap_command_to_log = ""
             if needs_privilege_escalation:
                 # This will show the command before -oX - might be added for privileged XML parsing
                 nmap_command_to_log = f"(Privileged) Nmap base command: {self.nmap_executable_path} {' '.join(current_scan_args_list)} {target}"
             else:
                 nmap_command_to_log = f"nmap {scan_args_str_for_direct_scan} {target}"
-            print(f"DEBUG: NmapScanner.scan - Final Nmap command to be executed: {nmap_command_to_log}") # This log is good as an overview
+            print(f"DEBUG: NmapScanner.scan - Final Nmap command to be executed: {nmap_command_to_log}")
 
         if needs_privilege_escalation:
             # For privileged scans, ensure Nmap produces XML output to stdout (`-oX -`)
@@ -285,7 +284,7 @@ class NmapScanner:
             
             nmap_cmd_path = self._get_nmap_escalation_command_path()
             if DEBUG_ENABLED:
-                print(f"DEBUG: NmapScanner.scan - FINAL privileged_command_args: {repr(current_scan_args_list)}") # Log exact list before execution
+                print(f"DEBUG: NmapScanner.scan - FINAL privileged_command_args: {repr(current_scan_args_list)}")
             completed_process = self._execute_with_privileges(
                 nmap_cmd_path, current_scan_args_list, target
             )
@@ -298,7 +297,6 @@ class NmapScanner:
                             print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (privileged, truncated):\n{xml_output_for_log[:2048]}\n... (omitted) ...\n{xml_output_for_log[-2048:]}")
                         else:
                             print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (privileged):\n{xml_output_for_log}")
-                        # The following log is somewhat redundant now but confirms parsing step.
                         print(f"DEBUG: NmapScanner.scan - Privileged scan successful, parsing XML output. Output size: {len(completed_process.stdout)}")
                     self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout)
                     result = self._parse_scan_results(do_os_fingerprint)
@@ -328,7 +326,7 @@ class NmapScanner:
             try:
                 if DEBUG_ENABLED:
                     print(f"DEBUG: NmapScanner.scan - Executing non-privileged scan.")
-                    print(f"DEBUG: NmapScanner.scan - FINAL direct_scan_arguments: {repr(scan_args_str_for_direct_scan)}") # Log exact string before execution
+                    print(f"DEBUG: NmapScanner.scan - FINAL direct_scan_arguments: {repr(scan_args_str_for_direct_scan)}")
                 self.nm.scan(hosts=target, arguments=scan_args_str_for_direct_scan, sudo=False)
                 if DEBUG_ENABLED:
                     # nmap_last_output() returns stdout of the nmap instance
@@ -372,7 +370,6 @@ class NmapScanner:
         if DEBUG_ENABLED:
             arg_str = _get_arg_value_reprs(self, do_os_fingerprint, additional_args_str, nse_script, default_args_str, stealth_scan, port_spec, timing_template, no_ping)
             print(f"DEBUG: Entering NmapScanner.build_scan_args(args: {arg_str})")
-            # This print below is more specific and was requested, so keeping it.
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Input parameters: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', default_args_str='{default_args_str}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
         if not isinstance(additional_args_str, str):
             raise NmapArgumentError("Additional arguments must be a string.")
@@ -536,7 +533,6 @@ class NmapScanner:
             arg_str = _get_arg_value_reprs(self, do_os_fingerprint)
             print(f"DEBUG: Entering NmapScanner._parse_scan_results(args: {arg_str})")
             # For now, not logging self.nm.analyse_nmap_xml_scan() output directly as it can be huge.
-            # Consider logging a hash or size if needed: print(f"DEBUG: Parsing Nmap XML Data (Size: {len(self.nm.analyse_nmap_xml_scan()) if self.nm.analyse_nmap_xml_scan() else 0})")
             print(f"DEBUG: NmapScanner._parse_scan_results - Parsing Nmap XML data...")
 
         hosts_data: List[Dict[str, Any]] = []
@@ -679,7 +675,6 @@ class NmapScanner:
         scan_stats = self.nm.scanstats()
         if scan_stats and DEBUG_ENABLED:
             stats_str = f"Scan stats: {scan_stats.get('uphosts', 'N/A')} up, {scan_stats.get('downhosts', 'N/A')} down, {scan_stats.get('totalhosts', 'N/A')} total. Elapsed: {scan_stats.get('elapsed', 'N/A')}s."
-            # This print was already conditional, ensuring it stays.
             if DEBUG_ENABLED:
                 print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
@@ -701,7 +696,6 @@ class NmapScanner:
                           f"Service: {service.get('name', 'N/A')}, Product: {service.get('product', 'N/A')}, Version: {service.get('version', 'N/A')}")
                     if port_entry.get('script_output'):
                         print(f"      Script Output: {repr(port_entry.get('script_output'))}")
-            # The existing log for returning hosts_data (summary) and current_message is good.
             print(f"DEBUG: NmapScanner._parse_scan_results - Returning hosts_data (summary above), current_message: {current_message}")
             print(f"DEBUG: Exiting NmapScanner._parse_scan_results")
         return hosts_data, current_message

@@ -64,7 +64,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
     def _show_toast(self, message: str):
-        # This method already has a DEBUG_ENABLED check for its print, so not adding entry/exit.
         if DEBUG_ENABLED:
             print(f"MAIN WINDOW TOAST: {message}", file=sys.stderr)
         self.toast_overlay.add_toast(Adw.Toast.new(message))
@@ -105,11 +104,18 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             arg_str = _get_arg_value_reprs(self, widget, pspec)
             widget_name = "Unknown"
             new_state = "Unknown"
+            if hasattr(widget, 'get_buildable_id') and callable(widget.get_buildable_id) and widget.get_buildable_id():
+                widget_name = widget.get_buildable_id()
+            elif hasattr(widget, 'get_name') and callable(widget.get_name) and widget.get_name():
+                widget_name = widget.get_name()
+
             if isinstance(widget, Gtk.Switch):
-                widget_name = widget.get_buildable_id() if hasattr(widget, 'get_buildable_id') and widget.get_buildable_id() else widget.get_name()
                 new_state = widget.get_active()
+            elif hasattr(widget, 'get_active'):
+                 new_state = widget.get_active()
+
             print(f"DEBUG: Entering {self.__class__.__name__}._on_simple_scan_param_changed(args: {arg_str})")
-            print(f"DEBUG: Window._on_simple_scan_param_changed - Widget '{widget_name}' new state: {new_state}")
+            print(f"DEBUG: Window._on_simple_scan_param_changed - UI element '{widget_name}' (type: {type(widget).__name__}) new state: {new_state}")
 
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
@@ -128,8 +134,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._initialize_ui_elements")
 
     def _are_inputs_valid_for_scan(self) -> bool:
-        # This is a utility method, extensive entry/exit logging might be too verbose.
-        # Existing logic seems fine.
         target_text = self.target_entry_row.get_text().strip()
         if not target_text or any(char in target_text for char in [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]):
             return False
@@ -211,9 +215,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _on_profile_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         if DEBUG_ENABLED:
-            arg_str = _get_arg_value_reprs(self, combo_row, pspec) # pspec might be None
+            arg_str = _get_arg_value_reprs(self, combo_row, pspec)
             print(f"DEBUG: Entering {self.__class__.__name__}._on_profile_selected(args: {arg_str})")
-            # Existing DEBUG_PROFILE_TRACE is more detailed, so keeping it.
             print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Handler ENTERED.")
 
         selected_idx = combo_row.get_selected()
@@ -270,7 +273,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             if found_profile:
                 if DEBUG_ENABLED:
                     profile_name_found = found_profile.get('name', 'UnknownName')
-                    # profile_command_found = found_profile.get('command', 'NoCommand') # Redundant, _apply_scan_profile will log it
                     print(f"DEBUG_PROFILE_TRACE: _on_profile_selected - Profile FOUND: name='{profile_name_found}'")
                     print(f"DEBUG: {self.__class__.__name__}._on_profile_selected - Selected profile '{profile_name_found}': {repr(found_profile)}")
                 self._apply_scan_profile(found_profile)
@@ -305,9 +307,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._populate_timing_template_combo")
 
     def _get_current_scan_parameters(self) -> Dict[str, Any]:
-        # Utility method, verbose logging might be too much.
-        # The caller _initiate_scan_procedure already logs the returned dict.
-        # However, per new requirement, adding itemized logging here.
         target_value = self.target_entry_row.get_text().strip()
         os_fingerprint_toggle_state = self.os_fingerprint_switch.get_active()
         additional_args_value = self.arguments_entry_row.get_text()
@@ -440,7 +439,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                 print(f"Debug: Unexpected item type in NSE script combo: {type(selected_item)}", file=sys.stderr)
 
         if DEBUG_ENABLED:
-            print(f"DEBUG: Window._on_nse_script_selected - New selection: {repr(self.selected_nse_script)}")
+            print(f"DEBUG: {self.__class__.__name__}._on_nse_script_selected - New NSE script selection: {repr(self.selected_nse_script)}")
 
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
@@ -460,7 +459,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             self.selected_timing_template = None
 
         if DEBUG_ENABLED:
-            print(f"DEBUG: Window._on_timing_template_selected - New selection: {repr(self.selected_timing_template)}")
+            print(f"DEBUG: {self.__class__.__name__}._on_timing_template_selected - New timing template selection: {repr(self.selected_timing_template)}")
 
         self._update_nmap_command_preview()
         self._update_ui_state("ready")
@@ -512,7 +511,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         """Applies settings from a scan profile to the UI using parsed command options."""
         if DEBUG_ENABLED:
             profile_name_for_log = profile['name'] if profile else "None"
-            # Using repr(profile) for full content as requested by task for this specific log
             print(f"DEBUG: Entering {self.__class__.__name__}._apply_scan_profile(args: self, profile_name='{profile_name_for_log}')")
             print(f"DEBUG: {self.__class__.__name__}._apply_scan_profile - Applying profile '{profile_name_for_log}': {repr(profile)}")
 
@@ -533,29 +531,38 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                     self.timing_template_combo_row.set_selected(0)
                     found_timing_in_combo = True
                 else:
-                    for i in range(timing_model.get_n_items()):
-                        display_name = timing_model.get_string(i)
+                    # More Pythonic way to find index
+                    all_display_names = [timing_model.get_string(j) for j in range(timing_model.get_n_items())]
+                    for i, display_name in enumerate(all_display_names):
                         if self.timing_options.get(display_name) == selected_timing_value:
                             self.timing_template_combo_row.set_selected(i)
                             found_timing_in_combo = True
                             break
-                if not found_timing_in_combo:
+                if not found_timing_in_combo: # Ensure selection if not found
                     self.timing_template_combo_row.set_selected(0)
-            else:
-                 self.timing_template_combo_row.set_selected(0)
+            else: # Model is not Gtk.StringList (unexpected for this setup)
+                 self.timing_template_combo_row.set_selected(0) # Default to first item
                  self.selected_timing_template = self.timing_options.get(list(self.timing_options.keys())[0])
+
             self.selected_nse_script = options.get('nse_script') or ''
-            nse_model = self.nse_script_combo_row.get_model()
+            nse_model = self.nse_script_combo_row.get_model() # This is a FilterListModel
+
             if isinstance(nse_model, Gtk.FilterListModel):
                 target_nse_script_name = self.selected_nse_script if self.selected_nse_script else "None"
-                self.nse_script_combo_row.set_selected(0)
-                for i in range(nse_model.get_n_items()):
-                    item_obj = nse_model.get_item(i)
+                # Iterate through the filtered model to find the matching string and set selection
+                # The model contains Gtk.StringObject items
+                found_nse_in_combo = False
+                for i in range(nse_model.get_n_items()): # nse_model is FilterListModel
+                    item_obj = nse_model.get_item(i) # Gets GObject, should be StringObject
                     if isinstance(item_obj, Gtk.StringObject):
                         if item_obj.get_string() == target_nse_script_name:
                             self.nse_script_combo_row.set_selected(i)
+                            found_nse_in_combo = True
                             break
-            else:
+                if not found_nse_in_combo:
+                    self.nse_script_combo_row.set_selected(0) # Default to "None" if not found
+                    self.selected_nse_script = None # Reflect this default choice
+            else: # Fallback if model is not as expected
                 self.nse_script_combo_row.set_selected(0)
                 self.selected_nse_script = None
             if options.get('list_scan', False): unmapped_args_parts.append("-sL")
@@ -641,9 +648,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _initiate_scan_procedure(self) -> None:
         if DEBUG_ENABLED:
-            # This existing UI Action log is good and specific
             print(f"DEBUG: UI Action: Scan initiated by user for target: {self.target_entry_row.get_text().strip()}")
-            # Entry log for the method itself
             print(f"DEBUG: Entering {self.__class__.__name__}._initiate_scan_procedure(args: self)")
         scan_params = self._get_current_scan_parameters()
         if DEBUG_ENABLED:
@@ -692,10 +697,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
                          nse_script: Optional[str], stealth_scan: bool, port_spec_str: Optional[str], 
                          timing_template_val: Optional[str], do_no_ping_val: bool) -> None:
         if DEBUG_ENABLED:
-            # This existing DEBUG_PROFILE_TRACE is comprehensive for parameters.
             print(f"DEBUG_PROFILE_TRACE: _run_scan_worker - Received parameters: target='{target}', os={do_os_fingerprint}, additional_args='{additional_args_str}', nse='{nse_script}', stealth={stealth_scan}, ports='{port_spec_str}', timing='{timing_template_val}', no_ping={do_no_ping_val}")
-            # Entry log for the method itself
-            arg_str = _get_arg_value_reprs(self, target=target, do_os_fingerprint=do_os_fingerprint, # etc.
+            arg_str = _get_arg_value_reprs(self, target=target, do_os_fingerprint=do_os_fingerprint,
                                          additional_args_str=additional_args_str, nse_script=nse_script,
                                          stealth_scan=stealth_scan, port_spec_str=port_spec_str,
                                          timing_template_val=timing_template_val, do_no_ping_val=do_no_ping_val)
@@ -783,11 +786,9 @@ class NetworkMapWindow(Adw.ApplicationWindow):
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
         if DEBUG_ENABLED:
-            # This existing log is good for entry and host count.
             print(f"DEBUG: NetworkMapWindow._populate_results_listbox - Populating results for {len(hosts_data)} hosts.")
-            arg_str = _get_arg_value_reprs(self, f"len(hosts_data)={len(hosts_data)}") # Redundant with above but follows pattern
+            arg_str = _get_arg_value_reprs(self, f"len(hosts_data)={len(hosts_data)}")
             print(f"DEBUG: Entering {self.__class__.__name__}._populate_results_listbox(args: {arg_str})")
-            # Optionally, iterate and log a one-liner summary for each host if not too verbose
             for host_info in hosts_data:
                 print(f"DEBUG:   Host for UI: ID: {host_info.get('id')}, State: {host_info.get('state')}, Ports: {len(host_info.get('ports', []))}")
         for host_data in hosts_data:
@@ -813,7 +814,6 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         friendly_message = f"Scan Error ({error_type}): {error_message}" if error_type != "ScanMessage" else error_message
         self.status_page.set_property("description", friendly_message)
         if DEBUG_ENABLED:
-            # This existing log is good.
             print(f"Scan Error Displayed: Type={error_type}, Message={error_message}", file=sys.stderr)
             print(f"DEBUG: Exiting {self.__class__.__name__}._display_scan_error")
 
@@ -822,7 +822,6 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
 
     def __init__(self, host_data: Dict[str, Any], raw_details_text: str, **kwargs) -> None:
         if DEBUG_ENABLED:
-            # repr(host_data) might be too verbose, log keys or specific items if needed
             arg_str = _get_arg_value_reprs(self, f"host_id={host_data.get('id', 'N/A')}", raw_details_text_len=len(raw_details_text), **kwargs)
             print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: {arg_str})")
         super().__init__(**kwargs)
@@ -868,5 +867,4 @@ class HostInfoExpanderRow(Adw.ExpanderRow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._on_expanded_changed")
 
     def get_text_view(self) -> Optional[Gtk.TextView]:
-        # Simple getter, may not need verbose logging unless issues arise.
         return self._text_view

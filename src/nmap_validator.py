@@ -1,7 +1,7 @@
 import re
 import sys
-from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
-from .utils import _get_arg_value_reprs # Import the helper
+from .config import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs
 
 class NmapCommandValidator:
     def __init__(self):
@@ -9,7 +9,6 @@ class NmapCommandValidator:
             print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: self)")
         self.forbidden_chars = [";", "|", "&", "$", "`", "(", ")", "<", ">", "\n", "\r"]
 
-        # Common Nmap options
         self.known_options = {
             "-sS", "-sT", "-sU", "-sA", "-sW", "-sM", # TCP Scan Types
             "-sN", "-sF", "-sX", # Stealth Scan Types
@@ -90,14 +89,11 @@ class NmapCommandValidator:
 
             is_prefix_option_handled = False
             if part.startswith("-"):
-                # Check if it's a known prefix option (e.g., -T4)
                 for prefix in self.prefix_options:
                     if part.startswith(prefix) and len(part) > len(prefix): # e.g. -T is prefix, -T4 is valid
-                        # Specific validation for known prefixes if needed, e.g., -T[0-5]
                         if prefix == "-T":
                             if not re.match(r"^-T[0-5]$", part):
                                 return False, f"Invalid timing template format: '{part}'. Must be -T0 to -T5."
-                        # If valid prefix option, mark as handled and continue
                         is_prefix_option_handled = True
                         break
 
@@ -117,11 +113,11 @@ class NmapCommandValidator:
                             port_regex = re.compile(r"^(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?)(?:,(?:[TU]:)?(?:[0-9]{1,5}(?:-[0-9]{1,5})?))*$")
                             if not port_regex.fullmatch(port_arg):
                                 return False, f"Invalid port specification format for {hd_opt_prefix}: '{port_arg}'."
-                            is_prefix_option_handled = True # It's a known form, handled.
+                            is_prefix_option_handled = True
                             is_attached_host_discovery_port_arg = True
                             break
                     if is_attached_host_discovery_port_arg:
-                        pass # Already handled and validated
+                        pass
                     # --- End: Handling for attached host discovery port args ---
                     elif not (len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args)):
                         return False, f"Unknown Nmap option: '{part}'"
@@ -153,7 +149,7 @@ class NmapCommandValidator:
                             if not script_regex.fullmatch(arg_value) and not complex_script_regex.fullmatch(arg_value):
                                 return False, f"Script argument for '{part}' ('{arg_value}') contains invalid characters or format."
 
-                        elif part == "-oN" or part == "-iL": # Or -oX, -oG, -oA
+                        elif part == "-oN" or part == "-iL":
                             if not arg_value or (arg_value.startswith("-") and arg_value in self.known_options) :
                                 return False, f"Filename argument for {part} cannot be empty or another option ('{arg_value}')."
                             filename_forbidden_chars = ["\n", "\r", "$", "`", ";", "|", "&", "<", ">", "(", ")"]

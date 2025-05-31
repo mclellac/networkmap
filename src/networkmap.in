@@ -1,9 +1,30 @@
 #!/usr/bin/env @PYTHON@
 # -*- Mode: Python; coding: utf-8; indent-tabs-mode: nil; tab-width: 4 -*-
 
+import logging
 import os
 import sys
-import logging
+
+# Attempt to import config early for debug flags.
+# This assumes 'networkmap' is in the path, which it should be due to the
+# sys.path modification below.
+try:
+    from networkmap import config
+except ImportError:
+    # Fallback if config cannot be imported, debug messages will not be conditional here.
+    # This might happen if script is run in a weird environment or before full package setup.
+    class DummyConfig:
+        DEBUG_ENABLED = False # Default to False if config is not available
+    config = DummyConfig()
+
+# It's important that gi is imported after config, so that config.DEBUG_ENABLED
+# can be used by any gi-related debug messages if needed immediately on import.
+import gi
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib # Grouped gi imports
+
+from networkmap import main as app_main # Application specific
+
 
 conf = {
     'PYTHON': '@PYTHON@',
@@ -24,35 +45,23 @@ site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packag
 if site_packages_path not in sys.path:
     sys.path.insert(0, site_packages_path)
 
-# Attempt to import config early for debug flags.
-# This assumes 'networkmap' is in the path, which it should be due to the above.
-try:
-    from networkmap import config
-except ImportError:
-    # Fallback if config cannot be imported, debug messages will not be conditional here.
-    # This might happen if script is run in a weird environment or before full package setup.
-    class DummyConfig:
-        DEBUG_ENABLED = False # Default to False if config is not available
-    config = DummyConfig()
 
 # --- BEGIN Adwaita Import Test ---
 if config.DEBUG_ENABLED:
-    print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr)
+    print("DEBUG: Attempting direct import of Adwaita...", file=sys.stderr) # Keep using stderr for early messages
 try:
-    import gi
-    gi.require_version("Adw", "1")
-    from gi.repository import Adw
+    # gi, Adw already imported
     if config.DEBUG_ENABLED:
-        print("DEBUG: Direct import of Adwaita (Adw) SUCCEEDED.", file=sys.stderr)
-except Exception as e_adw_test:
+        print("DEBUG: Direct import of Adwaita (Adw) SUCCEEDED.", file=sys.stderr) # Keep using stderr
+except Exception as e_adw_test: # Make this more specific if possible
     if config.DEBUG_ENABLED:
-        print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr)
+        print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr) # Keep using stderr
 # --- END Adwaita Import Test ---
+
 
 # 2. Load GResources
 try:
-    from gi.repository import Gio, GLib  # Import GLib for GLib.Error
-
+    # Gio, GLib already imported
     resource_path = conf['RESOURCE_PATH']
 
     if os.path.exists(resource_path):
@@ -75,10 +84,12 @@ except Exception as e:
     print(f"ERROR: Unexpected error during GResource loading: {e}", file=sys.stderr)
     sys.exit(1)
 
-# 3. Import and run the main application module
+
+# 3. Run the main application module (app_main already imported)
 try:
-    from networkmap import main as app_main
-except ImportError as e:
+    if __name__ == '__main__':
+        sys.exit(app_main.main(sys.argv))
+except ImportError as e: # This specific catch might be less relevant now if main import is at top
     print(f"ERROR: Failed to import the main application module 'networkmap.main'.", file=sys.stderr)
     print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(1)
@@ -86,6 +97,3 @@ except Exception as e:
     print(f"ERROR: Unexpected error while importing 'networkmap.main'.", file=sys.stderr)
     print(f"Error details: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(1)
-
-if __name__ == '__main__':
-    sys.exit(app_main.main(sys.argv))
