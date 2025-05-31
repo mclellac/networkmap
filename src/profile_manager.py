@@ -2,8 +2,8 @@ import json
 import sys
 from typing import List, Dict, Any, TypedDict, Optional, Tuple
 from gi.repository import Gio
-from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
-from .utils import _get_arg_value_reprs # Import the helper
+from .config import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs
 
 class ProfileManagerError(Exception):
     """Base class for exceptions in ProfileManager."""
@@ -70,7 +70,7 @@ class ProfileManager:
 
                 # Ensure command is also a string; treat missing command as an issue or default to empty.
                 # For consistency, a profile should always have a command string, even if empty.
-                if not isinstance(profile_command, str): # Check if command is string, allow empty string
+                if not isinstance(profile_command, str):
                     malformed_entries_details.append(f"Entry at index {i} (name: {profile_name}) has missing or invalid 'command': {json_str[:100]}")
                     continue
 
@@ -81,7 +81,7 @@ class ProfileManager:
                 profiles.append(profile)
             except json.JSONDecodeError as e:
                 malformed_entries_details.append(f"JSON decoding error for entry at index {i}: {e}. Data: {json_str[:100]}")
-            except TypeError as e: # Should be less likely with simpler ScanProfile
+            except TypeError as e:
                 malformed_entries_details.append(f"Type error for entry at index {i} (name: {profile_data.get('name', 'N/A')}): {e}. Data: {json_str[:100]}")
         
         if malformed_entries_details:
@@ -118,7 +118,7 @@ class ProfileManager:
                 # For example, ensure all keys are present if using a plain dict.
                 # However, if 'profiles' is List[ScanProfile], it should be fine.
                 profiles_json_list.append(json.dumps(profile))
-            except TypeError as e: # Should not happen if ScanProfile is used correctly
+            except TypeError as e:
                 profile_name = profile.get('name', 'Unknown Profile') if isinstance(profile, dict) else 'Unknown Profile'
                 if DEBUG_ENABLED:
                     print(f"DEBUG: Exiting {self.__class__.__name__}.save_profiles with TypeError: {e}")
@@ -186,7 +186,6 @@ class ProfileManager:
                     print(f"DEBUG: Exiting {self.__class__.__name__}.update_profile with ProfileExistsError for new name '{new_profile_name}'")
                 raise ProfileExistsError(f"Cannot rename profile to '{new_profile_name}' as another profile with this name already exists.")
             
-        # Update the profile at the found index
         # Ensure the updated data also conforms to ScanProfile structure,
         # though type hinting should help enforce this at call sites.
         profiles[profile_index_to_update] = updated_profile_data 
@@ -228,7 +227,6 @@ class ProfileManager:
         try:
             profiles_to_export = self.load_profiles()
             
-            # Serialize the list of profiles to a JSON string
             # indent=4 makes the JSON file human-readable
             json_data_to_export = json.dumps(profiles_to_export, indent=4)
             
@@ -315,7 +313,6 @@ class ProfileManager:
                 skipped_count += 1
                 continue
             
-            # Construct ScanProfile
             profile_command_imported = item_data.get('command')
             if not isinstance(profile_command_imported, str):
                 malformed_import_details.append(f"Profile '{profile_name}' (index {index}) has missing or invalid 'command'.")
@@ -362,13 +359,11 @@ if __name__ == '__main__':
     # For example: ProfileManager.DEBUG_ENABLED = True (if it were a class var)
     # Or ensure config.py is in path and DEBUG_ENABLED is True there for testing.
     # from .config import DEBUG_ENABLED # This would fail if run directly here
-    # if DEBUG_ENABLED: # This won't work as expected if file run directly unless config is discoverable
+    # if DEBUG_ENABLED:
     #     print("DEBUG: ProfileManager __main__ test block")
     manager = ProfileManager()
-    # Clear existing profiles for testing
     # manager.save_profiles([])
     
-    # Add a test profile
     # test_profile = ScanProfile(
     #     name="Test Stealth Scan",
     #     os_fingerprint=True,

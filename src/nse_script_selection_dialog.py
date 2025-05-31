@@ -1,7 +1,7 @@
 from gi.repository import Adw, Gtk, GObject
 from typing import List, Optional
-from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
-from .utils import _get_arg_value_reprs # Import the helper
+from .config import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs
 
 # A predefined list of common NSE scripts with a display name and script name
 # (display_name, script_name_for_nmap)
@@ -92,17 +92,8 @@ class NseScriptSelectionDialog(Adw.Dialog):
             script_name for script_name, check_button in self.check_buttons.items() if check_button.get_active()
         ]
         
-        # Future extension: Add custom scripts from an entry if implemented
-        # custom_scripts_text = self.custom_script_entry.get_text().strip()
-        # if custom_scripts_text:
-        #     selected_scripts_list.extend([s.strip() for s in custom_scripts_text.split(',') if s.strip()])
-
-        # Join sorted list of unique script names
-        # Using a set then list ensures uniqueness if custom scripts could duplicate checked ones.
-        # For now, only predefined scripts are handled, so direct list comprehension is fine.
         final_scripts_str = ",".join(sorted(list(set(selected_scripts_list))))
         if DEBUG_ENABLED:
-            # Log the list before joining, and the final string
             print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Selected NSE scripts list: {repr(selected_scripts_list)}")
             print(f"DEBUG: {self.__class__.__name__}._on_select_clicked - Final NSE scripts string to emit: {repr(final_scripts_str)}")
 

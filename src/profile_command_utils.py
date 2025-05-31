@@ -1,7 +1,7 @@
 from typing import TypedDict, Optional, List
 import shlex
-from .config import DEBUG_ENABLED # Import DEBUG_ENABLED
-from .utils import _get_arg_value_reprs # Import the helper
+from .config import DEBUG_ENABLED
+from .utils import _get_arg_value_reprs
 
 class ProfileOptions(TypedDict, total=False):
     name: Optional[str] # Profile name, not part of Nmap command itself
@@ -69,7 +69,7 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
         if part == "-O":
             options['os_fingerprint'] = True
         elif part == "-sS": # Handled by primary_scan_type or stealth_scan
-            options['stealth_scan'] = True # Explicitly set for the boolean field
+            options['stealth_scan'] = True
             if not options['primary_scan_type']: options['primary_scan_type'] = part
         elif part == "-Pn":
             options['no_ping'] = True
@@ -101,7 +101,7 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
                 options['ports'] = parts[i+1]
                 i += 1
             else: # -p without argument or followed by another option
-                remaining_parts.append(part) # Treat as unparsed for now
+                remaining_parts.append(part)
         elif part == "--script":
             if i + 1 < len(parts) and not parts[i+1].startswith("-"):
                 options['nse_script'] = parts[i+1]
@@ -177,7 +177,6 @@ def build_command_from_options(options: ProfileOptions) -> str:
         parts.append("--script")
         parts.append(options['nse_script'])
 
-    # Boolean flags
     if options.get('no_ping'):
         parts.append("-Pn")
     if options.get('list_scan'):
@@ -185,7 +184,6 @@ def build_command_from_options(options: ProfileOptions) -> str:
     if options.get('ping_scan'): # -sn
         parts.append("-sn")
 
-    # Host Discovery with optional ports
     if options.get('tcp_syn_ping'):
         arg = "-PS"
         if options.get('tcp_syn_ping_ports'):
@@ -209,7 +207,6 @@ def build_command_from_options(options: ProfileOptions) -> str:
     if options.get('traceroute'):
         parts.append("--traceroute")
 
-    # Special TCP scans
     if options.get('tcp_null_scan'):
         parts.append("-sN")
     if options.get('tcp_fin_scan'):

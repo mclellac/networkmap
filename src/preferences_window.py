@@ -44,7 +44,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
 
     def _show_toast(self, message: str):
-        # Existing DEBUG_ENABLED check is fine for the print itself.
         if DEBUG_ENABLED:
             print(f"PREFERENCES TOAST: {message}", file=sys.stderr)
         escaped_message = GLib.markup_escape_text(message)
@@ -75,7 +74,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
     def _init_ui_components(self) -> None:
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}._init_ui_components(args: self)")
-        # Method is currently empty
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}._init_ui_components")
 
@@ -91,7 +89,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._connect_signals")
 
     def _init_font_settings(self) -> None:
-        # This method seems unused, but adding logs if it were.
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}._init_font_settings(args: self)")
         font_str = self.settings.get_string("results-font")
@@ -106,7 +103,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._init_font_settings")
 
     def _init_theme_settings(self) -> None:
-        # This method seems unused, but adding logs if it were.
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}._init_theme_settings(args: self)")
         theme_str = self.settings.get_string("theme")
@@ -117,7 +113,6 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._init_theme_settings")
 
     def _bind_gsettings(self) -> None:
-        # This method seems unused, but adding logs if it were.
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}._bind_gsettings(args: self)")
         self.settings.bind(
@@ -130,10 +125,8 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             print(f"DEBUG: Exiting {self.__class__.__name__}._bind_gsettings")
 
     def _init_profile_management_ui(self) -> None:
-        # This method seems unused, but adding logs if it were.
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}._init_profile_management_ui(args: self)")
-        # Method is currently empty
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}._init_profile_management_ui")
 
@@ -303,7 +296,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                     profile_to_edit=profile_to_edit,
                     existing_profile_names=all_profile_names
                 )
-                if DEBUG_ENABLED and profile_to_edit: # Check if profile_to_edit is not None before printing
+                if DEBUG_ENABLED and profile_to_edit:
                     print(f"DEBUG: {self.__class__.__name__}._on_edit_profile_clicked - Loading profile for editing: {repr(profile_to_edit)}")
                 dialog.connect("profile-action", self._handle_profile_dialog_action_edit, profile_name)
                 dialog.present(self)

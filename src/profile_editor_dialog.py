@@ -18,7 +18,6 @@ class ProfileEditorDialog(Adw.Dialog):
                  profile_to_edit: Optional[Dict[str, Any]] = None,
                  existing_profile_names: Optional[List[str]] = None):
         if DEBUG_ENABLED:
-            # repr(profile_to_edit) could be large if command is long
             profile_name_for_log = profile_to_edit['name'] if profile_to_edit else "None"
             arg_str = _get_arg_value_reprs(self, f"profile_to_edit_name={profile_name_for_log}", existing_profile_names=existing_profile_names)
             print(f"DEBUG: Entering {self.__class__.__name__}.__init__(args: {arg_str})")
@@ -26,7 +25,7 @@ class ProfileEditorDialog(Adw.Dialog):
         super().__init__()
 
         self.profile_to_edit = profile_to_edit
-        if DEBUG_ENABLED and self.profile_to_edit: # Logging full content of profile being edited
+        if DEBUG_ENABLED and self.profile_to_edit:
             print(f"DEBUG: {self.__class__.__name__}.__init__ - Initializing with profile_to_edit: {repr(self.profile_to_edit)}")
         self.existing_profile_names = existing_profile_names if existing_profile_names else []
         self.original_profile_name = profile_to_edit['name'] if profile_to_edit else None
@@ -192,7 +191,6 @@ class ProfileEditorDialog(Adw.Dialog):
     def do_response(self, response_id: str):
         if DEBUG_ENABLED:
             print(f"DEBUG: Entering {self.__class__.__name__}.do_response(args: self, response_id={repr(response_id)})")
-            # Existing specific log for response_id is good.
             print(f"DEBUG: do_response received: {response_id}", file=sys.stderr)
         if response_id == "apply":
             name = self.profile_name_row.get_text().strip()
@@ -248,8 +246,6 @@ class ProfileEditorDialog(Adw.Dialog):
             if DEBUG_ENABLED:
                 action_type = "Updating" if self.profile_to_edit else "Adding"
                 print(f"DEBUG: UI Action: {action_type} profile: '{name}'")
-                # Optionally, also log final_command if it's not too verbose or sensitive
-                # print(f"DEBUG: Profile command: {final_command}")
 
             validator = NmapCommandValidator()
             is_valid, error_message = validator.validate_arguments(final_command)
@@ -262,10 +258,7 @@ class ProfileEditorDialog(Adw.Dialog):
             if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
                 profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
             if DEBUG_ENABLED:
-                # This print fulfills: "Log the full new content of the profile that's about to be saved."
                 print(f"DEBUG: {self.__class__.__name__}.do_response (apply) - Applying new/updated profile data: {repr(profile_data)}")
-                # The following specific print was already there and is also fine.
-                # print(f"DEBUG: apply - profile_data: {profile_data}", file=sys.stderr) # Redundant with above
                 print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
             self.emit("profile-action", "save", profile_data)
             if DEBUG_ENABLED:
@@ -293,9 +286,7 @@ class ProfileEditorDialog(Adw.Dialog):
 
     def _show_alert_dialog(self, message: str):
         if DEBUG_ENABLED:
-            # Existing specific log is fine.
             print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr)
-            # Entry log for the method itself
             print(f"DEBUG: Entering {self.__class__.__name__}._show_alert_dialog(args: self, message={repr(message)})")
         alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
         alert_dialog.add_response("ok", "OK")
