@@ -69,18 +69,18 @@
     </child>
     <child>
       <object class="AdwPreferencesPage">
+        <property name="icon-name">document-properties-symbolic</property>
         <property name="name">scan-profiles</property>
         <property name="title" translatable="yes">Scan Profiles</property>
-        <property name="icon-name">document-properties-symbolic</property> <!-- Or another suitable icon -->
         <child>
           <object class="AdwPreferencesGroup" id="profiles_group">
-            <property name="title" translatable="yes">Saved Profiles</property>
             <property name="description" translatable="yes">Manage your saved Nmap scan configurations.</property>
+            <property name="title" translatable="yes">Saved Profiles</property>
             <child>
               <object class="GtkListBox" id="profiles_list_box">
-                <property name="selection-mode">none</property> <!-- We'll use buttons on rows for actions -->
-                <property name="css-classes">boxed-list</property> 
-                <!-- Profiles will be added here programmatically as Adw.ActionRows -->
+                <!-- We'll use buttons on rows for actions -->
+                <property name="css-classes">boxed-list</property>
+                <property name="selection-mode">none</property>
               </object>
             </child>
             <child>
@@ -88,8 +88,8 @@
                 <property name="title" translatable="yes">Export All Scan Profiles</property>
                 <child>
                   <object class="GtkButton" id="export_profiles_button">
-                    <property name="label" translatable="yes">Export All...</property>
                     <property name="halign">end</property>
+                    <property name="label" translatable="yes">Export</property>
                     <property name="tooltip-text" translatable="yes">Export all scan profiles to a JSON file</property>
                     <style>
                       <class name="flat"/>
@@ -103,8 +103,8 @@
                 <property name="title" translatable="yes">Import Scan Profiles from File</property>
                 <child>
                   <object class="GtkButton" id="import_profiles_button">
-                    <property name="label" translatable="yes">Import...</property>
                     <property name="halign">end</property>
+                    <property name="label" translatable="yes">Import</property>
                     <property name="tooltip-text" translatable="yes">Import scan profiles from a JSON file</property>
                     <style>
                       <class name="flat"/>
@@ -113,12 +113,13 @@
                 </child>
               </object>
             </child>
-            <child type="footer"> <!-- Adding button as a footer to the group -->
+            <child type="footer">
+              <!-- Adding button as a footer to the group -->
               <object class="GtkButton" id="add_profile_button">
-                <property name="label" translatable="yes">Add New Profile...</property>
                 <property name="halign">start</property>
-                <property name="margin-top">6</property>
+                <property name="label" translatable="yes">Add New Profile...</property>
                 <property name="margin-bottom">6</property>
+                <property name="margin-top">6</property>
                 <style>
                   <class name="flat"/>
                 </style>
