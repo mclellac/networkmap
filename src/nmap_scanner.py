@@ -261,7 +261,7 @@ class NmapScanner:
                 nmap_command_to_log = f"(Privileged) Nmap base command: {self.nmap_executable_path} {' '.join(current_scan_args_list)} {target}"
             else:
                 nmap_command_to_log = f"nmap {scan_args_str_for_direct_scan} {target}"
-            print(f"DEBUG: NmapScanner.scan - Final Nmap command to be executed: {nmap_command_to_log}")
+            print(f"DEBUG: NmapScanner.scan - Final Nmap command to be executed: {nmap_command_to_log}") # This log is good as an overview
 
         if needs_privilege_escalation:
             # For privileged scans, ensure Nmap produces XML output to stdout (`-oX -`)
@@ -284,6 +284,8 @@ class NmapScanner:
                     current_scan_args_list.extend(["-oX", "-"])
             
             nmap_cmd_path = self._get_nmap_escalation_command_path()
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner.scan - FINAL privileged_command_args: {repr(current_scan_args_list)}") # Log exact list before execution
             completed_process = self._execute_with_privileges(
                 nmap_cmd_path, current_scan_args_list, target
             )
@@ -291,6 +293,12 @@ class NmapScanner:
             if completed_process.returncode == 0 and completed_process.stdout:
                 try:
                     if DEBUG_ENABLED:
+                        xml_output_for_log = completed_process.stdout
+                        if len(xml_output_for_log) > 4096: # Log first 2KB and last 2KB if too large
+                            print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (privileged, truncated):\n{xml_output_for_log[:2048]}\n... (omitted) ...\n{xml_output_for_log[-2048:]}")
+                        else:
+                            print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (privileged):\n{xml_output_for_log}")
+                        # The following log is somewhat redundant now but confirms parsing step.
                         print(f"DEBUG: NmapScanner.scan - Privileged scan successful, parsing XML output. Output size: {len(completed_process.stdout)}")
                     self.nm.analyse_nmap_xml_scan(nmap_xml_output=completed_process.stdout)
                     result = self._parse_scan_results(do_os_fingerprint)
@@ -320,7 +328,18 @@ class NmapScanner:
             try:
                 if DEBUG_ENABLED:
                     print(f"DEBUG: NmapScanner.scan - Executing non-privileged scan.")
+                    print(f"DEBUG: NmapScanner.scan - FINAL direct_scan_arguments: {repr(scan_args_str_for_direct_scan)}") # Log exact string before execution
                 self.nm.scan(hosts=target, arguments=scan_args_str_for_direct_scan, sudo=False)
+                if DEBUG_ENABLED:
+                    # nmap_last_output() returns stdout of the nmap instance
+                    raw_xml_output = self.nm.nmap_last_output()
+                    if raw_xml_output:
+                        if len(raw_xml_output) > 4096:
+                             print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (direct, truncated):\n{raw_xml_output[:2048]}\n... (omitted) ...\n{raw_xml_output[-2048:]}")
+                        else:
+                            print(f"DEBUG: NmapScanner.scan - Raw Nmap XML output (direct):\n{raw_xml_output}")
+                    else:
+                        print("DEBUG: NmapScanner.scan - No raw XML output retrieved from nmap_last_output() for direct scan.")
                 result = self._parse_scan_results(do_os_fingerprint)
                 if DEBUG_ENABLED:
                     print(f"DEBUG: Exiting NmapScanner.scan (non-privileged path) with result: {repr(result)[:200]}...")
@@ -665,6 +684,24 @@ class NmapScanner:
                 print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
         if DEBUG_ENABLED:
-            print(f"DEBUG: NmapScanner._parse_scan_results - Returning hosts_data: {repr(hosts_data)[:200]}..., current_message: {current_message}")
+            print(f"DEBUG: NmapScanner._parse_scan_results - Parsed {len(hosts_data)} hosts.")
+            for i, host_info in enumerate(hosts_data):
+                print(f"DEBUG: NmapScanner._parse_scan_results - Host #{i+1}:")
+                print(f"  ID: {host_info.get('id', 'N/A')}")
+                print(f"  Hostname: {host_info.get('hostname', 'N/A')}")
+                print(f"  State: {host_info.get('state', 'N/A')}")
+                if host_info.get('os_fingerprint'):
+                    os_fp = host_info['os_fingerprint'] # type: ignore
+                    print(f"  OS Fingerprint: Name: {os_fp.get('name', 'N/A')}, Accuracy: {os_fp.get('accuracy', 'N/A')}")
+                ports = host_info.get('ports', [])
+                print(f"  Found {len(ports)} ports.")
+                for port_entry in ports:
+                    service = port_entry.get('service', {})
+                    print(f"    Port: {port_entry.get('portid')}/{port_entry.get('protocol')}, State: {port_entry.get('state')}, " +
+                          f"Service: {service.get('name', 'N/A')}, Product: {service.get('product', 'N/A')}, Version: {service.get('version', 'N/A')}")
+                    if port_entry.get('script_output'):
+                        print(f"      Script Output: {repr(port_entry.get('script_output'))}")
+            # The existing log for returning hosts_data (summary) and current_message is good.
+            print(f"DEBUG: NmapScanner._parse_scan_results - Returning hosts_data (summary above), current_message: {current_message}")
             print(f"DEBUG: Exiting NmapScanner._parse_scan_results")
         return hosts_data, current_message
