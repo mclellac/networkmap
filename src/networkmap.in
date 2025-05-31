@@ -35,9 +35,6 @@ import gi
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib # Grouped gi imports
 
-from networkmap import main as app_main # Application specific
-
-
 conf = {
     'PYTHON': '@PYTHON@',
     'VERSION': '@VERSION@',
@@ -45,7 +42,6 @@ conf = {
     'localedir': '@localedir@',
     'pkgdatadir': '@pkgdatadir@'
 }
-
 
 # --- BEGIN Adwaita Import Test ---
 if config.DEBUG_ENABLED:
@@ -59,14 +55,13 @@ except Exception as e_adw_test: # Make this more specific if possible
         print(f"DEBUG: Direct import of Adwaita (Adw) FAILED: {type(e_adw_test).__name__}: {e_adw_test}", file=sys.stderr) # Keep using stderr
 # --- END Adwaita Import Test ---
 
-
 # 2. Load GResources
 try:
     # Gio, GLib already imported
     resource_path = conf['RESOURCE_PATH']
 
     if os.path.exists(resource_path):
-        if config.DEBUG_ENABLED:
+        if config.DEBUG_ENABLED: # Ensure config is usable here
             print(f"INFO: Attempting to load resource from: {resource_path}", file=sys.stderr)
         resource = Gio.Resource.load(resource_path)
         Gio.resources_register(resource)
@@ -75,16 +70,18 @@ try:
     else:
         print(f"ERROR: Compiled GResource file not found at {resource_path}. Application may fail to load UI.", file=sys.stderr)
 
-except ImportError as e:
+except ImportError as e: # This typically refers to Gio/GLib not being importable at Python level
     print(f"ERROR: Could not import Gio/GLib for GResource loading: {e}", file=sys.stderr)
     sys.exit(1)
-except GLib.Error as e:
+except GLib.Error as e: # This is for errors from GLib/Gio C functions, e.g. file not found by Gio.Resource.load
     print(f"ERROR: GLib.Error loading GResource {resource_path}: {e}", file=sys.stderr)
     sys.exit(1)
-except Exception as e:
+except Exception as e: # Other unexpected errors
     print(f"ERROR: Unexpected error during GResource loading: {e}", file=sys.stderr)
     sys.exit(1)
+# --- END of GResource Loading Block ---
 
+from networkmap import main as app_main # Application specific
 
 # 3. Run the main application module (app_main already imported)
 try:
