@@ -5,9 +5,21 @@ import logging
 import os
 import sys
 
+# --- Insert the site-packages install path for the installed modules ---
+# This is the critical fix so Python can find the installed networkmap package.
+# The path here matches the Meson install path for Python packages.
+# Adjust if your Meson setup uses a different path or variable.
+
+python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packages')
+
+if site_packages_path not in sys.path:
+    sys.path.insert(0, site_packages_path)
+# --- END of sys.path modification ---
+
 # Attempt to import config early for debug flags.
 # This assumes 'networkmap' is in the path, which it should be due to the
-# sys.path modification below.
+# sys.path modification above.
 try:
     from networkmap import config
 except ImportError:
@@ -33,17 +45,6 @@ conf = {
     'localedir': '@localedir@',
     'pkgdatadir': '@pkgdatadir@'
 }
-
-# --- Insert the site-packages install path for the installed modules ---
-# This is the critical fix so Python can find the installed networkmap package.
-# The path here matches the Meson install path for Python packages.
-# Adjust if your Meson setup uses a different path or variable.
-
-python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
-site_packages_path = os.path.join('/usr/local/lib', python_version, 'site-packages')
-
-if site_packages_path not in sys.path:
-    sys.path.insert(0, site_packages_path)
 
 
 # --- BEGIN Adwaita Import Test ---
