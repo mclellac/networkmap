@@ -1,6 +1,5 @@
 from typing import TypedDict, Optional, List
 import shlex
-import re # For more complex parsing if needed
 
 class ProfileOptions(TypedDict, total=False):
     name: Optional[str] # Profile name, not part of Nmap command itself

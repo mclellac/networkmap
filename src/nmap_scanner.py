@@ -1,4 +1,4 @@
-from gi.repository import GLib # Added for GLib.markup_escape_text
+from gi.repository import GLib
 from gi.repository import Gio
 
 try:
@@ -36,7 +36,7 @@ class NmapScanner:
     COLOR_OPEN = "green"
     COLOR_CLOSED = "red"
     COLOR_FILTERED = "orange"
-    COLOR_DEFAULT_STATE = "black" # Fallback
+    COLOR_DEFAULT_STATE = "black"
 
     def __init__(self) -> None:
         """
@@ -237,14 +237,14 @@ class NmapScanner:
         
     def build_scan_args(
         self,
-        do_os_fingerprint: bool,    
-        additional_args_str: str,   
-        nse_script: Optional[str] = None,        
-        default_args_str: Optional[str] = None,  
-        stealth_scan: bool = False, 
-        port_spec: Optional[str] = None,         
-        timing_template: Optional[str] = None,   
-        no_ping: bool = False                    
+        do_os_fingerprint: bool,
+        additional_args_str: str,
+        nse_script: Optional[str] = None,
+        default_args_str: Optional[str] = None,
+        stealth_scan: bool = False,
+        port_spec: Optional[str] = None,
+        timing_template: Optional[str] = None,
+        no_ping: bool = False
     ) -> str:
         if DEBUG_ENABLED:
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Input parameters: do_os_fingerprint={do_os_fingerprint}, additional_args_str='{additional_args_str}', nse_script='{nse_script}', default_args_str='{default_args_str}', stealth_scan={stealth_scan}, port_spec='{port_spec}', timing_template='{timing_template}', no_ping={no_ping}")
@@ -496,5 +496,3 @@ class NmapScanner:
             print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
         return hosts_data, current_message
-
-[end of src/nmap_scanner.py]

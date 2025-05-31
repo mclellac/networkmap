@@ -1,5 +1,5 @@
 import re
-import sys # For potential debug prints within the validator itself, if needed later
+import sys
 
 class NmapCommandValidator:
     def __init__(self):
@@ -48,7 +48,6 @@ class NmapCommandValidator:
             "--min-rate": "number",
             "--max-rate": "number",
             "--script-args": "args_list",
-            # Other options requiring arguments
         }
         # Options that can have arguments directly appended (e.g., -T4)
         # For these, the main parser might not see a separate arg, so we must recognize them.
@@ -112,7 +111,7 @@ class NmapCommandValidator:
                     if is_attached_host_discovery_port_arg:
                         pass # Already handled and validated
                     # --- End: Handling for attached host discovery port args ---
-                    elif not (len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args)): # existing -sV type check
+                    elif not (len(part) > 2 and part[0:2] in self.known_options and not (part[0:2] in self.options_with_args)):
                         return False, f"Unknown Nmap option: '{part}'"
 
                 # If code reaches here, 'part' is a known option or was handled as a prefix option (like -T4 or -PS22)
@@ -188,7 +187,7 @@ if __name__ == '__main__':
         ("iL_arg_is_option", "-iL -sV", False),
         ("oN_forbidden_char_in_filename", "-oN \"file;name.txt\"", False),
         ("iL_forbidden_char_in_filename", "-iL \"file|name.txt\"", False),
-        ("oN_empty_filename", "-oN \"\"", False), # Handled by "looks like another option" if quotes make it non-empty by split
+        ("oN_empty_filename", "-oN \"\"", False),
         ("invalid_T6", "-T6", False), # Invalid timing
         ("port_spec_invalid_char", "-p 80,abc", False), # 'abc' not valid in basic port regex
         ("script_spec_invalid_char", "--script \"bad-\\\"-script\"", False) # backslash in script name (example)

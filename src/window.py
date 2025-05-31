@@ -17,7 +17,7 @@ from .config import DEBUG_ENABLED
 class NetworkMapWindow(Adw.ApplicationWindow):
     __gtype_name__ = "NetworkMapWindow"
 
-    MAX_HISTORY_SIZE = 20 
+    MAX_HISTORY_SIZE = 20
     TARGET_HISTORY_SCHEMA_KEY = "target-history"
 
     target_entry_row: Adw.EntryRow = Gtk.Template.Child("target_entry_row")
@@ -43,13 +43,13 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.nmap_scanner: NmapScanner = NmapScanner()
         self.current_scan_results: Optional[List[Dict[str, Any]]] = None
         self.selected_nse_script: Optional[str] = None
-        self.nse_script_filter: Optional[Gtk.StringFilter] = None 
+        self.nse_script_filter: Optional[Gtk.StringFilter] = None
         self.selected_timing_template: Optional[str] = None
-        self.timing_options: Dict[str, Optional[str]] = {} 
-        
+        self.timing_options: Dict[str, Optional[str]] = {}
+
         self.settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
         self.target_history_list: List[str] = list(self.settings.get_strv(self.TARGET_HISTORY_SCHEMA_KEY))
-        self.font_css_provider = Gtk.CssProvider()
+        self.font_css_provider = Gtk.CssProvider() # For applying custom font to results ListBox items
         self.profile_manager = ProfileManager()
         self.validator = NmapCommandValidator()
 

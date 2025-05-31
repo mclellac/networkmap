@@ -291,7 +291,6 @@ class ProfileManager:
 
 # Example usage (for local testing, not part of the main application flow)
 if __name__ == '__main__':
-    import sys # Required for print to stderr in example
     manager = ProfileManager()
     # Clear existing profiles for testing
     # manager.save_profiles([])
