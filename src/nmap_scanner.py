@@ -79,7 +79,8 @@ class NmapScanner:
             settings = Gio.Settings.new("com.github.mclellac.NetworkMap")
             gsettings_default_args = settings.get_string("default-nmap-arguments")
         except Exception as e:
-            print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print(f"Warning: Could not retrieve default Nmap arguments from GSettings: {e}", file=sys.stderr)
 
         scan_args_str = self.build_scan_args(
             do_os_fingerprint,
@@ -179,6 +180,18 @@ class NmapScanner:
         
         needs_privilege_escalation = self._should_escalate(do_os_fingerprint, current_scan_args_list)
 
+        if DEBUG_ENABLED:
+            nmap_command_to_log = ""
+            if needs_privilege_escalation:
+                # For privileged scans, current_scan_args_list is more relevant before -oX - is added
+                # and self.nmap_executable_path is used by pkexec/osascript directly with these args
+                # The exact command depends on the escalation method in _execute_with_privileges
+                # This provides a general idea of the core nmap part of the command.
+                nmap_command_to_log = f"(Privileged) Nmap part: {self.nmap_executable_path} {' '.join(current_scan_args_list)} {target}"
+            else:
+                nmap_command_to_log = f"nmap {scan_args_str_for_direct_scan} {target}"
+            print(f"DEBUG: NmapScanner.scan - Effective Nmap command to be executed: {nmap_command_to_log}")
+
         if needs_privilege_escalation:
             # For privileged scans, ensure Nmap produces XML output to stdout (`-oX -`)
             # for parsing by `self.nm.analyse_nmap_xml_scan`.
@@ -273,7 +286,11 @@ class NmapScanner:
 
         if DEBUG_ENABLED:
             print(f"DEBUG_PROFILE_TRACE: NmapScanner.build_scan_args - Final constructed args list (before join): {final_args_list}")
-        return shlex.join(final_args_list)
+
+        final_command_str = shlex.join(final_args_list)
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner.build_scan_args - Final Nmap arguments string: {final_command_str}")
+        return final_command_str
 
     def _apply_os_fingerprint_arg(self, final_args_list: List[str], do_os_fingerprint: bool) -> None:
         if do_os_fingerprint and not self._is_arg_present(final_args_list, ["-O"]):
@@ -302,8 +319,9 @@ class NmapScanner:
         if stealth_scan and not self._is_arg_present(final_args_list, SCAN_TYPE_ARGS):
             final_args_list.append("-sS")
         elif stealth_scan and self._is_arg_present(final_args_list, SCAN_TYPE_ARGS) and not self._is_arg_present(final_args_list, ["-sS"]):
-             print(f"Warning: Stealth scan (-sS) selected, but conflicting scan type arguments are already present: "
-                   f"{' '.join(final_args_list)}. User/default arguments will take precedence.", file=sys.stderr)
+            if DEBUG_ENABLED:
+                 print(f"Warning: Stealth scan (-sS) selected, but conflicting scan type arguments are already present: "
+                       f"{' '.join(final_args_list)}. User/default arguments will take precedence.", file=sys.stderr)
 
     def _apply_no_ping_arg(self, final_args_list: List[str], no_ping: bool) -> None:
         if no_ping and not self._is_arg_present(final_args_list, ["-Pn"]):
@@ -331,7 +349,8 @@ class NmapScanner:
             if timing_template in {"-T0", "-T1", "-T2", "-T3", "-T4", "-T5"}:
                 final_args_list.append(timing_template.strip())
             else:
-                print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
+                if DEBUG_ENABLED:
+                    print(f"Warning: Invalid timing template '{timing_template}' provided. Ignored.", file=sys.stderr)
 
     def _apply_gsettings_dns_arg(self, final_args_list: List[str]) -> None:
         try:
@@ -342,12 +361,15 @@ class NmapScanner:
                 if dns_servers and not self._is_arg_present(final_args_list, ["--dns-servers"], True):
                     final_args_list.extend(["--dns-servers", ','.join(dns_servers)])
                 elif dns_servers and self._is_arg_present(final_args_list, ["--dns-servers"], True):
-                     print("Info: --dns-servers argument already provided by user or default arguments. "
-                           "GSettings value for DNS will not override.", file=sys.stderr)
+                    if DEBUG_ENABLED:
+                         print("Info: --dns-servers argument already provided by user or default arguments. "
+                               "GSettings value for DNS will not override.", file=sys.stderr)
         except GLib.Error as e:
-            print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print(f"Warning: Could not retrieve DNS servers from GSettings: {e}", file=sys.stderr)
         except Exception as e:
-            print(f"Warning: An unexpected error occurred while retrieving DNS servers from GSettings: {e}", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print(f"Warning: An unexpected error occurred while retrieving DNS servers from GSettings: {e}", file=sys.stderr)
 
     def _is_arg_present(self, args_list: List[str], check_args: List[str], is_prefix_check: bool = False) -> bool:
         for arg_to_check in check_args:
@@ -365,7 +387,13 @@ class NmapScanner:
         hosts_data: List[Dict[str, Any]] = []
         scanned_host_ids = self.nm.all_hosts()
         if not scanned_host_ids:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._parse_scan_results - No scanned_host_ids found from Nmap output.")
             return [], "No hosts found."
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NmapScanner._parse_scan_results - Found host IDs: {scanned_host_ids}")
+
         for host_id in scanned_host_ids:
             try:
                 host_scan_data = self.nm[host_id]
@@ -484,15 +512,19 @@ class NmapScanner:
                 raise NmapScanParseError(
                     f"Unexpected error parsing data for host {host_id} ({type(e).__name__}): {e}"
                 )
-        if not hosts_data and scanned_host_ids: 
+        if not hosts_data and scanned_host_ids:
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NmapScanner._parse_scan_results - No hosts_data populated after parsing {len(scanned_host_ids)} host IDs.")
             current_message = "No information parsed for scanned hosts. They might be down or heavily filtered."
         elif not scanned_host_ids:
+            # This case is already handled by the initial check of scanned_host_ids
             current_message = "No hosts found."
         else:
             current_message = None
         scan_stats = self.nm.scanstats()
         if scan_stats and DEBUG_ENABLED:
             stats_str = f"Scan stats: {scan_stats.get('uphosts', 'N/A')} up, {scan_stats.get('downhosts', 'N/A')} down, {scan_stats.get('totalhosts', 'N/A')} total. Elapsed: {scan_stats.get('elapsed', 'N/A')}s."
-            print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
+            if DEBUG_ENABLED:
+                print(f"DEBUG Nmap Scan Stats: {stats_str}", file=sys.stderr)
         
         return hosts_data, current_message

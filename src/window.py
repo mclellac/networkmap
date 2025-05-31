@@ -503,8 +503,11 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.target_history_list = list(self.settings.get_strv(key_name))
 
     def _initiate_scan_procedure(self) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: UI Action: Scan initiated by user for target: {self.target_entry_row.get_text().strip()}")
         scan_params = self._get_current_scan_parameters()
-        if DEBUG_ENABLED: print(f"DEBUG_PROFILE_TRACE: _initiate_scan_procedure - scan_params collected: {scan_params}")
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NetworkMapWindow._initiate_scan_procedure - Scan parameters for NmapScanner: {scan_params}")
         target: str = scan_params["target"]
         if not target:
             self._show_toast("Error: Target cannot be empty")
@@ -608,6 +611,8 @@ class NetworkMapWindow(Adw.ApplicationWindow):
             child = self.results_listbox.get_first_child()
 
     def _populate_results_listbox(self, hosts_data: List[Dict[str, Any]]) -> None:
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NetworkMapWindow._populate_results_listbox - Populating results for {len(hosts_data)} hosts.")
         for host_data in hosts_data:
             row = HostInfoExpanderRow(host_data=host_data, raw_details_text=host_data.get("raw_details_text", ""))
             if hasattr(self, 'font_css_provider'): 

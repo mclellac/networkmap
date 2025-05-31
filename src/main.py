@@ -74,6 +74,8 @@ class NetworkMapApplication(Adw.Application):
 
     def _on_about_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'about' action by showing the application's About dialog."""
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: UI Action: Opening About dialog.")
         about_dialog = Adw.AboutDialog(
             application_name=APP_NAME,
             application_icon=APP_ID,
@@ -102,6 +104,8 @@ class NetworkMapApplication(Adw.Application):
         self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]
     ) -> None:
         """Handles the 'preferences' action by creating and presenting the preferences window."""
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: UI Action: Opening Preferences window.")
         active_window = self.get_active_window()
         if active_window is None:
             # This should ideally not happen for an action that requires a window
@@ -115,6 +119,8 @@ class NetworkMapApplication(Adw.Application):
 
     def _on_help_shortcuts_action(self, action: Gio.SimpleAction, parameter: Optional[GLib.Variant]) -> None:
         """Handles the 'help_shortcuts' action by displaying the shortcuts window."""
+        if config.DEBUG_ENABLED:
+            print(f"DEBUG: UI Action: Opening Help Shortcuts window.")
         # Assuming 'help-overlay.ui' is the compiled UI file for the shortcuts
         # and it's included in the GResources.
         # The resource path would be like '/com/github/mclellac/NetworkMap/help-overlay.ui'
@@ -164,6 +170,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         The exit status of the application.
     """
     current_argv = argv if argv is not None else sys.argv
+    # config.DEBUG_ENABLED is not set yet, so we check args.debug directly for this one print.
+    # Or, defer this print until after config.DEBUG_ENABLED is set.
+    # For now, let's check args.debug as it's the earliest point.
+    # A more complex setup might involve a pre-config logging setup.
+    if '--debug' in current_argv: # Basic check before full parsing
+        print(f"DEBUG: main() received initial sys.argv: {current_argv}")
 
     parser = argparse.ArgumentParser(description="Network Map application")
     parser.add_argument(
