@@ -284,15 +284,24 @@ class ProfileEditorDialog(Adw.Dialog):
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}._on_host_discovery_ping_switch_toggled")
 
-    def _show_alert_dialog(self, message: str):
-        if DEBUG_ENABLED:
-            print(f"PROFILE EDITOR INFO (will be AlertDialog): {message}", file=sys.stderr)
-            print(f"DEBUG: Entering {self.__class__.__name__}._show_alert_dialog(args: self, message={repr(message)})")
-        alert_dialog = Adw.AlertDialog(heading="Input Error", body=message)
-        alert_dialog.add_response("ok", "OK")
-        alert_dialog.set_default_response("ok")
-        alert_dialog.set_transient_for(self)
-        alert_dialog.set_modal(True)
-        alert_dialog.present()
-        if DEBUG_ENABLED:
-            print(f"DEBUG: Exiting {self.__class__.__name__}._show_alert_dialog")
+    def _show_alert_dialog(self, message_text: str):
+        # Entry log for this method is assumed to be handled by the broader logging additions
+        # if config.DEBUG_ENABLED:
+        #     print(f"DEBUG: Entering {self.__class__.__name__}._show_alert_dialog(message_text={repr(message_text)})")
+
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING, # Using WARNING, can be changed
+            buttons=Gtk.ButtonsType.OK,
+            text="Validation Error" # Dialog title
+        )
+        dialog.set_secondary_text(message_text) # Set the main message content
+
+        # Ensure dialog is destroyed on response
+        dialog.connect("response", lambda d, response_id: d.destroy())
+        dialog.set_visible(True)
+
+        # Exit log for this method is assumed to be handled by the broader logging additions
+        # if config.DEBUG_ENABLED:
+        #     print(f"DEBUG: Exiting {self.__class__.__name__}._show_alert_dialog")
