@@ -73,7 +73,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
         self.export_profiles_button.connect("clicked", self._on_export_profiles_clicked)
         self.import_profiles_button.connect("clicked", self._on_import_profiles_clicked)
 
-    def _init_font_settings(self) -> None: # Not called, but kept for potential future use or direct call
+    def _init_font_settings(self) -> None:
         font_str = self.settings.get_string("results-font")
         if font_str:
             try:
@@ -83,13 +83,13 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
                 print(f"Error setting font from GSettings: {e}", file=sys.stderr)
         self.pref_font_button.connect("font-set", self._on_font_changed)
 
-    def _init_theme_settings(self) -> None: # Not called
+    def _init_theme_settings(self) -> None:
         theme_str = self.settings.get_string("theme")
         selected_theme_index = self.THEME_MAP_GSETTINGS_TO_INDEX.get(theme_str, 0)
         self.pref_theme_combo_row.set_selected(selected_theme_index)
         self.pref_theme_combo_row.connect("notify::selected", self._on_theme_changed)
 
-    def _bind_gsettings(self) -> None: # Not called
+    def _bind_gsettings(self) -> None:
         self.settings.bind(
             "dns-servers", self.pref_dns_servers_entry_row, "text", Gio.SettingsBindFlags.DEFAULT
         )
@@ -97,7 +97,7 @@ class NetworkMapPreferencesWindow(Adw.PreferencesWindow):
             "default-nmap-arguments", self.pref_default_nmap_args_entry_row, "text", Gio.SettingsBindFlags.DEFAULT
         )
 
-    def _init_profile_management_ui(self) -> None: # Not called
+    def _init_profile_management_ui(self) -> None:
         pass
 
     def _create_file_chooser(self, title: str, action: Gtk.FileChooserAction, accept_label: str) -> Gtk.FileChooserNative:
