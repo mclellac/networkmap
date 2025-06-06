@@ -51,7 +51,7 @@ def parse_command_to_options(command_str: str) -> ProfileOptions:
         'udp_ping_ports': '',
         'primary_scan_type': None,
         'ports': '',
-        'nse_script': '',
+        'nse_script': None, # Changed from '' to None for better "not set" representation
         'timing_template': None,
         'additional_args': ''
     }
@@ -173,9 +173,9 @@ def build_command_from_options(options: ProfileOptions) -> str:
         parts.append("-p")
         parts.append(options['ports'])
 
-    if options.get('nse_script'):
-        parts.append("--script")
-        parts.append(options['nse_script'])
+    nse_script_val = options.get('nse_script')
+    if nse_script_val and isinstance(nse_script_val, str) and nse_script_val.strip():
+        parts.append(f"--script={nse_script_val.strip()}")
 
     if options.get('no_ping'):
         parts.append("-Pn")

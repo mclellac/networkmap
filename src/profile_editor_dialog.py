@@ -6,6 +6,7 @@ from .nmap_validator import NmapCommandValidator
 from .profile_command_utils import parse_command_to_options, build_command_from_options, ProfileOptions
 from .config import DEBUG_ENABLED
 from .utils import _get_arg_value_reprs # Import the helper
+from .nse_script_selection_dialog import NseScriptSelectionDialog
 
 class ProfileEditorDialog(Adw.Dialog):
     __gtype_name__ = "NetworkMapProfileEditorDialog"
@@ -29,6 +30,11 @@ class ProfileEditorDialog(Adw.Dialog):
             print(f"DEBUG: {self.__class__.__name__}.__init__ - Initializing with profile_to_edit: {repr(self.profile_to_edit)}")
         self.existing_profile_names = existing_profile_names if existing_profile_names else []
         self.original_profile_name = profile_to_edit['name'] if profile_to_edit else None
+
+        self.current_nse_scripts_str: Optional[str] = None
+        if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit and isinstance(self.profile_to_edit['nse_scripts'], str):
+            self.current_nse_scripts_str = self.profile_to_edit['nse_scripts']
+            if DEBUG_ENABLED: print(f"DEBUG: Initialized self.current_nse_scripts_str from profile_to_edit: {self.current_nse_scripts_str}")
 
         if self.profile_to_edit:
             self.set_title("Edit Profile")
@@ -124,6 +130,18 @@ class ProfileEditorDialog(Adw.Dialog):
         self.tcp_xmas_scan_switch = Adw.SwitchRow(title="TCP Xmas Scan (-sX)")
         scan_techniques_expander.add_row(self.tcp_xmas_scan_switch)
 
+        # NSE Scripts Expander & Button
+        nse_expander = Adw.ExpanderRow(title="NSE Scripts")
+        nse_expander.set_expanded(False) # Default to collapsed
+        preferences_group.add(nse_expander)
+
+        self.select_nse_button = Gtk.Button(label="Select Scripts...")
+        self.select_nse_button.connect("clicked", self._on_select_nse_scripts_clicked)
+        select_scripts_action_row = Adw.ActionRow(title="Configure NSE Scripts")
+        select_scripts_action_row.add_suffix(self.select_nse_button)
+        select_scripts_action_row.set_activatable_widget(self.select_nse_button)
+        nse_expander.add_row(select_scripts_action_row)
+
         additional_args_expander = Adw.ExpanderRow(title="Additional Manual Arguments")
         additional_args_expander.set_expanded(True)
         preferences_group.add(additional_args_expander)
@@ -214,7 +232,7 @@ class ProfileEditorDialog(Adw.Dialog):
                 'tcp_xmas_scan': self.tcp_xmas_scan_switch.get_active(),
                 'additional_args': self.additional_args_row.get_text().strip() or None,
                  'ports': None,
-                 'nse_script': None,
+                 'nse_script': self.current_nse_scripts_str,
             }
             timing_map_from_index = {0:"-T0",1:"-T1",2:"-T2",3:"-T3",4:"-T4",5:"-T5"}
             selected_timing_idx = self.timing_combo.get_selected()
@@ -255,8 +273,10 @@ class ProfileEditorDialog(Adw.Dialog):
                     print(f"DEBUG (ProfileEditorDialog): Validation failed - '{error_message}' in command: {final_command}", file=sys.stderr)
                 return True
             profile_data = {'name': name, 'command': final_command}
-            if self.profile_to_edit and 'nse_scripts' in self.profile_to_edit:
-                profile_data['nse_scripts'] = self.profile_to_edit['nse_scripts']
+            if self.current_nse_scripts_str:
+                profile_data['nse_scripts'] = self.current_nse_scripts_str
+            elif 'nse_scripts' in profile_data: # Ensure it's removed if cleared
+                del profile_data['nse_scripts']
             if DEBUG_ENABLED:
                 print(f"DEBUG: {self.__class__.__name__}.do_response (apply) - Applying new/updated profile data: {repr(profile_data)}")
                 print("DEBUG: apply - emitting profile-action 'save'", file=sys.stderr)
@@ -305,3 +325,30 @@ class ProfileEditorDialog(Adw.Dialog):
         # Exit log for this method is assumed to be handled by the broader logging additions
         # if config.DEBUG_ENABLED:
         #     print(f"DEBUG: Exiting {self.__class__.__name__}._show_alert_dialog")
+
+    def _on_select_nse_scripts_clicked(self, button: Gtk.Button) -> None:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, button=button)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_select_nse_scripts_clicked(args: {arg_str})")
+
+        dialog = NseScriptSelectionDialog(parent_window=self.get_root(), current_scripts_str=self.current_nse_scripts_str)
+        dialog.connect("scripts-selected", self._on_nse_scripts_selected)
+        dialog.set_visible(True)
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_select_nse_scripts_clicked")
+
+    def _on_nse_scripts_selected(self, dialog: NseScriptSelectionDialog, scripts_str: str) -> None:
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, dialog=dialog, scripts_str=scripts_str)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_nse_scripts_selected(args: {arg_str})")
+
+        self.current_nse_scripts_str = scripts_str
+        if DEBUG_ENABLED:
+            print(f"DEBUG: {self.__class__.__name__}._on_nse_scripts_selected - Updated self.current_nse_scripts_str to: {self.current_nse_scripts_str}")
+
+        # Optionally, update UI here to reflect selected scripts, e.g., button label or action row subtitle.
+        # For now, this is skipped as per instruction.
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_nse_scripts_selected")
