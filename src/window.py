@@ -95,6 +95,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         self.port_spec_entry_row.connect("notify::text", self._update_nmap_command_preview)
         self.port_spec_entry_row.connect("notify::text", self._on_ports_entry_changed)
         self.nse_script_combo_row.connect("notify::selected", self._on_nse_script_selected) 
+        self.nse_script_combo_row.connect("notify::search-text", self._on_nse_search_text_changed)
         self.timing_template_combo_row.connect("notify::selected", self._on_timing_template_selected)
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}._connect_ui_element_signals")
@@ -411,6 +412,7 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         string_list_model = Gtk.StringList.new(combo_items)
         expression = Gtk.PropertyExpression.new(Gtk.StringObject, None, "string")
         self.nse_script_filter = Gtk.StringFilter.new(expression)
+        if DEBUG_ENABLED: print(f"DEBUG: NetworkMapWindow._populate_nse_script_combo - Initial nse_script_filter.props.search: '{self.nse_script_filter.props.search}'")
         self.nse_script_filter.set_match_mode(Gtk.StringFilterMatchMode.SUBSTRING)
         self.nse_script_filter.set_ignore_case(True)
         filter_model = Gtk.FilterListModel.new(string_list_model, self.nse_script_filter)
@@ -422,6 +424,16 @@ class NetworkMapWindow(Adw.ApplicationWindow):
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}._populate_nse_script_combo (Loaded {len(combo_items) -1} scripts)")
 
+    def _on_nse_search_text_changed(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
+        search_text = combo_row.props.search_text
+        if DEBUG_ENABLED:
+            print(f"DEBUG: NetworkMapWindow._on_nse_search_text_changed - Search text from ComboRow: '{search_text}'")
+        if self.nse_script_filter:
+            self.nse_script_filter.set_search(search_text if search_text else None)
+            if DEBUG_ENABLED:
+                print(f"DEBUG: NetworkMapWindow._on_nse_search_text_changed - Set nse_script_filter.props.search to: '{self.nse_script_filter.props.search}'")
+        else:
+            if DEBUG_ENABLED: print("DEBUG: NetworkMapWindow._on_nse_search_text_changed - self.nse_script_filter is None, cannot set search.")
 
     def _on_nse_script_selected(self, combo_row: Adw.ComboRow, pspec: GObject.ParamSpec) -> None:
         if DEBUG_ENABLED:
