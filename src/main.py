@@ -76,7 +76,9 @@ class NetworkMapApplication(Adw.Application):
             print(f"DEBUG: Entering NetworkMapApplication.do_activate(args: self)")
         win: Optional[NetworkMapWindow] = self.get_active_window()
         if not win:
+            if config.DEBUG_ENABLED: print(f"DEBUG: NetworkMapApplication.do_activate - About to create NetworkMapWindow")
             win = NetworkMapWindow(application=self)
+            if config.DEBUG_ENABLED: print(f"DEBUG: NetworkMapApplication.do_activate - NetworkMapWindow created. Type: {type(win)}")
         win.present()
         if config.DEBUG_ENABLED:
             print(f"DEBUG: Exiting NetworkMapApplication.do_activate")
