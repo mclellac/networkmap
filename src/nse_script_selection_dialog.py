@@ -43,6 +43,10 @@ class NseScriptSelectionDialog(Adw.Dialog):
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         self.set_child(main_box)
 
+        self.search_entry = Gtk.SearchEntry(placeholder_text="Search scripts...")
+        self.search_entry.connect("search-changed", self._on_search_changed)
+        main_box.append(self.search_entry)
+
         scrolled_window = Gtk.ScrolledWindow(has_frame=True, policy=(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC), vexpand=True)
         main_box.append(scrolled_window)
 
@@ -50,15 +54,18 @@ class NseScriptSelectionDialog(Adw.Dialog):
         scrolled_window.set_child(self.list_box)
 
         self.check_buttons: dict[str, Gtk.CheckButton] = {} # Stores script_name: Gtk.CheckButton
+        self.script_rows: List[Adw.ActionRow] = [] # To store all script rows for easy iteration
 
         for display_name, script_name in PREDEFINED_NSE_SCRIPTS:
             row = Adw.ActionRow(title=display_name)
+            row.script_name = script_name # Store script_name directly on the row
             check_button = Gtk.CheckButton(active=(script_name in self.current_selected_scripts))
             self.check_buttons[script_name] = check_button
             
             row.add_suffix(check_button)
             row.set_activatable_widget(check_button) # Allows toggling by clicking the row
             self.list_box.append(row)
+            self.script_rows.append(row)
 
         action_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, halign=Gtk.Align.END, margin_top=12)
         
@@ -73,6 +80,32 @@ class NseScriptSelectionDialog(Adw.Dialog):
         main_box.append(action_box)
         if DEBUG_ENABLED:
             print(f"DEBUG: Exiting {self.__class__.__name__}.__init__")
+
+    def _on_search_changed(self, search_entry: Gtk.SearchEntry) -> None:
+        """Handles the search entry text changed event to filter scripts."""
+        if DEBUG_ENABLED:
+            arg_str = _get_arg_value_reprs(self, search_entry=search_entry)
+            print(f"DEBUG: Entering {self.__class__.__name__}._on_search_changed(args: {arg_str})")
+
+        search_text = search_entry.get_text().lower()
+
+        for row in self.script_rows:
+            row_title = row.get_title()
+            script_name_attr = getattr(row, "script_name", "") # Get script_name, default to "" if not found
+
+            should_be_visible = False
+            if not search_text: # Empty search shows all
+                should_be_visible = True
+            else:
+                if row_title and search_text in row_title.lower():
+                    should_be_visible = True
+                elif script_name_attr and search_text in script_name_attr.lower():
+                    should_be_visible = True
+
+            row.set_visible(should_be_visible)
+
+        if DEBUG_ENABLED:
+            print(f"DEBUG: Exiting {self.__class__.__name__}._on_search_changed")
 
     def _on_cancel_clicked(self, button: Gtk.Button) -> None:
         """Handles the Cancel button click event."""
