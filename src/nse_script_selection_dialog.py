@@ -59,6 +59,7 @@ class NseScriptSelectionDialog(Adw.Dialog):
         for display_name, script_name in PREDEFINED_NSE_SCRIPTS:
             row = Adw.ActionRow(title=display_name)
             row.script_name = script_name # Store script_name directly on the row
+            if DEBUG_ENABLED: print(f"DEBUG: Assigned script_name '{row.script_name}' to row with title '{row.get_title()}'")
             check_button = Gtk.CheckButton(active=(script_name in self.current_selected_scripts))
             self.check_buttons[script_name] = check_button
             
@@ -88,20 +89,28 @@ class NseScriptSelectionDialog(Adw.Dialog):
             print(f"DEBUG: Entering {self.__class__.__name__}._on_search_changed(args: {arg_str})")
 
         search_text = search_entry.get_text().lower()
+        if DEBUG_ENABLED: print(f"DEBUG: _on_search_changed - Search text: '{search_text}'")
 
         for row in self.script_rows:
             row_title = row.get_title()
             script_name_attr = getattr(row, "script_name", "") # Get script_name, default to "" if not found
+            if DEBUG_ENABLED: print(f"DEBUG: Checking row: Title='{row_title}', ScriptName='{script_name_attr}'")
 
             should_be_visible = False
             if not search_text: # Empty search shows all
                 should_be_visible = True
             else:
-                if row_title and search_text in row_title.lower():
+                title_match = row_title and search_text in row_title.lower()
+                if DEBUG_ENABLED: print(f"DEBUG: Match found in title: {title_match if row_title else False}")
+                script_name_match = script_name_attr and search_text in script_name_attr.lower()
+                if DEBUG_ENABLED: print(f"DEBUG: Match found in script_name: {script_name_match if script_name_attr else False}")
+
+                if title_match:
                     should_be_visible = True
-                elif script_name_attr and search_text in script_name_attr.lower():
+                elif script_name_match:
                     should_be_visible = True
 
+            if DEBUG_ENABLED: print(f"DEBUG: Setting visibility of '{row_title}' to {should_be_visible}")
             row.set_visible(should_be_visible)
 
         if DEBUG_ENABLED:
